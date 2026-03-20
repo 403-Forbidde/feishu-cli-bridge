@@ -211,12 +211,35 @@ class OpenCodeAdapter(BaseCLIAdapter):
     ) -> Optional[OpenCodeSession]:
         """创建新的 OpenCode 会话"""
         try:
-            response = await self._client.post("/session", json={"title": title})
+            import uuid
+            import time
+
+            # 生成唯一的 client_session_id 避免服务端复用
+            client_session_id = str(uuid.uuid4())[:8]
+
+            # 添加更多唯一标识确保创建新会话
+            body = {
+                "title": title,
+                "client_session_id": client_session_id,
+                "force_new": True,
+                "timestamp": time.time(),
+            }
+
+            if self.logger:
+                self.logger.debug(f"Creating session with body: {body}")
+
+            response = await self._client.post("/session", json=body)
             if response.status_code == 200:
                 data = response.json()
-                return OpenCodeSession(
-                    id=data.get("id"), title=data.get("title", title)
-                )
+                session_id = data.get("id")
+                if self.logger:
+                    self.logger.info(f"Session created: {session_id}")
+                return OpenCodeSession(id=session_id, title=data.get("title", title))
+            else:
+                if self.logger:
+                    self.logger.error(
+                        f"Failed to create session: {response.status_code} - {response.text}"
+                    )
         except Exception as e:
             if self.logger:
                 self.logger.error(f"Failed to create session: {e}")
@@ -407,3 +430,205 @@ class OpenCodeAdapter(BaseCLIAdapter):
             await self._client.aclose()
         if self._server_manager:
             await self._server_manager.stop()
+
+    # ==================== TUI 命令支持 ====================
+
+    @property
+    def supported_tui_commands(self) -> List[str]:
+        """返回支持的 TUI 命令列表"""
+        return ["new", "session", "model", "reset"]
+
+    async def create_new_session(self) -> Optional[Dict[str, Any]]:
+        """创建新会话"""
+        if not await self._ensure_server():
+            return None
+
+        try:
+            import time
+            import random
+            import uuid
+
+            # 生成唯一标题
+            timestamp = time.strftime("%m%d_%H%M%S")
+            random_suffix = random.randint(1000, 9999)
+            title = f"Feishu Bridge {timestamp}_{random_suffix}"
+
+            # 记录旧会话
+            old_session_id = self._active_session.id if self._active_session else None
+            if self.logger:
+                self.logger.info(f"准备创建新会话，当前会话: {old_session_id}")
+                # 先列出所有会话，看当前有几个
+                existing_sessions = await self.list_sessions(limit=20)
+                self.logger.info(f"当前已有 {len(existing_sessions)} 个会话")
+
+            # 创建新会话
+            session = await self._create_session(title=title)
+
+            if self.logger and session:
+                self.logger.info(f"_create_session 返回: {session.id}")
+                # 再次列出会话，看是否增加了
+                new_sessions = await self.list_sessions(limit=20)
+                self.logger.info(f"创建后共有 {len(new_sessions)} 个会话")
+
+                # 检查是否真的创建了新会话
+                if session.id == old_session_id:
+                    self.logger.error(
+                        f"错误：返回的会话 ID ({session.id}) 与旧会话相同！"
+                    )
+
+            if session:
+                self._active_session = session
+                return {
+                    "id": session.id,
+                    "title": session.title,
+                    "created_at": session.created_at,
+                }
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"创建会话失败: {e}")
+        return None
+
+    async def list_sessions(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """列出会话"""
+        if not await self._ensure_server():
+            return []
+
+        try:
+            response = await self._client.get("/session")
+            if response.status_code == 200:
+                data = response.json()
+                # API 可能直接返回列表或包含 items 的字典
+                if isinstance(data, list):
+                    sessions = data
+                elif isinstance(data, dict):
+                    sessions = data.get("items", [])
+                else:
+                    sessions = []
+
+                # 格式化为统一格式
+                return [
+                    {
+                        "id": s.get("id"),
+                        "title": s.get("title", "未命名会话"),
+                        "created_at": s.get("createdAt", time.time()),
+                    }
+                    for s in sessions[:limit]
+                ]
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"列出会话失败: {e}")
+        return []
+
+    async def switch_session(self, session_id: str) -> bool:
+        """切换到指定会话"""
+        if not await self._ensure_server():
+            return False
+
+        try:
+            # 验证会话是否存在
+            response = await self._client.get(f"/session/{session_id}")
+            if response.status_code == 200:
+                data = response.json()
+                self._active_session = OpenCodeSession(
+                    id=data.get("id"),
+                    title=data.get("title", "已恢复会话"),
+                )
+                return True
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"切换会话失败: {e}")
+        return False
+
+    async def reset_session(self) -> bool:
+        """重置当前会话（清空对话历史）"""
+        if self._active_session:
+            # 创建新会话替换当前会话
+            new_session = await self._create_session()
+            if new_session:
+                self._active_session = new_session
+                return True
+        return False
+
+    async def list_models(self, provider: Optional[str] = None) -> List[Dict[str, Any]]:
+        """列出可用模型 - 只显示已配置 API key 的主要模型"""
+        # 返回常用且已配置的模型列表
+        # 这些应该是用户实际有 API key 的模型
+        return [
+            # OpenCode 官方模型（免费）
+            {
+                "provider": "opencode",
+                "model": "mimo-v2",
+                "name": "Mimo V2",
+                "full_id": "opencode/mimo-v2",
+            },
+            {
+                "provider": "opencode",
+                "model": "mimo-v2-pro-free",
+                "name": "Mimo V2 Pro Free",
+                "full_id": "opencode/mimo-v2-pro-free",
+            },
+            {
+                "provider": "opencode",
+                "model": "mimo-v2-omni-free",
+                "name": "Mimo V2 Omni Free",
+                "full_id": "opencode/mimo-v2-omni-free",
+            },
+            # Anthropic Claude 系列（需要 ANTHROPIC_API_KEY）
+            {
+                "provider": "anthropic",
+                "model": "claude-sonnet-4-20250514",
+                "name": "Claude Sonnet 4",
+                "full_id": "anthropic/claude-sonnet-4-20250514",
+            },
+            {
+                "provider": "anthropic",
+                "model": "claude-opus-4-20250514",
+                "name": "Claude Opus 4",
+                "full_id": "anthropic/claude-opus-4-20250514",
+            },
+            {
+                "provider": "anthropic",
+                "model": "claude-3-5-sonnet-20241022",
+                "name": "Claude 3.5 Sonnet",
+                "full_id": "anthropic/claude-3-5-sonnet-20241022",
+            },
+            # Kimi 系列（需要 MOONSHOT_API_KEY）
+            {
+                "provider": "moonshotai",
+                "model": "kimi-k2.5",
+                "name": "Kimi K2.5",
+                "full_id": "moonshotai/kimi-k2.5",
+            },
+            {
+                "provider": "moonshotai",
+                "model": "kimi-k2-thinking",
+                "name": "Kimi K2 Thinking",
+                "full_id": "moonshotai/kimi-k2-thinking",
+            },
+            # GPT 系列（需要 OPENAI_API_KEY）
+            {
+                "provider": "opencode",
+                "model": "gpt-5-nano",
+                "name": "GPT-5 Nano",
+                "full_id": "opencode/gpt-5-nano",
+            },
+        ]
+
+    async def switch_model(self, model_id: str) -> bool:
+        """切换当前会话使用的模型"""
+        # 验证模型格式
+        if "/" not in model_id:
+            return False
+
+        # 更新配置中的默认模型
+        # 注意：这只会影响新消息，当前正在进行的对话不会改变
+        self.config["default_model"] = model_id
+
+        if self.logger:
+            self.logger.info(f"切换到模型: {model_id}")
+
+        return True
+
+    def get_current_model(self) -> str:
+        """获取当前使用的模型"""
+        return self.default_model

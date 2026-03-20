@@ -13,6 +13,8 @@ from ..adapters import create_adapter, BaseCLIAdapter, StreamChunkType
 from ..adapters.base import Message, TokenStats
 from ..session import SessionManager
 from ..config import Config
+from ..tui_commands import create_router, TUIResultType
+from ..tui_commands.base import CommandContext
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,7 @@ class MessageHandler:
         self.bot_user_id: Optional[str] = None
         self.adapters: dict = {}
         self.dedup = MessageDeduplicator()  # 消息去重
+        self.tui_router = create_router()  # TUI 命令路由器
 
         # 初始化启用的适配器
         for cli_type, cli_config in config.cli.items():
@@ -45,6 +48,8 @@ class MessageHandler:
                     )
                     adapter.logger = logger
                     self.adapters[cli_type] = adapter
+                    # 注册适配器到 TUI 路由器
+                    self.tui_router.register_adapter(cli_type, adapter)
                     logger.info(f"Loaded adapter: {cli_type}")
                 except Exception as e:
                     logger.error(f"Failed to load adapter {cli_type}: {e}")
@@ -120,14 +125,52 @@ class MessageHandler:
         # 解析命令
         content = message.content.strip()
 
-        # 处理 /reset 命令
-        if content == "/reset" or content == "/clear":
-            await self._handle_reset(message)
-            return
+        # 移除 @ 标记（先处理，以便正确识别命令）
+        if message.chat_type == "group":
+            # 移除 @_user_xxx 格式的 @
+            import re
 
-        # 处理 /help 命令
-        if content == "/help":
-            await self._handle_help(message)
+            content = re.sub(r"@_user_\w+\s*", "", content).strip()
+
+        # 检测是否是回复交互式消息
+        logger.debug(
+            f"🔍 检查交互式回复: parent_id={message.parent_id}, content={content[:50]}"
+        )
+
+        # 方式1：通过 parent_id 匹配（用户点击"回复"）
+        if message.parent_id:
+            is_interactive = self.tui_router.is_interactive_reply(
+                user_id=message.sender_id,
+                chat_id=message.chat_id,
+                reply_to_message_id=message.parent_id,
+            )
+            logger.debug(f"🔍 通过 parent_id 匹配: {is_interactive}")
+            if is_interactive:
+                await self._handle_interactive_reply(message)
+                return
+
+        # 方式2：如果没有 parent_id 但内容是简单数字（1-10）或模型ID格式，尝试匹配最近的交互式消息
+        content_stripped = content.strip()
+        is_digit = content_stripped.isdigit() and 1 <= int(content_stripped) <= 10
+        is_model_id = "/" in content_stripped and not content_stripped.startswith("/")
+
+        if is_digit or is_model_id:
+            logger.debug(
+                f"🔍 检测到可能的交互式回复: {content_stripped}，尝试匹配最近交互式消息"
+            )
+            is_interactive = self.tui_router.is_interactive_reply(
+                user_id=message.sender_id,
+                chat_id=message.chat_id,
+                reply_to_message_id=None,
+            )
+            logger.debug(f"🔍 通过最近消息匹配: {is_interactive}")
+            if is_interactive:
+                await self._handle_interactive_reply(message)
+                return
+
+        # 检测是否是 TUI 命令（斜杠命令）
+        if self.tui_router.is_tui_command(content):
+            await self._handle_tui_command(content, message)
             return
 
         # 移除 @ 标记
@@ -138,6 +181,11 @@ class MessageHandler:
             content = re.sub(r"@_user_\w+\s*", "", content).strip()
 
         if not content:
+            return
+
+        # 检测是否是 TUI 命令（斜杠命令）
+        if self.tui_router.is_tui_command(content):
+            await self._handle_tui_command(content, message)
             return
 
         # 检测 CLI 类型
@@ -277,8 +325,11 @@ class MessageHandler:
             elif msg_type == "post":
                 text = self._extract_text_from_post(content_obj)
 
+            # 获取回复的消息 ID
+            parent_id = message_data.get("parent_id") or message_data.get("root_id")
+
             logger.debug(
-                f"📄 解析消息: type={msg_type}, chat_type={message_data.get('chat_type', '')}"
+                f"📄 解析消息: type={msg_type}, chat_type={message_data.get('chat_type', '')}, parent_id={parent_id}"
             )
 
             return FeishuMessage(
@@ -291,6 +342,7 @@ class MessageHandler:
                 msg_type=msg_type,
                 thread_id=message_data.get("thread_id"),
                 mention_users=[],
+                parent_id=parent_id,
             )
 
         except Exception as e:
@@ -359,3 +411,143 @@ class MessageHandler:
 • "@claude 解释一下这段代码"
 """
         await self.api.send_text(message.chat_id, help_text)
+
+    async def _handle_interactive_reply(self, message: FeishuMessage):
+        """处理交互式消息的回复
+
+        Args:
+            message: 飞书消息对象
+        """
+        try:
+            # 处理回复（CLI 类型由交互式消息管理器自动识别）
+            result = await self.tui_router.handle_reply(
+                reply_content=message.content,
+                user_id=message.sender_id,
+                chat_id=message.chat_id,
+                reply_to_message_id=message.parent_id,
+            )
+
+            if result:
+                if result.type == TUIResultType.TEXT:
+                    await self.api.send_text(message.chat_id, result.content)
+                elif result.type == TUIResultType.ERROR:
+                    await self.api.send_text(message.chat_id, f"❌ {result.content}")
+                elif result.type in (TUIResultType.CARD, TUIResultType.INTERACTIVE):
+                    from .card_builder import build_card_content
+
+                    card_data = build_card_content(
+                        "complete", {"text": result.content, "metadata": {}}
+                    )
+                    await self.api.send_card_message(message.chat_id, card_data)
+
+        except Exception as e:
+            logger.exception("Error processing interactive reply")
+            await self.api.send_text(message.chat_id, f"❌ 处理失败: {str(e)}")
+
+    async def _handle_tui_command(self, content: str, message: FeishuMessage):
+        """处理 TUI 命令
+
+        Args:
+            content: 命令内容
+            message: 飞书消息对象
+        """
+        # 检测 CLI 类型
+        cli_type = self._detect_cli_type(content)
+        if not cli_type:
+            await self.api.send_text(
+                message.chat_id,
+                "⚠️ 没有可用的 CLI 工具。请确保已安装 opencode、claudecode 或 codex。",
+            )
+            return
+
+        # 清理命令前缀
+        for prefix in [
+            "@opencode",
+            "@claude",
+            "@codex",
+            "使用opencode",
+            "使用claude",
+            "使用codex",
+        ]:
+            if content.lower().startswith(prefix.lower()):
+                content = content[len(prefix) :].strip()
+
+        # 获取适配器
+        adapter = self.adapters.get(cli_type)
+        if not adapter:
+            await self.api.send_text(
+                message.chat_id, f"⚠️ CLI 工具 {cli_type} 未启用或加载失败。"
+            )
+            return
+
+        # 获取工作目录和会话
+        working_dir = self._get_working_dir(message)
+        session = self.session_mgr.get_or_create(
+            user_id=message.sender_id, cli_type=cli_type, working_dir=working_dir
+        )
+
+        # 创建命令上下文
+        context = CommandContext(
+            user_id=message.sender_id,
+            chat_id=message.chat_id,
+            cli_type=cli_type,
+            working_dir=working_dir,
+            session_id=session.session_id if session else None,
+            current_model=adapter.get_current_model(),
+        )
+
+        try:
+            # 执行 TUI 命令
+            result = await self.tui_router.execute(content, cli_type, context)
+
+            if not result:
+                await self.api.send_text(message.chat_id, f"❌ 无法执行命令: {content}")
+                return
+
+            # 根据结果类型发送回复
+            if result.type == TUIResultType.ERROR:
+                await self.api.send_text(message.chat_id, f"❌ {result.content}")
+
+            elif result.type == TUIResultType.TEXT:
+                await self.api.send_text(message.chat_id, result.content)
+
+            elif result.type == TUIResultType.CARD:
+                # 发送卡片消息
+                from .card_builder import build_card_content
+
+                card_data = build_card_content(
+                    "complete",
+                    {
+                        "text": result.content,
+                        "metadata": {},
+                    },
+                )
+                await self.api.send_card_message(message.chat_id, card_data)
+
+            elif result.type == TUIResultType.INTERACTIVE:
+                # 发送交互式消息
+                from .card_builder import build_card_content
+
+                card_data = build_card_content(
+                    "complete",
+                    {
+                        "text": result.content,
+                        "metadata": {},
+                    },
+                )
+                # 发送并获取消息 ID
+                msg_id = await self.api.send_card_message(message.chat_id, card_data)
+
+                # 注册交互式消息
+                if msg_id and result.interactive_id:
+                    self.tui_router.register_interactive(
+                        message_id=msg_id,
+                        interactive_id=result.interactive_id,
+                        user_id=message.sender_id,
+                        chat_id=message.chat_id,
+                        cli_type=cli_type,
+                        metadata=result.metadata,
+                    )
+        except Exception as e:
+            logger.exception("Error processing TUI command")
+            await self.api.send_text(message.chat_id, f"❌ 命令执行失败: {str(e)}")

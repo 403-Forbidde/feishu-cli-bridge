@@ -1,5 +1,77 @@
 # 更新日志
 
+## [v0.0.2] - 2026-03-20
+
+**开发人**: ERROR403
+
+### 新增
+
+- **TUI 命令系统** (`src/tui_commands/`)
+  - 全新 TUI 命令模块，支持斜杠命令管理 CLI 工具
+  - `/new` - 创建新会话，生成唯一标题避免复用
+  - `/session` - 列出最近 10 个会话，支持回复数字或 ID 切换
+  - `/model` - 列出已配置 API key 的可用模型（约 10 个常用模型）
+  - `/reset` / `/clear` - 重置当前会话
+  - 交互式消息支持：用户回复数字或模型 ID 自动识别并处理
+  - 独立模块设计：`base.py` (基类)、`opencode.py` (实现)、`interactive.py` (交互管理)、`__init__.py` (路由)
+
+- **适配器 TUI 接口** (`src/adapters/base.py`, `src/adapters/opencode.py`)
+  - `supported_tui_commands` 属性声明支持的命令列表
+  - `create_new_session()` - 创建新会话
+  - `list_sessions()` - 列出会话（支持 OpenCode HTTP API）
+  - `switch_session()` - 切换会话
+  - `reset_session()` - 重置会话
+  - `list_models()` - 列出模型（只显示已配置 API key 的模型）
+  - `switch_model()` - 切换模型
+  - `get_current_model()` - 获取当前模型
+
+- **消息处理器集成** (`src/feishu/handler.py`)
+  - 集成 TUI 命令路由 (`TUICommandRouter`)
+  - 检测斜杠命令并路由到对应处理器
+  - 支持交互式消息回复（通过 parent_id 或内容匹配）
+  - 数字回复（1-10）自动识别为会话切换
+  - 模型 ID 格式（如 `opencode/mimo-v2`）自动识别为模型切换
+
+- **消息对象扩展** (`src/feishu/client.py`)
+  - `FeishuMessage` 添加 `parent_id` 字段，支持回复消息追踪
+
+### 优化
+
+- **会话数量限制** (`src/config.py`)
+  - 默认最大会话数从 15 调整为 10
+  - 减少资源占用，提高响应速度
+
+- **会话 ID 显示** (`src/tui_commands/base.py`)
+  - 修复所有会话显示相同 ID 的问题（原取前 6 位都是 `ses_2f`）
+  - 改为取会话 ID 后 8 位作为显示 ID，确保唯一性
+
+- **消息格式美化**
+  - 会话列表：标题加粗、ID 代码格式、当前会话标记 ★
+  - 模型列表：按提供商分组、名称加粗、ID 代码格式
+  - 成功消息：统一格式，使用 Markdown 加粗和代码块
+
+### 修复
+
+- **模型列表为空** (`src/adapters/opencode.py`)
+  - 问题：`opencode models --format json` 选项不存在，解析失败
+  - 修复：改为直接解析 `opencode models` 标准输出
+
+- **交互式回复失效** (`src/tui_commands/opencode.py`)
+  - 问题：模型列表返回 `TUIResult.card` 而非 `TUIResult.interactive`
+  - 修复：改为 `TUIResult.interactive`，支持用户回复模型 ID
+
+- **模型 ID 回复未识别** (`src/feishu/handler.py`)
+  - 问题：只检测数字回复，未检测模型 ID 格式
+  - 修复：添加模型 ID 格式检测（包含 `/` 且不以 `/` 开头）
+
+### 设计原则
+
+- **完全隔离**：每个 CLI 工具有独立的 TUI 命令实现模块
+- **自动路由**：根据当前会话上下文自动路由命令
+- **向后兼容**：原有对话功能不受影响
+
+---
+
 ## [v0.0.1] - 2026-03-20
 
 **开发人**: ERROR403

@@ -159,3 +159,86 @@ class BaseCLIAdapter(ABC):
             ),
             model=self.default_model,
         )
+
+    # ==================== TUI 命令支持 ====================
+
+    @property
+    def supported_tui_commands(self) -> List[str]:
+        """返回支持的 TUI 命令列表
+
+        子类应覆盖此方法返回支持的命令列表。
+        默认返回空列表表示不支持 TUI 命令。
+
+        Returns:
+            命令名称列表，如 ["new", "session", "model", "reset"]
+        """
+        return []
+
+    async def create_new_session(self) -> Optional[Dict[str, Any]]:
+        """创建新会话
+
+        Returns:
+            新会话信息字典，包含 id, title 等字段
+            或 None（如果不支持）
+        """
+        return None
+
+    async def list_sessions(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """列出会话
+
+        Args:
+            limit: 最大返回数量
+
+        Returns:
+            会话列表，每个会话包含 id, title, created_at 等
+        """
+        return []
+
+    async def switch_session(self, session_id: str) -> bool:
+        """切换到指定会话
+
+        Args:
+            session_id: 会话 ID
+
+        Returns:
+            是否切换成功
+        """
+        return False
+
+    async def reset_session(self) -> bool:
+        """重置当前会话
+
+        Returns:
+            是否重置成功
+        """
+        return False
+
+    async def list_models(self, provider: Optional[str] = None) -> List[Dict[str, Any]]:
+        """列出可用模型
+
+        Args:
+            provider: 提供商筛选（可选）
+
+        Returns:
+            模型列表，每个模型包含 provider, model, name 等
+        """
+        return []
+
+    async def switch_model(self, model_id: str) -> bool:
+        """切换当前会话使用的模型
+
+        Args:
+            model_id: 模型完整 ID（如 "opencode/mimo-v2"）
+
+        Returns:
+            是否切换成功
+        """
+        return False
+
+    def get_current_model(self) -> str:
+        """获取当前使用的模型
+
+        Returns:
+            模型完整 ID
+        """
+        return self.default_model
