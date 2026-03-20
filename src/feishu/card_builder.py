@@ -211,29 +211,26 @@ def _build_complete_card(
         }
     )
 
-    # ── 3. 底部元信息（右对齐，notation 字号）──────────────────────────
-    parts: List[str] = []
-
-    # 状态
+    # ── 3. 底部元信息（两行显示，右对齐，notation 字号）──────────────────────────
+    # 第一行：状态 + 耗时
+    first_line_parts: List[str] = []
     if is_error:
-        parts.append("❌ 出错")
+        first_line_parts.append("❌ 出错")
     else:
-        parts.append("✅ 已完成")
-
-    # 耗时
+        first_line_parts.append("✅ 已完成")
     if elapsed_ms is not None:
-        parts.append(f"耗时 {_format_elapsed(elapsed_ms)}")
+        first_line_parts.append(f"⏱️ 耗时 {_format_elapsed(elapsed_ms)}")
 
-    # Token 统计
+    # 第二行：Token 统计 + 模型
+    second_line_parts: List[str] = []
     if token_stats:
-        _append_token_stats(parts, token_stats)
-
-    # 模型名称
+        _append_token_stats(second_line_parts, token_stats)
     if model:
-        parts.append(f"🤖 {_simplify_model_name(model)}")
+        second_line_parts.append(f"🤖 {_simplify_model_name(model)}")
 
-    if parts:
-        footer_text = " · ".join(parts)
+    # 添加第一行
+    if first_line_parts:
+        footer_text = " · ".join(first_line_parts)
         footer_content = (
             f"<font color='red'>{footer_text}</font>" if is_error else footer_text
         )
@@ -241,6 +238,23 @@ def _build_complete_card(
             {
                 "tag": "markdown",
                 "content": footer_content,
+                "text_align": "right",
+                "text_size": "notation",
+            }
+        )
+
+    # 添加第二行
+    if second_line_parts:
+        second_footer_text = " · ".join(second_line_parts)
+        second_footer_content = (
+            f"<font color='red'>{second_footer_text}</font>"
+            if is_error
+            else second_footer_text
+        )
+        elements.append(
+            {
+                "tag": "markdown",
+                "content": second_footer_content,
                 "text_align": "right",
                 "text_size": "notation",
             }

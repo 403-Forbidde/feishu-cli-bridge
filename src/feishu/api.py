@@ -266,10 +266,6 @@ class FeishuAPI:
                 "chat_id": response_create.data.chat_id or to,
             }
 
-        result = {
-            "message_id": response.data.message_id,
-            "chat_id": response.data.chat_id,
-        }
         logger.info(
             f"Sent card by card_id: card_id={card_id}, message_id={result['message_id']}"
         )

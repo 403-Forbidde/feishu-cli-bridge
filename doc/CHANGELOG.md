@@ -68,6 +68,24 @@
   - 格式：`✅ 已完成 · 耗时 3.2s · 📊 1,234 tokens (3.9%) · 🤖 Claude-Sonnet`
   - 支持 OpenCode/Kimi 两种 Token 统计格式
 
+### 优化（2026-03-20 补充）
+
+- **卡片 Footer 元数据布局调整** (`src/feishu/card_builder.py`)
+  - 从单行改为两行显示，视觉层次更清晰
+  - 第一行：✅ 已完成 · ⏱️ 耗时 3.2s（状态 + 耗时）
+  - 第二行：📊 17,163 tokens (11.7%) · Context: 128K · 🤖 kimi-k2.5（Token统计 + 模型）
+  - 两行均右对齐，notation 字号
+
+- **OpenCode 默认模型切换** (`config.yaml`)
+  - 从 `opencode/mimo-v2-pro-free` 切换为 `kimi-for-coding/k2p5`
+  - Kimi K2.5 在代码任务上表现更佳
+
+### 修复
+
+- **api.py 逻辑错误** (`src/feishu/api.py`)
+  - 问题：`send_card_by_card_id` 方法中重复定义 `result` 变量，使用未初始化的 `response`
+  - 修复：删除冗余代码块，直接使用前面分支中已定义的 `result`
+
 ### 技术债务
 
 - LSP 类型检查错误：lark_oapi SDK 类型定义不完整导致的误报，不影响实际运行

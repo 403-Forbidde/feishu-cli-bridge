@@ -114,7 +114,7 @@ cli:
   opencode:
     enabled: true
     command: "opencode"
-    default_model: "gpt-4"
+    default_model: "kimi-for-coding/k2p5"
     timeout: 300
   
   claudecode:
