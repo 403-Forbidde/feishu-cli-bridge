@@ -1,5 +1,35 @@
 # 更新日志
 
+## [v0.0.3] - 2026-03-20
+
+**开发人**: ERROR403
+
+### 优化
+
+- **卡片样式美化** (`src/feishu/card_builder.py`)
+  - 参考 OpenClaw-Lark 插件的飞书消息卡片样式进行改进
+  - 自动为分类标题添加 emoji 图标（如 📚 信息与搜索、🛠️ 技术开发等）
+  - 支持 30+ 个常用分类关键词的自动 emoji 匹配
+  - 思考面板样式优化：蓝色边框、更大圆角、更合适的间距
+  - Footer 信息改为单行紧凑显示，更简洁美观
+  - Token 统计使用更简洁的格式：`📊 1.2K (5%)` 替代长格式
+  - 模型名称简化显示（如 `Claude-Sonnet` 替代完整路径）
+
+### 新增
+
+- **Emoji 分类系统** (`src/feishu/card_builder.py`)
+  - `CATEGORY_EMOJI_MAP` - 分类关键词到 emoji 的映射表
+  - `_add_category_emojis()` - 自动检测并添加 emoji 图标
+  - `_beautify_list_items()` - 列表项美化（预留扩展）
+  - `_append_token_stats_compact()` - 紧凑格式 Token 统计
+
+### 设计参考
+
+- 样式参考: `/home/error403/.openclaw/extensions/openclaw-lark`
+- OpenClaw-Lark: ByteDance 官方飞书插件 (MIT License, Copyright 2026 ByteDance)
+
+---
+
 ## [v0.0.2] - 2026-03-20
 
 **开发人**: ERROR403
