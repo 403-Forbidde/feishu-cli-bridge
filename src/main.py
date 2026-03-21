@@ -5,7 +5,7 @@ import signal
 import sys
 from pathlib import Path
 
-from .config import load_config, get_config
+from .config import load_config, get_config, get_config_dir
 from .utils.logger import setup_logger
 from .feishu import FeishuClient, FeishuAPI, MessageHandler
 from .project import ProjectManager
@@ -18,15 +18,31 @@ async def main():
     """主函数"""
     # 加载配置
     config = get_config()
-    
+
+    # 解析路径（相对路径基于配置文件目录，支持服务模式）
+    config_dir = get_config_dir()
+
+    storage_dir = Path(config.session.storage_dir)
+    if not storage_dir.is_absolute():
+        storage_dir = config_dir / storage_dir
+
+    if config.debug.log_dir:
+        log_dir: Path = Path(config.debug.log_dir).expanduser()
+        if not log_dir.is_absolute():
+            log_dir = config_dir / log_dir
+    else:
+        log_dir = config_dir / "logs"
+
     # 设置日志
     logger = setup_logger(
         level=config.debug.log_level,
-        save_logs=config.debug.save_logs
+        save_logs=config.debug.save_logs,
+        log_dir=log_dir,
     )
-    
+
     logger.info("=" * 50)
     logger.info("Feishu CLI Bridge 启动中...")
+    logger.info(f"配置目录: {config_dir}")
     logger.info(f"日志级别: {config.debug.log_level}")
     logger.info(f"最大会话数: {config.session.max_sessions}")
     logger.info("=" * 50)
@@ -52,8 +68,9 @@ async def main():
         logger.error("❌ 没有可用的 CLI 工具！请至少安装一个：opencode 或 codex")
         sys.exit(1)
     
-    # 创建会话存储目录
-    Path(config.session.storage_dir).mkdir(exist_ok=True)
+    # 创建会话存储目录（使用解析后的绝对路径）
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    config.session.storage_dir = str(storage_dir)
     
     # 创建飞书 API 客户端
     feishu_api = FeishuAPI(

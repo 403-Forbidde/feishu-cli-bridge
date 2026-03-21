@@ -2,7 +2,7 @@
 
 程序员专属：用飞书私聊向 OpenCode、Codex 等 CLI 编程工具下达指令，享受流式打字机输出体验。
 
-**版本**: v0.1.2
+**版本**: v0.1.3
 **开发**: ERROR403
 **更新日期**: 2026-03-21
 
@@ -67,6 +67,59 @@ python -m src.main
 python start.py
 ./start.sh
 ```
+
+## macOS 运行说明（Apple Silicon / Intel）
+
+`./start.sh` 在 macOS 上可直接运行，无需任何代码修改。所有依赖均有 macOS arm64/x86_64 wheel，无 Linux 专属组件。
+
+### 前置要求
+
+```bash
+# 安装 Homebrew（如果没有）
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# 安装 Python 3
+brew install python3
+
+# 安装项目依赖
+pip3 install -r requirements.txt
+```
+
+> **注意**：macOS 系统自带的 `python3` 版本可能较旧，建议通过 Homebrew 安装最新版本。
+
+### 启动
+
+```bash
+./start.sh           # CardKit 流式模式（默认）
+./start.sh --legacy  # 传统 IM Patch 模式
+```
+
+### CLI 工具安装
+
+opencode 和 codex 均需有对应平台的可执行文件。以 opencode 为例：
+
+```bash
+# 参考 opencode 官方文档安装 macOS 版本
+brew install opencode   # 如果 Homebrew 提供
+# 或从 GitHub Releases 下载 macOS 二进制
+```
+
+安装后验证：
+
+```bash
+which opencode   # 应输出可执行文件路径
+```
+
+### 与 Linux 的差异
+
+| 特性 | Linux | macOS |
+|------|-------|-------|
+| `./start.sh` 启动 | ✅ | ✅ |
+| 开发模式运行 | ✅ | ✅ |
+| systemd 服务自启 | ✅ `scripts/install_service.sh` | ❌ 暂不支持 |
+| launchd 服务自启 | ❌ | 🔜 计划支持 |
+
+macOS 如需后台常驻，目前推荐结合终端复用工具（`tmux` / `screen`）使用 `./start.sh`。
 
 ## 使用方法
 
@@ -184,13 +237,21 @@ feishu-cli-bridge/
 │   └── main.py                # 入口
 ├── doc/
 │   ├── CHANGELOG.md
-│   └── ISSUES.md
+│   ├── ISSUES.md
+│   └── AIGUIDE.md         # AI 模型部署指南
 ├── config.yaml
 ├── requirements.txt
 └── start.sh
 ```
 
 ## 更新日志
+
+### v0.1.3 (2026-03-21)
+- ✅ systemd 用户服务支持（`scripts/install_service.sh` / `uninstall_service.sh`）
+- ✅ 配置文件自动发现（`CONFIG_FILE` 环境变量 → XDG → `./config.yaml`）
+- ✅ 路径解析基于配置文件目录，开发 / 服务模式自动隔离
+- ✅ `start.sh` 去掉硬编码路径，强制使用本地 `config.yaml`
+- ✅ 新增 macOS 运行说明
 
 ### v0.1.2 (2026-03-21)
 - ✅ 移除 Claude Code（claudecode）支持，仅保留 OpenCode 和 Codex
@@ -247,7 +308,10 @@ feishu-cli-bridge/
 |------|------|
 | `FEISHU_APP_ID` | 飞书 App ID |
 | `FEISHU_APP_SECRET` | 飞书 App Secret |
+| `CONFIG_FILE` | 显式指定配置文件路径（覆盖自动发现） |
 | `LOG_LEVEL` | 日志级别（默认 INFO） |
+| `LOG_DIR` | 日志目录（留空则使用配置文件同级 `logs/`） |
+| `DISABLE_CARDKIT` | 设为 `1` 强制使用 IM Patch 模式 |
 
 ## 许可证
 

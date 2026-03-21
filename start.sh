@@ -18,6 +18,7 @@ else
     echo "使用 CardKit 流式模式启动..."
 fi
 
-# 启动应用
-cd /code/cli-feishu-bridge
+# 启动应用（切换到脚本所在目录，强制使用本地 config.yaml 避免加载服务配置）
+cd "$(dirname "$0")"
+export CONFIG_FILE="$(pwd)/config.yaml"
 python3 -m src.main

@@ -42,6 +42,7 @@ class StreamingConfig:
 class DebugConfig:
     log_level: str = "INFO"
     save_logs: bool = True
+    log_dir: str = ""  # 留空则使用 <config_dir>/logs/
 
 
 @dataclass
@@ -60,13 +61,61 @@ class Config:
     project: ProjectConfig = field(default_factory=ProjectConfig)
 
 
-def load_config(config_path: str = "config.yaml") -> Config:
-    """加载配置文件"""
-    config_file = Path(config_path)
+# 已加载的配置文件路径（用于相对路径解析）
+_config_path: Optional[Path] = None
 
-    if not config_file.exists():
-        # 尝试从环境变量加载
+
+def get_config_dir() -> Path:
+    """返回配置文件所在目录，用于解析相对路径。
+    未找到配置文件时回退到当前工作目录。
+    """
+    if _config_path is not None:
+        return _config_path.parent
+    return Path.cwd()
+
+
+def _find_config_file() -> Optional[Path]:
+    """按优先级查找配置文件：
+    1. CONFIG_FILE 环境变量
+    2. $XDG_CONFIG_HOME/cli-feishu-bridge/config.yaml（默认 ~/.config/...）
+    3. ./config.yaml（当前工作目录，开发模式）
+    """
+    # 1. 显式环境变量
+    env_path = os.environ.get("CONFIG_FILE")
+    if env_path:
+        p = Path(env_path).expanduser()
+        if p.exists():
+            return p
+
+    # 2. XDG 配置目录
+    config_home = Path(os.environ.get("XDG_CONFIG_HOME", "~/.config")).expanduser()
+    xdg_config = config_home / "cli-feishu-bridge" / "config.yaml"
+    if xdg_config.exists():
+        return xdg_config
+
+    # 3. 当前工作目录（开发模式）
+    cwd_config = Path("config.yaml")
+    if cwd_config.exists():
+        return cwd_config
+
+    return None
+
+
+def load_config(config_path: Optional[str] = None) -> Config:
+    """加载配置文件"""
+    global _config_path
+
+    if config_path is not None:
+        config_file: Optional[Path] = Path(config_path).expanduser()
+    else:
+        config_file = _find_config_file()
+
+    if config_file is None or not config_file.exists():
+        # 没有找到配置文件，从环境变量加载
+        _config_path = None
         return _load_from_env()
+
+    _config_path = config_file.resolve()
 
     with open(config_file, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
@@ -110,6 +159,7 @@ def _load_from_env() -> Config:
         debug=DebugConfig(
             log_level=os.getenv("LOG_LEVEL", "INFO"),
             save_logs=os.getenv("SAVE_LOGS", "true").lower() == "true",
+            log_dir=os.getenv("LOG_DIR", ""),
         ),
         project=ProjectConfig(
             storage_path=os.getenv("PROJECT_STORAGE_PATH", ""),
@@ -158,6 +208,7 @@ def _parse_config(data: dict) -> Config:
         debug=DebugConfig(
             log_level=debug_data.get("log_level", "INFO"),
             save_logs=debug_data.get("save_logs", True),
+            log_dir=debug_data.get("log_dir", ""),
         ),
         project=ProjectConfig(
             storage_path=project_data.get("storage_path", ""),

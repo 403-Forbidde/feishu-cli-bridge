@@ -2,8 +2,14 @@
 # Feishu CLI Bridge — 配置模板
 # =============================================================================
 # 使用方式：
-#   cp config.example.yaml config.yaml
+#   开发模式: cp config.example.yaml config.yaml  （放在项目根目录）
+#   服务模式: bash scripts/install_service.sh      （自动复制到 ~/.config/cli-feishu-bridge/）
 #   然后填写飞书凭据（feishu.app_id / feishu.app_secret）
+#
+# 配置文件查找顺序（优先级由高到低）：
+#   1. CONFIG_FILE 环境变量指定的路径
+#   2. ~/.config/cli-feishu-bridge/config.yaml（服务模式默认位置）
+#   3. ./config.yaml（当前工作目录，开发模式）
 #
 # 所有字段均支持环境变量覆盖，环境变量优先级高于 config.yaml。
 # config.yaml 已列入 .gitignore，凭据不会被提交到代码库。
@@ -28,7 +34,7 @@ feishu:
 session:
   max_sessions: 10          # 最大保留会话数，超出时 LRU 淘汰（环境变量: MAX_SESSIONS）
   max_history: 20           # 单会话最大历史轮数（环境变量: MAX_HISTORY）
-  storage_dir: ".sessions"  # 会话 JSON 存储目录（环境变量: SESSION_DIR）
+  storage_dir: ".sessions"  # 会话 JSON 存储目录，相对路径基于配置文件目录（环境变量: SESSION_DIR）
 
 
 # -----------------------------------------------------------------------------
@@ -94,4 +100,5 @@ project:
 # -----------------------------------------------------------------------------
 debug:
   log_level: "INFO"  # DEBUG / INFO / WARNING / ERROR（环境变量: LOG_LEVEL）
-  save_logs: true    # 是否保存日志文件到 logs/ 目录（环境变量: SAVE_LOGS）
+  save_logs: true    # 是否保存日志文件（环境变量: SAVE_LOGS）
+  log_dir: ""        # 日志目录，留空则使用 <配置文件目录>/logs/（环境变量: LOG_DIR）

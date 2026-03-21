@@ -1,5 +1,48 @@
 # 更新日志
 
+## [v0.1.3] - 2026-03-21
+
+**开发人**: ERROR403
+
+### 新增
+
+- **systemd 用户服务支持**（仅 Linux）
+  - `scripts/install_service.sh` — 一键安装：自动推导代码目录、创建 `~/.config/cli-feishu-bridge/`、复制配置模板、写入 `~/.config/systemd/user/cli-feishu-bridge.service`、重载 daemon，并打印后续步骤
+  - `scripts/uninstall_service.sh` — 停止、禁用、删除 service 文件、重载 daemon
+  - 服务以 `WorkingDirectory=%h`（用户 home）运行，`PYTHONPATH` 指向代码目录
+  - 支持 `loginctl enable-linger` 说明，适配无桌面会话环境
+
+- **`DebugConfig.log_dir` 配置项**（`src/config.py`, `config.example.yaml`）
+  - 新增 `debug.log_dir` 字段（留空 = 自动），环境变量 `LOG_DIR`
+  - 留空时日志落在配置文件同级 `logs/` 目录，服务模式下自动归入 `~/.config/cli-feishu-bridge/logs/`
+
+### 改进
+
+- **配置文件自动发现**（`src/config.py`）
+  - `load_config()` 新增 `_find_config_file()`，按优先级查找：`CONFIG_FILE` 环境变量 → `$XDG_CONFIG_HOME/cli-feishu-bridge/config.yaml` → `./config.yaml`
+  - 新增 `get_config_dir() -> Path`，返回实际加载的配置文件目录，供路径解析使用
+
+- **路径解析基于配置文件目录**（`src/main.py`）
+  - `storage_dir`、`log_dir` 的相对路径均基于 `get_config_dir()` 解析为绝对路径
+  - 服务模式（config 在 `~/.config/...`）与开发模式（config 在项目根）路径自动隔离，无需额外配置
+
+- **`setup_logger()` 接受 `log_dir` 参数**（`src/utils/logger.py`）
+  - 新增 `log_dir: Optional[Union[str, Path]] = None` 参数，替代原硬编码的 `Path("logs")`
+
+- **`start.sh` 路径自适应**（`start.sh`）
+  - 去掉硬编码的 `/code/cli-feishu-bridge`，改为 `cd "$(dirname "$0")"` 自适应脚本位置
+  - 显式设置 `CONFIG_FILE=$(pwd)/config.yaml`，确保开发启动始终使用本地配置，与服务配置隔离
+
+### 文档
+
+- **README.md** 新增 `## macOS 运行说明` 章节（前置要求、启动、CLI 工具安装、与 Linux 差异对比表）
+- **README.md** 补全环境变量表（新增 `CONFIG_FILE`、`LOG_DIR`、`DISABLE_CARDKIT`）
+- **AGENTS.md** 新增配置文件查找顺序说明、平台兼容性对比表，补全环境变量和 `config.yaml` 示例
+- **config.example.yaml** 更新文件头注释（查找顺序、服务/开发两种使用方式），新增 `debug.log_dir`、`session.storage_dir` 路径说明
+- **doc/ISSUES.md** 新增 Issue #10：`/session` 命令在飞书客户端作用有限，待讨论是否去除，暂不修改
+
+---
+
 ## [v0.1.2] - 2026-03-21
 
 **开发人**: ERROR403
