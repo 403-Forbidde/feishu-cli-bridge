@@ -1,8 +1,8 @@
 # Feishu CLI Bridge
 
-程序员专属：用飞书私聊向 OpenCode、Claude Code、Codex 等 CLI 编程工具下达指令，享受流式打字机输出体验。
+程序员专属：用飞书私聊向 OpenCode、Codex 等 CLI 编程工具下达指令，享受流式打字机输出体验。
 
-**版本**: v0.1.1
+**版本**: v0.1.2
 **开发**: ERROR403
 **更新日期**: 2026-03-21
 
@@ -16,7 +16,7 @@
 
 ## 功能特性
 
-- 🤖 **多 CLI 支持** — OpenCode、Claude Code、Codex，可同时启用，按 `@` 前缀指定
+- 🤖 **多 CLI 支持** — OpenCode、Codex，可同时启用，按 `@` 前缀指定
 - 💬 **CardKit 流式输出** — 真正的打字机效果，逐字动画显示，左下角 loading 动画
 - 💭 **思考过程展示** — 可折叠思考面板，实时显示 AI 推理过程
 - 📊 **Token 统计** — Footer 紧凑显示耗时、Token 消耗、上下文占用率、模型名
@@ -81,8 +81,7 @@ python start.py
 通过 `@` 前缀指定工具（默认优先 OpenCode）：
 
 ```
-@claude 帮我重构这个函数
-@codex  生成一个 React 组件
+@codex 生成一个 React 组件
 ```
 
 ### TUI 命令
@@ -150,12 +149,6 @@ cli:
         name: "Kimi K2.5"
       - id: "opencode/mimo-v2-pro-free"
         name: "MiMo V2 Pro Free"
-  claudecode:
-    enabled: true
-    command: "claude"
-    default_model: "claude-3-5-sonnet-20241022"
-    timeout: 300
-
 # 项目管理
 project:
   storage_path: ""    # 留空使用默认 ~/.config/cli-feishu-bridge/projects.json
@@ -182,7 +175,7 @@ project:
 ```
 feishu-cli-bridge/
 ├── src/
-│   ├── adapters/              # CLI 适配器（OpenCode/Claude Code/Codex）
+│   ├── adapters/              # CLI 适配器（OpenCode/Codex）
 │   ├── feishu/                # 飞书模块（WebSocket/API/卡片/流式控制）
 │   ├── project/               # 项目管理（增删改查、JSON 持久化）
 │   ├── session/               # 会话管理（LRU 缓存）
@@ -198,6 +191,9 @@ feishu-cli-bridge/
 ```
 
 ## 更新日志
+
+### v0.1.2 (2026-03-21)
+- ✅ 移除 Claude Code（claudecode）支持，仅保留 OpenCode 和 Codex
 
 ### v0.1.1 (2026-03-21)
 - ✅ `/new` 卡片显示完整模型 ID（如 `anthropic/claude-sonnet-4-20250514`）

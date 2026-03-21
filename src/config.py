@@ -95,14 +95,6 @@ def _load_from_env() -> Config:
                 default_model=os.getenv("OPENCODE_MODEL", "gpt-4"),
                 timeout=int(os.getenv("OPENCODE_TIMEOUT", "300")),
             ),
-            "claudecode": CLIConfig(
-                enabled=os.getenv("CLAUDECODE_ENABLED", "true").lower() == "true",
-                command=os.getenv("CLAUDECODE_CMD", "claude"),
-                default_model=os.getenv(
-                    "CLAUDECODE_MODEL", "claude-3-5-sonnet-20241022"
-                ),
-                timeout=int(os.getenv("CLAUDECODE_TIMEOUT", "300")),
-            ),
             "codex": CLIConfig(
                 enabled=os.getenv("CODEX_ENABLED", "false").lower() == "true",
                 command=os.getenv("CODEX_CMD", "codex"),

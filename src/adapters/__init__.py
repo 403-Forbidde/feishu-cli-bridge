@@ -1,7 +1,6 @@
 """CLI 适配器模块"""
 from .base import BaseCLIAdapter, StreamChunk, StreamChunkType, Message, TokenStats
 from .opencode import OpenCodeAdapter
-from .claudecode import ClaudeCodeAdapter
 from .codex import CodexAdapter
 
 __all__ = [
@@ -11,7 +10,6 @@ __all__ = [
     "Message",
     "TokenStats",
     "OpenCodeAdapter",
-    "ClaudeCodeAdapter",
     "CodexAdapter",
     "create_adapter",
 ]
@@ -19,7 +17,6 @@ __all__ = [
 # 适配器注册表
 _ADAPTER_REGISTRY = {
     "opencode": OpenCodeAdapter,
-    "claudecode": ClaudeCodeAdapter,
     "codex": CodexAdapter,
 }
 
@@ -27,9 +24,9 @@ _ADAPTER_REGISTRY = {
 def create_adapter(cli_type: str, config: dict) -> BaseCLIAdapter:
     """
     创建适配器实例
-    
+
     Args:
-        cli_type: CLI 类型 (opencode/claudecode/codex)
+        cli_type: CLI 类型 (opencode/codex)
         config: 配置字典
         
     Returns:

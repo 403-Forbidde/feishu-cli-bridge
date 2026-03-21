@@ -93,7 +93,7 @@ def build_new_session_card(
         session_title:        新会话标题
         working_dir:          当前工作目录
         model:                当前模型 ID（可选）
-        cli_type:             CLI 工具类型（如 opencode / claudecode）
+        cli_type:             CLI 工具类型（如 opencode / codex）
         project_name:         当前项目标识（可选）
         project_display_name: 当前项目显示名（可选）
 
@@ -110,7 +110,7 @@ def build_new_session_card(
     home = os.path.expanduser("~")
     display_dir = working_dir.replace(home, "~") if working_dir.startswith(home) else working_dir
 
-    cli_label = {"opencode": "OpenCode", "claudecode": "Claude Code", "codex": "Codex"}.get(
+    cli_label = {"opencode": "OpenCode", "codex": "Codex"}.get(
         cli_type.lower(), cli_type or "AI"
     )
 

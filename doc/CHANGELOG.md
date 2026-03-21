@@ -1,5 +1,23 @@
 # 更新日志
 
+## [v0.1.2] - 2026-03-21
+
+**开发人**: ERROR403
+
+### 移除
+
+- **Claude Code（claudecode）适配器全面下线**
+  - 删除 `src/adapters/claudecode.py`
+  - `src/adapters/__init__.py` 移除 `ClaudeCodeAdapter` 导入和注册
+  - `src/config.py` 移除 `claudecode` 默认配置及 `CLAUDECODE_*` 环境变量
+  - `src/feishu/handler.py` 移除 `@claude` / `使用claude` 路由规则、claudecode 回退逻辑
+  - `src/feishu/card_builder.py` 移除 `cli_label` 中 `"claudecode": "Claude Code"` 映射
+  - `config.yaml` / `config.example.yaml` 移除 `claudecode` 配置段
+  - 所有错误提示、帮助文字、文档中的 Claude Code 相关内容全部清除
+  - 当前支持工具：**OpenCode**（默认）、**Codex**（`@codex` 前缀指定）
+
+---
+
 ## [v0.1.1] - 2026-03-21
 
 **开发人**: ERROR403

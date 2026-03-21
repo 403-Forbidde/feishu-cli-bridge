@@ -49,7 +49,7 @@ async def main():
                 logger.warning(f"⚠️ CLI 工具未安装: {cli_type} ({cli_config.command})")
     
     if not available_clis:
-        logger.error("❌ 没有可用的 CLI 工具！请至少安装一个：opencode、claudecode 或 codex")
+        logger.error("❌ 没有可用的 CLI 工具！请至少安装一个：opencode 或 codex")
         sys.exit(1)
     
     # 创建会话存储目录

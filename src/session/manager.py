@@ -135,7 +135,7 @@ class SessionManager:
         
         Args:
             user_id: 用户 ID
-            cli_type: CLI 类型 (opencode/claudecode/codex)
+            cli_type: CLI 类型 (opencode/codex)
             working_dir: 工作目录
             
         Returns:

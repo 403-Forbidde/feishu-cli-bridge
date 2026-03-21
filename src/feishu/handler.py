@@ -62,7 +62,7 @@ class MessageHandler:
     def _detect_cli_type(self, content: str) -> Optional[str]:
         """
         检测用户想要使用的 CLI 类型
-        优先级：opencode > claudecode > codex
+        优先级：opencode > codex
         """
         content_lower = content.lower()
 
@@ -70,17 +70,12 @@ class MessageHandler:
         if "@opencode" in content_lower or "使用opencode" in content_lower:
             return "opencode" if "opencode" in self.adapters else None
 
-        if "@claude" in content_lower or "使用claude" in content_lower:
-            return "claudecode" if "claudecode" in self.adapters else None
-
         if "@codex" in content_lower or "使用codex" in content_lower:
             return "codex" if "codex" in self.adapters else None
 
         # 默认使用第一个启用的适配器
         if "opencode" in self.adapters:
             return "opencode"
-        if "claudecode" in self.adapters:
-            return "claudecode"
         if "codex" in self.adapters:
             return "codex"
 
@@ -186,17 +181,15 @@ class MessageHandler:
         if not cli_type:
             await self.api.send_text(
                 message.chat_id,
-                "⚠️ 没有可用的 CLI 工具。请确保已安装 opencode、claudecode 或 codex。",
+                "⚠️ 没有可用的 CLI 工具。请确保已安装 opencode 或 codex。",
             )
             return
 
         # 清理命令前缀
         for prefix in [
             "@opencode",
-            "@claude",
             "@codex",
             "使用opencode",
-            "使用claude",
             "使用codex",
         ]:
             if content.lower().startswith(prefix.lower()):
@@ -462,7 +455,6 @@ class MessageHandler:
 
 **支持的 CLI 工具：**
 • **OpenCode** — 默认使用
-• **Claude Code** — `@claude` 指定
 • **Codex** — `@codex` 指定
 
 **会话 & 模型命令：**
@@ -742,17 +734,15 @@ class MessageHandler:
         if not cli_type:
             await self.api.send_text(
                 message.chat_id,
-                "⚠️ 没有可用的 CLI 工具。请确保已安装 opencode、claudecode 或 codex。",
+                "⚠️ 没有可用的 CLI 工具。请确保已安装 opencode 或 codex。",
             )
             return
 
         # 清理命令前缀
         for prefix in [
             "@opencode",
-            "@claude",
             "@codex",
             "使用opencode",
-            "使用claude",
             "使用codex",
         ]:
             if content.lower().startswith(prefix.lower()):

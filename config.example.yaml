@@ -33,8 +33,8 @@ session:
 
 # -----------------------------------------------------------------------------
 # CLI 工具配置
-# 支持同时启用多个工具，发消息时通过 @opencode / @claude / @codex 指定
-# 默认优先级: opencode > claudecode > codex
+# 支持同时启用多个工具，发消息时通过 @opencode / @codex 指定
+# 默认优先级: opencode > codex
 # -----------------------------------------------------------------------------
 cli:
   # OpenCode（推荐，支持多模型 + HTTP/SSE 流式）
@@ -53,13 +53,6 @@ cli:
         name: "MiMo V2 Pro Free"
       - id: "opencode/mimo-v2-omni-free"
         name: "MiMo V2 Omni Free"
-
-  # Claude Code（Anthropic 官方 CLI）
-  claudecode:
-    enabled: true
-    command: "claude"                   # 环境变量: CLAUDECODE_CMD
-    default_model: "claude-sonnet-4-5"  # 环境变量: CLAUDECODE_MODEL
-    timeout: 300                        # 环境变量: CLAUDECODE_TIMEOUT
 
   # Codex（默认关闭）
   codex:
