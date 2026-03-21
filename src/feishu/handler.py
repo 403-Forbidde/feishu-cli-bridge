@@ -656,6 +656,37 @@ class MessageHandler:
                         return {"toast": {"type": "error", "content": e.message,
                                           "i18n": {"zh_cn": e.message}}}
 
+            elif action_type == "switch_mode":
+                agent_id = button_value.get("agent_id")
+                cli_type = button_value.get("cli_type", "opencode")
+                if not agent_id:
+                    return {"toast": {"type": "error", "content": "未指定 agent",
+                                      "i18n": {"zh_cn": "未指定 agent"}}}
+
+                adapter = self.adapters.get(cli_type)
+                if not adapter or not hasattr(adapter, "switch_agent"):
+                    return {"toast": {"type": "error", "content": "适配器不支持模式切换",
+                                      "i18n": {"zh_cn": "适配器不支持模式切换"}}}
+
+                await adapter.switch_agent(agent_id)
+                logger.info(f"卡片回调切换 agent 成功: {agent_id}")
+
+                # 重绘卡片，高亮新选中的 agent
+                agents = await adapter.list_agents()
+                from .card_builder import build_mode_select_card
+                updated_card = build_mode_select_card(agents, agent_id, cli_type=cli_type)
+                return {
+                    "toast": {
+                        "type": "success",
+                        "content": f"✅ 已切换到: {agent_id}",
+                        "i18n": {"zh_cn": f"✅ 已切换到: {agent_id}"},
+                    },
+                    "update_card": {
+                        "message_id": message_id,
+                        "card": updated_card,
+                    },
+                }
+
             else:
                 logger.warning(f"未知卡片回调 action: {action_type}")
                 return {"toast": {"type": "error", "content": "未知操作",

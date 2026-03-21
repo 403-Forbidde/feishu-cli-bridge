@@ -364,6 +364,92 @@ def build_project_list_card(
     }
 
 
+def build_mode_select_card(
+    agents: List[Dict[str, Any]],
+    current_agent: str,
+    cli_type: str = "opencode",
+) -> Dict[str, Any]:
+    """
+    构建 agent 模式切换卡片（Schema 1.0 格式）
+
+    当前 agent 用绿色 primary 按钮标识，其余为 default 按钮。
+    点击后推送 im.card.action.trigger_v1，handler 处理 switch_mode 动作。
+
+    Args:
+        agents:        用户可见的 agent 列表，每项含 name / description
+        current_agent: 当前激活的 agent 名称
+        cli_type:      CLI 工具类型（写入按钮 value，供 handler 路由）
+    """
+    elements: List[Dict[str, Any]] = []
+
+    def _label(a: Dict[str, Any]) -> str:
+        return a.get("display_name") or a["name"]
+
+    current_info = next((a for a in agents if a["name"] == current_agent), None)
+    current_label = _label(current_info) if current_info else current_agent
+    current_desc = current_info.get("description", "") if current_info else ""
+
+    # ── 当前激活区块（绿色高亮，无切换按钮）─────────────────────────────
+    elements.append({
+        "tag": "div",
+        "text": {
+            "tag": "lark_md",
+            "content": "<font color='grey'>当前激活</font>",
+        },
+    })
+    elements.append({
+        "tag": "div",
+        "text": {
+            "tag": "lark_md",
+            "content": (
+                f"<font color='green'>🟢 **{current_label}**</font>\n"
+                f"{current_desc}"
+            ),
+        },
+    })
+    elements.append({"tag": "hr"})
+
+    # ── 其余 agent：名称 + 描述 + 醒目蓝色切换按钮 ───────────────────────
+    for agent in agents:
+        name = agent["name"]
+        label = _label(agent)
+        desc = agent.get("description", "")
+        if name == current_agent:
+            continue
+
+        elements.append({
+            "tag": "div",
+            "text": {
+                "tag": "lark_md",
+                "content": f"**{label}**\n<font color='grey'>{desc}</font>",
+            },
+        })
+        elements.append({
+            "tag": "action",
+            "actions": [
+                {
+                    "tag": "button",
+                    "text": {"tag": "plain_text", "content": "▶ 切换至此"},
+                    "type": "primary",
+                    "value": {
+                        "action": "switch_mode",
+                        "agent_id": name,
+                        "cli_type": cli_type,
+                    },
+                }
+            ],
+        })
+
+    return {
+        "config": {"wide_screen_mode": True},
+        "header": {
+            "title": {"tag": "plain_text", "content": "🔄 切换 Agent 模式"},
+            "template": "blue",
+        },
+        "elements": elements,
+    }
+
+
 # ---------------------------------------------------------------------------
 # 私有卡片构建函数
 # ---------------------------------------------------------------------------

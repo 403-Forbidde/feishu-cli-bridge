@@ -42,6 +42,7 @@ cli:
     enabled: true                       # 环境变量: OPENCODE_ENABLED
     command: "opencode"                 # 可执行文件名或绝对路径（环境变量: OPENCODE_CMD）
     default_model: "kimi-for-coding/k2p5"  # 格式: provider/model（环境变量: OPENCODE_MODEL）
+    default_agent: "build"              # 默认 agent：build / plan / 自定义（环境变量: OPENCODE_AGENT）
     timeout: 300                        # 单次请求超时（秒）（环境变量: OPENCODE_TIMEOUT）
 
   # Claude Code（Anthropic 官方 CLI）

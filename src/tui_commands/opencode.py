@@ -21,7 +21,7 @@ class OpenCodeTUICommands(TUIBaseCommand):
     @property
     def supported_commands(self) -> List[str]:
         """返回支持的命令列表"""
-        return ["new", "session", "model", "reset"]
+        return ["new", "session", "model", "mode", "reset"]
 
     async def execute(
         self, command: str, args: Optional[str], context: CommandContext
@@ -42,6 +42,8 @@ class OpenCodeTUICommands(TUIBaseCommand):
             return await self._handle_session(args, context)
         elif command == "model":
             return await self._handle_model(args, context)
+        elif command == "mode":
+            return await self._handle_mode(args, context)
         elif command == "reset":
             return await self._handle_reset(context)
         else:
@@ -252,6 +254,50 @@ class OpenCodeTUICommands(TUIBaseCommand):
             if self.logger:
                 self.logger.error(f"切换模型失败: {e}")
             return TUIResult.error(f"切换模型失败: {str(e)}")
+
+    async def _handle_mode(
+        self, args: Optional[str], context: CommandContext
+    ) -> TUIResult:
+        """处理 /mode 命令 - 列出或切换 agent 模式
+
+        - 无参数: 发送按钮卡片供用户点击切换
+        - 有参数: 直接切换到指定 agent
+        """
+        try:
+            if args:
+                return await self._switch_mode(args.strip(), context)
+            return await self._list_modes(context)
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"处理 mode 命令失败: {e}")
+            return TUIResult.error(f"处理 mode 命令失败: {str(e)}")
+
+    async def _list_modes(self, context: CommandContext) -> TUIResult:
+        """列出可用 agent 并返回按钮卡片"""
+        if not hasattr(self.adapter, "list_agents"):
+            return TUIResult.error("适配器不支持 list_agents")
+
+        agents = await self.adapter.list_agents()
+        if not agents:
+            return TUIResult.text("ℹ️ 暂无可用 agent 模式")
+
+        current = self.adapter.get_current_agent() if hasattr(self.adapter, "get_current_agent") else "build"
+
+        from ..feishu.card_builder import build_mode_select_card
+        card = build_mode_select_card(agents, current, cli_type=context.cli_type)
+        return TUIResult.card("", metadata={"card_json": card})
+
+    async def _switch_mode(self, agent_id: str, context: CommandContext) -> TUIResult:
+        """直接切换到指定 agent，返回与 /mode 一致的卡片"""
+        if not hasattr(self.adapter, "switch_agent"):
+            return TUIResult.error("适配器不支持 switch_agent")
+
+        await self.adapter.switch_agent(agent_id)
+
+        agents = await self.adapter.list_agents() if hasattr(self.adapter, "list_agents") else []
+        from ..feishu.card_builder import build_mode_select_card
+        card = build_mode_select_card(agents, agent_id, cli_type=context.cli_type)
+        return TUIResult.card("", metadata={"card_json": card})
 
     async def _handle_reset(self, context: CommandContext) -> TUIResult:
         """处理 /reset 命令 - 重置当前会话"""

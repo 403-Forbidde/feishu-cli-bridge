@@ -20,7 +20,7 @@ class TUICommandRouter:
     """
 
     # 所有支持的 TUI 命令
-    SUPPORTED_COMMANDS = ["new", "session", "model", "reset", "clear", "help"]
+    SUPPORTED_COMMANDS = ["new", "session", "model", "mode", "reset", "clear", "help"]
 
     def __init__(self):
         self._command_handlers: Dict[str, TUIBaseCommand] = {}

@@ -128,6 +128,10 @@ class OpenCodeAdapter(BaseCLIAdapter):
         return self.config.get("default_model", "opencode/mimo-v2-pro-free")
 
     @property
+    def default_agent(self) -> str:
+        return self.config.get("default_agent", "build")
+
+    @property
     def context_window(self) -> int:
         model = self.default_model.lower()
         if "kimi" in model or "claude" in model:
@@ -322,6 +326,7 @@ class OpenCodeAdapter(BaseCLIAdapter):
             body: Dict[str, Any] = {
                 "parts": parts,
                 "model": {"providerID": provider_id, "modelID": model_id},
+                "agent": self.default_agent,
             }
 
             # directory 作为 query 参数，服务端中间件决定此 prompt 的工作目录上下文
@@ -717,3 +722,109 @@ class OpenCodeAdapter(BaseCLIAdapter):
     def get_current_model(self) -> str:
         """获取当前使用的模型"""
         return self.default_model
+
+    # OpenCode 内置 agent 的中文展示信息
+    _BUILTIN_DISPLAY: Dict[str, Dict[str, str]] = {
+        "build": {
+            "display_name": "Build · 构建",
+            "description": "默认模式，全工具权限，可读写文件、执行命令",
+        },
+        "plan": {
+            "display_name": "Plan · 规划",
+            "description": "只读模式，用于分析代码和制定方案，不会修改文件",
+        },
+    }
+
+    # oh-my-openagent 各 agent 的中文展示信息（key 为小写 agent 名）
+    _OHM_DISPLAY: Dict[str, Dict[str, str]] = {
+        "sisyphus": {
+            "display_name": "Sisyphus · 总协调",
+            "description": "主协调者，并行调度其他 agent，驱动任务完成",
+        },
+        "hephaestus": {
+            "display_name": "Hephaestus · 深度工作",
+            "description": "自主深度工作者，端到端探索和执行代码任务",
+        },
+        "prometheus": {
+            "display_name": "Prometheus · 战略规划",
+            "description": "动手前先与你确认任务范围和策略",
+        },
+        "oracle": {
+            "display_name": "Oracle · 架构调试",
+            "description": "架构设计与调试专家",
+        },
+        "librarian": {
+            "display_name": "Librarian · 文档搜索",
+            "description": "文档查找与代码搜索专家",
+        },
+        "explore": {
+            "display_name": "Explore · 快速探索",
+            "description": "快速代码库 grep 与文件浏览",
+        },
+        "multimodal looker": {
+            "display_name": "Multimodal Looker · 视觉分析",
+            "description": "图片与多模态内容分析",
+        },
+        "multimodal_looker": {
+            "display_name": "Multimodal Looker · 视觉分析",
+            "description": "图片与多模态内容分析",
+        },
+    }
+
+    # 用于检测 oh-my-openagent 是否已安装的特征 agent 名（小写）
+    _OHM_SIGNATURE = {"sisyphus", "hephaestus", "prometheus"}
+
+    def _builtin_agents(self) -> List[Dict[str, Any]]:
+        """返回 OpenCode 内置 agent 列表（附中文展示信息）"""
+        return [
+            {**{"name": k}, **v}
+            for k, v in self._BUILTIN_DISPLAY.items()
+        ]
+
+    async def list_agents(self) -> List[Dict[str, Any]]:
+        """列出用户可见的 agent。
+
+        - 未安装 oh-my-openagent：仅返回 build / plan（附中文描述）
+        - 已安装 oh-my-openagent：仅返回 oh-my-openagent 的 agent（附中文描述）
+        """
+        started = await self._ensure_server()
+        if not started or self._client is None:
+            return self._builtin_agents()
+        try:
+            response = await self._client.get("/agent")
+            if response.status_code != 200:
+                return self._builtin_agents()
+            all_agents = response.json()
+
+            # 检测 oh-my-openagent 是否已安装
+            names_lower = {a.get("name", "").lower() for a in all_agents}
+            if names_lower & self._OHM_SIGNATURE:
+                # 仅展示 oh-my-openagent 的 agent
+                result = []
+                for a in all_agents:
+                    key = a.get("name", "").lower()
+                    if key in self._OHM_DISPLAY:
+                        display = self._OHM_DISPLAY[key]
+                        result.append({
+                            "name": a["name"],
+                            "display_name": display["display_name"],
+                            "description": display["description"],
+                        })
+                return result
+            else:
+                return self._builtin_agents()
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"list_agents 失败: {e}")
+            return self._builtin_agents()
+
+    async def switch_agent(self, agent_id: str) -> bool:
+        """切换当前使用的 agent"""
+        self.config["default_agent"] = agent_id
+        if self.logger:
+            self.logger.info(f"切换到 agent: {agent_id}")
+        return True
+
+    def get_current_agent(self) -> str:
+        """获取当前使用的 agent"""
+        return self.default_agent

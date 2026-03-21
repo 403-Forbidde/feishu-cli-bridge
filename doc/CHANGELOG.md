@@ -1,5 +1,37 @@
 # 更新日志
 
+## [v0.0.9] - 2026-03-21
+
+**开发人**: ERROR403
+
+### 新增
+
+- **`/mode` 命令：Agent 模式切换** (`src/tui_commands/opencode.py`, `src/adapters/opencode.py`, `src/feishu/card_builder.py`, `src/feishu/handler.py`)
+  - `/mode` — 发送 Agent 模式选择卡片，展示当前激活模式（🟢 绿色高亮）及其余可切换模式（蓝色 `▶ 切换至此` 按钮）
+  - `/mode <agent>` — 直接切换，返回与 `/mode` 样式统一的更新卡片
+  - 点击卡片按钮通过 `im.card.action.trigger_v1` 回调切换，卡片原地重绘并弹 toast
+  - `TUICommandRouter.SUPPORTED_COMMANDS` 注册 `"mode"`
+
+- **oh-my-openagent 自动检测** (`src/adapters/opencode.py`)
+  - 未安装时：仅显示 OpenCode 内置的 Build / Plan 两个模式
+  - 已安装时：自动改为显示 oh-my-openagent 的 7 个 Agent（Sisyphus、Hephaestus、Prometheus、Oracle、Librarian、Explore、Multimodal Looker），通过特征集合 `{sisyphus, hephaestus, prometheus}` 检测
+  - 所有 Agent 附中文展示名称和中文描述，`display_name` 字段由 adapter 注入，card builder 直接渲染
+
+- **`switch_mode` 卡片回调** (`src/feishu/handler.py`)
+  - `handle_card_callback` 新增 `switch_mode` action 分支
+  - 按钮 value 携带 `agent_id` + `cli_type`，handler 通过 `self.adapters[cli_type]` 路由到对应 adapter
+
+- **`prompt_async` 注入 agent 字段** (`src/adapters/opencode.py`)
+  - 每次发消息时 body 携带 `"agent": self.default_agent`，确保 OpenCode 使用选定 agent 处理请求
+
+### 技术细节
+
+- `GET /agent` 动态枚举全部 agent，内部 agent（compaction / title / summary）通过黑名单过滤
+- oh-my-openagent 检测依赖特征签名，未来新增 agent 无需修改检测逻辑
+- `_switch_mode` 切换后调用 `list_agents()` 重建卡片，与按钮回调路径输出完全一致
+
+---
+
 ## [v0.0.8] - 2026-03-21
 
 **开发人**: ERROR403
