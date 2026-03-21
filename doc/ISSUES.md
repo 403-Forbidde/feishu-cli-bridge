@@ -660,6 +660,211 @@ working_dir = current_project.path if current_project else default_working_dir
 
 ---
 
+### Issue #16: 双重消息解析路径（死代码 + 一致性问题）
+
+**状态**: 📋 待修复
+**优先级**: 高
+**发现时间**: 2026-03-21
+
+**问题描述**:
+`FeishuClient._parse_message`（`client.py:307`）解析完消息后，结果被立即丢弃。代码随即调用 `_event_to_dict` 将事件转回字典，再由 `handler.py:275` 重新解析一遍。两套解析逻辑对附件处理能力不对等（`client.py` 版不处理 `image/file` 类型），且一次事件被解析两次。
+
+**修复方案**:
+删除 `client.py` 中的 `_parse_message` 方法（死代码），统一由 `handler.py` 的 `_parse_event_data` 负责消息解析。
+
+**相关文件**: `src/feishu/client.py`, `src/feishu/handler.py`
+
+---
+
+### Issue #17: `_stream_reply_legacy` 丢失 reply_to 参数
+
+**状态**: 📋 待修复
+**优先级**: 高
+**发现时间**: 2026-03-21
+
+**问题描述**:
+`api.py:609` 在 IM Patch 回退路径中调用 `send_card_message` 时未传 `reply_to` 参数：
+```python
+message_id = await self.send_card_message(chat_id, initial_card)
+# 应为：send_card_message(chat_id, initial_card, reply_to=reply_to_message_id)
+```
+导致 IM Patch 模式下回复不显示原生引用气泡，与 CardKit 路径行为不一致。
+
+**修复方案**:
+在调用处补传 `reply_to=reply_to_message_id`。
+
+**相关文件**: `src/feishu/api.py`
+
+---
+
+### Issue #18: `SessionManager._save_session` 在事件循环中同步阻塞
+
+**状态**: 📋 待修复
+**优先级**: 高
+**发现时间**: 2026-03-21
+
+**问题描述**:
+`session/manager.py:109` 的 `_save_session` 是同步文件写入，在异步上下文（`handle_message`）中被直接调用，每条消息触发 2-3 次，持续阻塞 asyncio 事件循环。
+
+**修复方案**:
+改用 `await asyncio.to_thread(self._save_session, session)` 将磁盘 IO 移到线程池。
+
+**相关文件**: `src/session/manager.py`
+
+---
+
+### Issue #19: `_patch_card` 每次回调重建 SDK Client
+
+**状态**: 📋 待修复
+**优先级**: 高
+**发现时间**: 2026-03-21
+
+**问题描述**:
+`client.py:183` 在每次卡片回调时执行 `lark.Client.builder().app_id(...).build()`，不复用已有的 SDK 客户端，导致连接池无法复用，累积资源浪费和潜在连接泄漏。
+
+**修复方案**:
+直接使用 `FeishuAPI` 中已初始化的 `self.client` 实例，或在 `FeishuClient` 构造时创建共享实例。
+
+**相关文件**: `src/feishu/client.py`
+
+---
+
+### Issue #20: handler.py 重复 TUI 命令检测（死代码）
+
+**状态**: 📋 待修复
+**优先级**: 高
+**发现时间**: 2026-03-21
+
+**问题描述**:
+`handler.py:167-177` 存在两段相同的 `is_tui_command` 检测逻辑，第二段（第 174 行）因第一段已 `return` 而永远不会执行，是死代码：
+```python
+if self.tui_router.is_tui_command(content):   # 第 167 行，执行后 return
+    ...
+    return
+if not content:
+    return
+if self.tui_router.is_tui_command(content):   # 第 174 行，永远不会执行
+    ...
+```
+
+**修复方案**:
+删除第二段重复检测，将 `if not content: return` 移到第一段之前。
+
+**相关文件**: `src/feishu/handler.py`
+
+---
+
+### Issue #21: 附件保存存在路径穿越风险
+
+**状态**: 📋 待修复
+**优先级**: 中
+**发现时间**: 2026-03-21
+
+**问题描述**:
+`api.py:432` 直接使用飞书 SDK 返回的 `response.file_name` 构造保存路径：
+```python
+save_path = save_dir / filename  # filename 来自飞书响应，可能含 ../
+```
+若 `filename` 包含 `../` 路径组件，文件将被写入 `feishu_images/` 目录之外。
+
+**修复方案**:
+```python
+save_path = save_dir / Path(filename).name  # 只取基础文件名
+```
+
+**相关文件**: `src/feishu/api.py`
+
+---
+
+### Issue #22: OpenCode `_sessions` 字典无并发锁保护
+
+**状态**: 📋 待修复
+**优先级**: 中
+**发现时间**: 2026-03-21
+
+**问题描述**:
+`opencode.py:159` 的 `self._sessions` 在并发消息场景下，`_get_or_create_session` 和 `create_new_session` 同时执行时可能产生竞态——两个协程对同一 `working_dir` 均触发 `_create_session`，产生重复 API 调用和 session 泄漏。
+
+**修复方案**:
+添加 `self._sessions_lock = asyncio.Lock()`，在 `_get_or_create_session` 中使用 `async with self._sessions_lock`。
+
+**相关文件**: `src/adapters/opencode.py`
+
+---
+
+### Issue #23: `asyncio.get_event_loop()` 弃用用法
+
+**状态**: 📋 待修复
+**优先级**: 中
+**发现时间**: 2026-03-21
+
+**问题描述**:
+以下位置在异步函数中使用了已弃用的 `asyncio.get_event_loop()`，在 Python 3.10+ 触发 `DeprecationWarning`：
+- `opencode.py:424,443`：`asyncio.get_event_loop().time()`
+- `flush_controller.py:102`：`loop = asyncio.get_event_loop()`
+
+**修复方案**:
+统一替换为 `asyncio.get_running_loop()`（在 async 函数中）或 `time.monotonic()`。
+
+**相关文件**: `src/adapters/opencode.py`, `src/feishu/flush_controller.py`
+
+---
+
+### Issue #24: `_beautify_list_items` 是完全空操作
+
+**状态**: 📋 待修复
+**优先级**: 中
+**发现时间**: 2026-03-21
+
+**问题描述**:
+`card_builder.py:977-1002` 的 `_beautify_list_items` 函数设置了 `prev_was_list` 局部变量但从未使用，函数无任何可观测副作用，是完全空操作。`optimize_markdown_style` 每次调用它都白白遍历一遍文本行。
+
+**修复方案**:
+删除此函数及所有调用点。
+
+**相关文件**: `src/feishu/card_builder.py`
+
+---
+
+### Issue #25: `formatter.py` 大量死代码待清理
+
+**状态**: 📋 待修复
+**优先级**: 低
+**发现时间**: 2026-03-21
+
+**问题描述**:
+`formatter.py` 中以下代码已被 `card_builder.py` 的同名实现取代，但未删除，造成维护混乱：
+- `optimize_markdown_style`（第 55 行）— 已被 `card_builder.py:1010` 取代，且逻辑不同（H1→H3 vs H1→H4），`format_with_metadata` 仍调用旧版
+- `_simplify_model_name`（第 104 行）— 已被 `card_builder.py:1159` 取代，截断逻辑不一致
+- `format_with_metadata`（第 8 行）— 无任何调用方
+- `parse_mention`（第 155 行）— 无任何调用方
+
+**修复方案**:
+删除 `formatter.py` 中的全部死代码；若文件为空则删除整个文件，并更新 import。
+
+**相关文件**: `src/feishu/formatter.py`, `src/feishu/card_builder.py`
+
+---
+
+### Issue #26: `max_sessions` 默认值三处不一致
+
+**状态**: 📋 待修复
+**优先级**: 低
+**发现时间**: 2026-03-21
+
+**问题描述**:
+`max_sessions` 的默认值在三处不一致：
+- `config.py:21`（dataclass 字段默认值）：`10`
+- `config.py:145`（env 变量解析）：`int(os.getenv("MAX_SESSIONS", "15"))`
+- `config.py:207`（YAML 解析）：`session_data.get("max_sessions", 15)`
+
+**修复方案**:
+统一为同一个值（建议 15），或抽取为模块级常量 `DEFAULT_MAX_SESSIONS = 15`。
+
+**相关文件**: `src/config.py`
+
+---
+
 ### 5. Codex 适配器完整化（对齐 OpenCode 功能）
 
 **状态**: 📋 待规划

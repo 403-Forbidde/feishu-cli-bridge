@@ -90,15 +90,48 @@
 
 ---
 
-## 快速开始
+## 快速开始（Linux · Ubuntu 24.04）
 
-### 1. 安装依赖
+> macOS 和 Windows 用户请跳转至下方对应平台章节。
+
+### 前置要求
+
+Ubuntu 24.04 内置 Python 3.12，需确保 `python3-venv` 已安装：
 
 ```bash
-pip install -r requirements.txt
-# 或
-uv pip install -r requirements.txt
+sudo apt update && sudo apt install -y python3-venv python3-pip
 ```
+
+安装 opencode CLI（参考 [opencode 官方文档](https://opencode.ai)）：
+
+```bash
+# 通过 npm 安装
+npm install -g opencode-ai
+# 或下载二进制放入 PATH
+```
+
+验证安装：
+
+```bash
+python3 --version   # 需 3.12+
+opencode --version
+```
+
+### 1. 克隆项目 & 创建虚拟环境
+
+```bash
+git clone <repo_url>
+cd cli-feishu-bridge
+
+# 创建虚拟环境（Ubuntu 24.04 Python 3.12+ 必须）
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 安装依赖
+pip install -r requirements.txt
+```
+
+激活后命令行前缀会出现 `(.venv)`，表示虚拟环境已生效。
 
 ### 2. 创建飞书自建应用
 
@@ -131,7 +164,8 @@ uv pip install -r requirements.txt
 
 ```bash
 cp config.example.yaml config.yaml
-# 编辑 config.yaml，填写 app_id 和 app_secret
+# 用编辑器打开，填写 app_id 和 app_secret
+nano config.yaml
 ```
 
 或只用环境变量（无需 config.yaml）：
@@ -144,10 +178,28 @@ export FEISHU_APP_SECRET="your_app_secret"
 ### 4. 启动
 
 ```bash
-python -m src.main
-# 或
-python start.py
-./start.sh
+# 推荐：start.sh 自动检测并激活 .venv，无需手动激活
+./start.sh           # CardKit 流式模式（默认）
+./start.sh --legacy  # 传统 IM Patch 模式
+
+# 或直接用 python3
+source .venv/bin/activate  # 若虚拟环境未激活
+python3 -m src.main
+```
+
+### 后台运行（systemd 用户服务）
+
+```bash
+# 安装 systemd 用户服务（开机自启，无需 root）
+bash scripts/install_service.sh
+
+# 管理服务
+systemctl --user status feishu-bridge
+systemctl --user stop feishu-bridge
+systemctl --user restart feishu-bridge
+
+# 卸载服务
+bash scripts/uninstall_service.sh
 ```
 
 ## macOS 运行说明（Apple Silicon / Intel）
