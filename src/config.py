@@ -1,6 +1,7 @@
 """配置管理模块"""
 
 import os
+import sys
 import yaml
 from dataclasses import dataclass, field
 from typing import Dict, Optional
@@ -87,11 +88,19 @@ def _find_config_file() -> Optional[Path]:
         if p.exists():
             return p
 
-    # 2. XDG 配置目录
-    config_home = Path(os.environ.get("XDG_CONFIG_HOME", "~/.config")).expanduser()
-    xdg_config = config_home / "cli-feishu-bridge" / "config.yaml"
-    if xdg_config.exists():
-        return xdg_config
+    # 2. 平台配置目录
+    if sys.platform == 'win32':
+        # Windows: %APPDATA%\cli-feishu-bridge\config.yaml
+        appdata = Path(os.environ.get('APPDATA', Path.home())).expanduser()
+        win_config = appdata / "cli-feishu-bridge" / "config.yaml"
+        if win_config.exists():
+            return win_config
+    else:
+        # Linux/macOS: XDG_CONFIG_HOME (~/.config)
+        config_home = Path(os.environ.get("XDG_CONFIG_HOME", "~/.config")).expanduser()
+        xdg_config = config_home / "cli-feishu-bridge" / "config.yaml"
+        if xdg_config.exists():
+            return xdg_config
 
     # 3. 当前工作目录（开发模式）
     cwd_config = Path("config.yaml")

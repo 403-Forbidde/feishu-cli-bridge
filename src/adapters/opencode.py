@@ -4,6 +4,7 @@ import asyncio
 import base64
 import json
 import os
+import shutil
 import time
 from typing import Optional, List, AsyncIterator, Dict, Any, Tuple
 from dataclasses import dataclass, field
@@ -26,13 +27,14 @@ class OpenCodeSession:
 class OpenCodeServerManager:
     """OpenCode Server 进程管理器（单实例，工作目录隔离通过 session directory 参数实现）"""
 
-    def __init__(self, port: int = 4096, hostname: str = "127.0.0.1"):
+    def __init__(self, port: int = 4096, hostname: str = "127.0.0.1", logger=None):
         self.port = port
         self.hostname = hostname
         self.base_url = f"http://{hostname}:{port}"
         self.process: Optional[asyncio.subprocess.Process] = None
         self._lock = asyncio.Lock()
         self._is_running = False
+        self._logger = logger
 
     async def start(self) -> bool:
         """启动 OpenCode Server"""
@@ -45,14 +47,14 @@ class OpenCodeServerManager:
                 self._is_running = True
                 return True
 
-            cmd = [
-                "opencode",
-                "serve",
-                "--port",
-                str(self.port),
-                "--hostname",
-                self.hostname,
-            ]
+            # 用 shutil.which 拿到完整路径，避免 Windows 子进程不走 shell PATH
+            opencode_bin = shutil.which("opencode")
+            if not opencode_bin:
+                if self._logger:
+                    self._logger.error("找不到 opencode 可执行文件，请确认已安装并加入 PATH")
+                return False
+
+            cmd = [opencode_bin, "serve", "--port", str(self.port)]
 
             try:
                 self.process = await asyncio.create_subprocess_exec(
@@ -62,15 +64,50 @@ class OpenCodeServerManager:
                     start_new_session=True,
                 )
 
-                # 等待服务启动
-                for _ in range(30):  # 最多等待 3 秒
+                # 等待服务启动，最多 10 秒（Windows 冷启动更慢）
+                for i in range(100):
                     await asyncio.sleep(0.1)
+
+                    # 进程已退出 → 立即读取 stderr 并报错
+                    if self.process.returncode is not None:
+                        stderr_bytes = b""
+                        if self.process.stderr:
+                            try:
+                                stderr_bytes = await asyncio.wait_for(
+                                    self.process.stderr.read(), timeout=1.0
+                                )
+                            except Exception:
+                                pass
+                        if self._logger:
+                            self._logger.error(
+                                f"opencode serve 进程意外退出 (code={self.process.returncode}): "
+                                f"{stderr_bytes.decode(errors='replace').strip()}"
+                            )
+                        return False
+
                     if await self._check_health():
                         self._is_running = True
                         return True
 
+                # 超时：读取 stderr 帮助诊断
+                stderr_bytes = b""
+                if self.process.stderr:
+                    try:
+                        stderr_bytes = await asyncio.wait_for(
+                            self.process.stderr.read(4096), timeout=1.0
+                        )
+                    except Exception:
+                        pass
+                if self._logger:
+                    self._logger.error(
+                        f"opencode serve 启动超时（10s）。stderr: "
+                        f"{stderr_bytes.decode(errors='replace').strip() or '(无输出)'}"
+                    )
                 return False
-            except Exception:
+
+            except Exception as e:
+                if self._logger:
+                    self._logger.error(f"启动 opencode serve 失败: {e}")
                 return False
 
     async def stop(self):
@@ -85,15 +122,22 @@ class OpenCodeServerManager:
             self._is_running = False
 
     async def _check_health(self) -> bool:
-        """检查服务健康状态"""
+        """检查服务健康状态（兼容不同 opencode 版本的 health 路径）"""
+        endpoints = ["/global/health", "/health", "/api/health"]
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"{self.base_url}/global/health", timeout=1.0
-                )
-                return response.status_code == 200
+                for path in endpoints:
+                    try:
+                        response = await client.get(
+                            f"{self.base_url}{path}", timeout=1.0
+                        )
+                        if response.status_code == 200:
+                            return True
+                    except Exception:
+                        continue
         except Exception:
-            return False
+            pass
+        return False
 
 
 class OpenCodeAdapter(BaseCLIAdapter):
@@ -151,7 +195,7 @@ class OpenCodeAdapter(BaseCLIAdapter):
             # 启动新实例
             port = self.config.get("server_port", 4096)
             hostname = self.config.get("server_hostname", "127.0.0.1")
-            self._server_manager = OpenCodeServerManager(port, hostname)
+            self._server_manager = OpenCodeServerManager(port, hostname, logger=self.logger)
 
             timeout = httpx.Timeout(300.0, connect=10.0)
             if self._client:

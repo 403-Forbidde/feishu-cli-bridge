@@ -173,6 +173,101 @@ file_content = response.file  # 直接访问
 
 ---
 
+### Issue #11: asyncio.Event 跨循环错误（Python ≤3.9）
+
+**状态**: ✅ 已修复
+**时间**: 2026-03-21
+**影响版本**: Windows Python 3.9 用户
+
+**问题描述**:
+Windows 上启动时报 `RuntimeError: Task got Future attached to a different loop`，程序无法运行。
+
+**根本原因**:
+`asyncio.Event()` 在模块顶层（`shutdown_event = asyncio.Event()`）创建时，Python 3.9 会将其绑定到当时存在的事件循环（或默认循环）。`asyncio.run()` 再创建新的事件循环，导致两者不一致。Python 3.10+ 已修复此行为。
+
+**修复方案**:
+将 `shutdown_event = asyncio.Event()` 从模块顶层移入 `main()` 函数内部，确保在运行中的事件循环内创建。`signal_handler` 通过闭包捕获 `shutdown_event`，行为不变。
+
+**相关文件**: `src/main.py`
+
+---
+
+### Issue #12: start.bat 中文注释乱码
+
+**状态**: ✅ 已修复
+**时间**: 2026-03-21
+**影响版本**: v0.1.4 Windows
+
+**问题描述**:
+运行 `start.bat` 时报多行 `'xxx' is not recognized as an internal or external command`，脚本无法正常执行。
+
+**根本原因**:
+`start.bat` 以 UTF-8 编码保存，包含中文注释。Windows CMD 默认使用 GBK/GB2312 代码页，UTF-8 中文字节序列被误解析为命令执行。
+
+**修复方案**:
+将 `start.bat` 中所有中文注释改为英文，消除编码依赖。
+
+**相关文件**: `start.bat`
+
+---
+
+### Issue #13: opencode 子进程启动失败 [WinError 2]
+
+**状态**: ✅ 已修复
+**时间**: 2026-03-21
+**影响版本**: v0.1.4 Windows
+
+**问题描述**:
+飞书发送消息后控制台报 `启动 opencode serve 失败: [WinError 2] 系统找不到指定的文件`，所有对话均失败。
+
+**根本原因**:
+`asyncio.create_subprocess_exec` 在 Windows 上不走 shell 的 `PATH` 查找，直接将第一个参数作为完整可执行路径处理。`"opencode"` 字符串在这种情况下找不到对应文件。
+
+**修复方案**:
+启动前用 `shutil.which("opencode")` 解析完整可执行路径（如 `C:\Users\xxx\AppData\Roaming\npm\opencode.cmd`），再传给 `create_subprocess_exec`。
+
+**相关文件**: `src/adapters/opencode.py`
+
+---
+
+### Issue #14: opencode serve --hostname 参数在 v1.2.27 不支持
+
+**状态**: ✅ 已修复
+**时间**: 2026-03-21
+**影响版本**: opencode v1.2.27+
+
+**问题描述**:
+opencode server 启动超时（10s 后），日志显示 `opencode serve 进程意外退出`。
+
+**根本原因**:
+代码中 `opencode serve` 命令携带了 `--hostname 127.0.0.1` 参数，该参数在 opencode v1.2.27 中不存在（可能已更名或移除），导致进程启动后立即以错误码退出。
+
+**修复方案**:
+去除 `--hostname` 参数，仅保留 `--port`。opencode v1.2.27 默认即绑定 `127.0.0.1`。
+
+**相关文件**: `src/adapters/opencode.py`
+
+---
+
+### Issue #15: asyncio.WindowsProactorEventLoopPolicy 废弃警告
+
+**状态**: ✅ 已修复
+**时间**: 2026-03-21
+**影响版本**: Python 3.12+ Windows
+
+**问题描述**:
+启动时输出两行 `DeprecationWarning: 'asyncio.WindowsProactorEventLoopPolicy' is deprecated and slated for removal in Python 3.16`。
+
+**根本原因**:
+Python 3.12+ 在 Windows 上已将 `ProactorEventLoop` 设为默认，不再需要手动 `set_event_loop_policy`；强行设置反而触发废弃警告。
+
+**修复方案**:
+加版本判断：仅在 Python < 3.12 时设置 `WindowsProactorEventLoopPolicy`。
+
+**相关文件**: `src/main.py`
+
+---
+
 ## 已知问题
 
 ### LSP 类型检查误报
@@ -562,4 +657,62 @@ working_dir = current_project.path if current_project else default_working_dir
 | `/code/kimibridge/src/services/project_manager.py` | `src/project/manager.py` |
 | `/code/kimibridge/src/handlers/project_command_handler.py` | `src/tui_commands/project.py` |
 | `/code/kimibridge/src/handlers/feishu_handler_v3.py`（项目相关部分） | `src/feishu/handler.py` |
+
+---
+
+### 5. Codex 适配器完整化（对齐 OpenCode 功能）
+
+**状态**: 📋 待规划
+**优先级**: 中
+**调研时间**: 2026-03-21
+
+#### 背景
+
+当前 `src/adapters/codex.py` 是基于旧版推测写成的占位实现，存在以下问题：
+
+1. **JSON 事件解析错误** — `parse_chunk` 查找的字段（`response`、`delta`、`command`、`done`）不匹配真实 Codex `--json` 输出格式。实际格式（v0.44+）为 `{"type": "agent_message", ...}`、`{"type": "turn.completed", ...}` 等
+2. **`--history` 参数不存在** — 代码尝试传 `--history <tmpfile>` 参数，但该 flag 从未实现（GitHub issue #118，已关闭为"不计划"）；上下文持久化靠 session resume 机制
+3. **图片支持缺失** — `attachments` 参数被完全忽略，Codex 实际支持 `--image path[,path...]`
+4. **无 TUI 命令支持** — 缺少 `/new`、`/session`、`/model`、`/reset` 命令
+
+#### OpenCode vs Codex 功能对比
+
+| 功能 | OpenCode 实现方式 | Codex 实现方式 | 当前状态 |
+|------|-----------------|---------------|---------|
+| 流式输出 | HTTP/SSE `GET /event` | `--json` stdout JSONL | ❌ 解析格式错误 |
+| 会话创建 | `POST /session` | 直接运行（新进程） | ❌ 缺失 |
+| 会话续接 | session ID + HTTP | `codex exec resume <ID>` | ❌ 缺失 |
+| 会话重置 `/reset` | 新建 session | 不传 `resume`，新起进程 | ❌ 缺失 |
+| 会话列表 `/session` | `GET /session` | 读 `~/.codex/sessions/` 目录 | ❌ 缺失 |
+| 模型切换 `/model` | 更新 config | `--model` flag | ❌ 缺失 |
+| 图片输入 | FilePart base64 data URL | `--image path[,path...]` | ❌ 缺失 |
+| Agent 切换 | `GET /agent` + config | 无（Codex 无 agent 系统） | N/A |
+
+#### 需要修改的内容
+
+1. **重写 `parse_chunk`** — 按真实 Codex event schema 解析：
+   - `type: "agent_message"` → `StreamChunkType.CONTENT`
+   - `type: "turn.completed"` → `StreamChunkType.DONE`
+   - `type: "turn.failed"` / `type: "error"` → `StreamChunkType.ERROR`
+
+2. **Session ID 追踪** — 从 `--json` 输出中提取 session ID，持久化到 `.sessions/` 供 resume 使用
+
+3. **`execute_stream` 支持 resume** — 有 session ID 时用 `codex exec resume <ID>`，否则新起会话
+
+4. **图片支持** — 将 `attachments` 中的本地路径转为 `--image path1,path2` 参数（支持 PNG/JPEG）
+
+5. **TUI 命令** — 实现以下方法（对齐 OpenCode 接口）：
+   - `create_new_session()` — 清除当前 session ID，下次调用自动新建
+   - `list_sessions()` — 扫描 `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` 目录
+   - `switch_session(session_id)` — 设置当前 session ID 为指定值
+   - `reset_session()` — 等同 `create_new_session()`
+   - `list_models()` — 从 `config.yaml models` 列表读取（与 OpenCode 相同方式）
+   - `switch_model(model_id)` — 更新 `config["default_model"]`（与 OpenCode 相同）
+
+#### 技术参考
+
+- [Codex 非交互模式文档](https://developers.openai.com/codex/noninteractive)
+- [Codex CLI 命令参考](https://developers.openai.com/codex/cli/reference)
+- [GitHub Issue #4776: JSON 输出格式漂移](https://github.com/openai/codex/issues/4776)（已修复，event 字段名为 `type` 非 `item_type`）
+- [GitHub Issue #118: streaming/history 标志](https://github.com/openai/codex/issues/118)（`--history` 不会实现，用 resume）
 

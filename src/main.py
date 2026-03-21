@@ -10,12 +10,11 @@ from .utils.logger import setup_logger
 from .feishu import FeishuClient, FeishuAPI, MessageHandler
 from .project import ProjectManager
 
-# 全局变量用于信号处理
-shutdown_event = asyncio.Event()
-
-
 async def main():
     """主函数"""
+    # 在运行中的事件循环内创建 Event，避免 Python 3.9 跨循环问题
+    shutdown_event = asyncio.Event()
+
     # 加载配置
     config = get_config()
 
@@ -104,7 +103,8 @@ async def main():
         shutdown_event.set()
     
     signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
+    if hasattr(signal, 'SIGTERM'):  # Windows 无 SIGTERM
+        signal.signal(signal.SIGTERM, signal_handler)
     
     try:
         # 启动飞书客户端
@@ -133,6 +133,10 @@ async def main():
 
 def run():
     """入口函数"""
+    # Python 3.11 及以下 Windows 需显式设置 ProactorEventLoop 以支持子进程
+    # Python 3.12+ Windows 上已是默认值，无需设置
+    if sys.platform == 'win32' and sys.version_info < (3, 12):
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

@@ -18,21 +18,39 @@ opencode --version        # OpenCode CLI（主要 AI 后端，必须在 PATH 中
 
 > **OpenCode 由桥接程序自动管理**：启动 `python -m src.main` 后，收到第一条消息时桥接程序会自动执行 `opencode serve --port 4096`，无需手动启动。但 `opencode` 可执行文件必须存在于 PATH 中。
 
+**Windows 用户额外说明：**
+
+- Python 3.12+ 从 [python.org](https://www.python.org/downloads/windows/) 安装，安装时务必勾选「**Add Python to PATH**」
+- opencode 从官方 Releases 下载 Windows 版二进制（`.exe`），放入 PATH 可访问目录
+- 以上命令在 **命令提示符（CMD）** 或 **PowerShell** 中均可运行
+
 如果 Python 版本不符或工具缺失，**先停下来告知用户**，不要继续。
 
 ---
 
 ## 二、安装依赖
 
+**Linux / macOS：**
+
 ```bash
-# 进入项目目录
 cd /path/to/cli-feishu-bridge
 
-# 方式一：pip
+# 方式一：pip（推荐先创建虚拟环境，macOS 3.12+ 必须）
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 
-# 方式二：uv（更快）
+# 方式二：uv（更快，可跳过手动创建 venv）
 uv pip install -r requirements.txt
+```
+
+**Windows（CMD）：**
+
+```cmd
+cd C:\path\to\cli-feishu-bridge
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
 ```
 
 安装完成后验证：
@@ -59,17 +77,24 @@ python -c "import lark_oapi, aiohttp, yaml; print('依赖 OK')"
 
 在权限管理页面找到「导入权限」功能，将 `doc/BOTAUTH.md` 的 JSON 内容粘贴导入，一次性开启所有权限。
 
+> `doc/BOTAUTH.md` 包含本项目所需的全部最小权限集（8 个 scope），可直接导入。
+
 **方式 B：手动开启（最小权限）**
 
 进入应用 → **权限管理** → 搜索并开启以下权限（全部选「申请」）：
 
-| 权限 | 说明 |
-|------|------|
+| 权限 scope | 说明 |
+|-----------|------|
 | `im:message` | 读取消息 |
 | `im:message:send_as_bot` | 以机器人身份发消息 |
-| `im:messageReaction:readonly` | 读取 Emoji Reaction |
-| `im:messageReaction:write` | 添加/删除 Emoji Reaction |
+| `im:message.reactions:read` | 读取 Emoji Reaction（打字提示）|
+| `im:message.reactions:write_only` | 添加/删除 Emoji Reaction |
+| `im:resource` | 下载消息中的图片/文件 |
 | `contact:user.id:readonly` | 读取用户 ID |
+| `cardkit:card:read` | CardKit 流式卡片（不开则自动降级为 IM Patch 模式）|
+| `cardkit:card:write` | CardKit 流式卡片（不开则自动降级为 IM Patch 模式）|
+
+> **注意**：`im:messageReaction:readonly` / `im:messageReaction:write` 是旧版 scope 名，飞书控制台中无法搜索到。请使用上表中的新名称。
 
 ### 3.3 配置事件订阅
 
@@ -132,11 +157,13 @@ cli:
         name: "Kimi K2.5"
 
 project:
-  storage_path: ""       # 留空 = ~/.config/cli-feishu-bridge/projects.json
+  storage_path: ""       # 留空 = 平台默认（Linux/macOS: ~/.config/cli-feishu-bridge/projects.json，Windows: %APPDATA%\cli-feishu-bridge\projects.json）
   max_projects: 50
 ```
 
 ### 方式 B：纯环境变量（无 config.yaml）
+
+**Linux / macOS：**
 
 ```bash
 export FEISHU_APP_ID="cli_xxx"
@@ -146,22 +173,49 @@ export OPENCODE_MODEL="kimi-for-coding/k2p5"
 export LOG_LEVEL="INFO"
 ```
 
+**Windows（CMD）：**
+
+```cmd
+set FEISHU_APP_ID=cli_xxx
+set FEISHU_APP_SECRET=xxx
+```
+
+**Windows（永久写入用户环境变量，PowerShell）：**
+
+```powershell
+[System.Environment]::SetEnvironmentVariable("FEISHU_APP_ID", "cli_xxx", "User")
+[System.Environment]::SetEnvironmentVariable("FEISHU_APP_SECRET", "xxx", "User")
+```
+
 ---
 
 ## 五、启动服务
+
+**Linux / macOS：**
 
 ```bash
 # 标准启动（推荐）
 python -m src.main
 
-# 或使用脚本
-python start.py
+# 或使用脚本（自动激活 .venv）
 ./start.sh
 
 # 强制 IM Patch 模式（CardKit 不可用时）
 ./start.sh --legacy
 # 或
 DISABLE_CARDKIT=1 python -m src.main
+```
+
+**Windows（CMD，自动激活 .venv）：**
+
+```cmd
+start.bat
+
+REM 强制 IM Patch 模式
+start.bat --legacy
+
+REM 或直接用 Python
+python -m src.main
 ```
 
 ### 预期启动日志
@@ -232,8 +286,14 @@ opencode serve --port 4096
 ### 端口冲突（4096）
 
 ```bash
-# 查看占用进程
+# Linux / macOS：查看占用进程
 lsof -i :4096
+```
+
+```cmd
+REM Windows：查看占用进程
+netstat -ano | findstr :4096
+taskkill /PID <pid> /F
 ```
 
 修改 OpenCode 监听端口，在 `config.yaml` 中增加：
@@ -249,8 +309,9 @@ cli:
 
 ## 八、后台运行（可选）
 
+**Linux（nohup）：**
+
 ```bash
-# 使用 nohup
 nohup python -m src.main > bridge.log 2>&1 &
 echo $! > bridge.pid
 
@@ -258,7 +319,36 @@ echo $! > bridge.pid
 kill $(cat bridge.pid)
 ```
 
-或使用 systemd / supervisor 等进程管理器。
+**Linux（systemd，推荐）：**
+
+```bash
+bash scripts/install_service.sh    # 安装并启动 systemd 用户服务
+bash scripts/uninstall_service.sh  # 卸载
+```
+
+**macOS：**
+
+```bash
+nohup ./start.sh > bridge.log 2>&1 &
+```
+
+**Windows（任务计划程序，开机自启）：**
+
+```cmd
+schtasks /create /tn "FeiShuBridge" /tr "python -m src.main" /sc onlogon /ru %USERNAME% /sd C:\path\to\cli-feishu-bridge /f
+
+REM 停止
+schtasks /end /tn "FeiShuBridge"
+
+REM 卸载
+schtasks /delete /tn "FeiShuBridge" /f
+```
+
+**Windows（PowerShell 隐藏窗口，临时）：**
+
+```powershell
+Start-Process python -ArgumentList "-m src.main" -WorkingDirectory $PWD -WindowStyle Hidden
+```
 
 ---
 
@@ -276,4 +366,4 @@ kill $(cat bridge.pid)
 
 ---
 
-*最后更新: 2026-03-21（v0.1.2）*
+*最后更新: 2026-03-21（v0.1.4）*

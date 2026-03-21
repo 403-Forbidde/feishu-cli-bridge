@@ -1,5 +1,38 @@
 # 更新日志
 
+## [v0.1.4] - 2026-03-21
+
+**开发人**: ERROR403
+
+### 新增
+
+- **Windows 完整支持**
+  - `start.bat` — Windows 启动脚本，与 `start.sh` 功能对等（`--legacy` / `--help` 参数、自动激活 `.venv\Scripts\activate.bat`、自动设置 `CONFIG_FILE`）
+
+### 修复（跨平台兼容）
+
+- **`src/feishu/api.py`**：图片/文件临时目录从硬编码 `/tmp/feishu_images` 改为 `Path(tempfile.gettempdir()) / "feishu_images"`，Linux/macOS 行为不变（`gettempdir()` 返回 `/tmp`），Windows 自动使用 `%TEMP%`
+- **`src/main.py`**：`signal.SIGTERM` 注册改为 `hasattr` 判断保护，避免 Windows 上 `AttributeError`（Linux/macOS 无影响）
+- **`src/main.py`**：`asyncio.Event()` 从模块顶层移入 `main()` 函数内部，修复 Python ≤3.9 上 "Future attached to a different loop" 错误（Python 3.10+ 上此问题已不存在，但代码更规范）
+- **`src/main.py`**：`WindowsProactorEventLoopPolicy` 仅在 Python < 3.12 时设置；Python 3.12+ Windows 已默认 ProactorEventLoop，设置反而触发废弃警告
+- **`src/config.py`**：配置文件查找路径分平台：Windows 使用 `%APPDATA%\cli-feishu-bridge\config.yaml`，Linux/macOS 继续使用 XDG 路径 `~/.config/cli-feishu-bridge/config.yaml`
+
+### 修复（Windows 实测）
+
+- **`src/adapters/opencode.py`**：去除 `opencode serve` 命令中的 `--hostname` 参数（v1.2.27 不支持此 flag，进程立即退出导致 "Failed to start OpenCode Server"）
+- **`src/adapters/opencode.py`**：用 `shutil.which("opencode")` 解析完整可执行路径后再传给 `asyncio.create_subprocess_exec`，修复 Windows 子进程不走 shell PATH 查找导致的 `[WinError 2] 系统找不到指定的文件`
+- **`src/adapters/opencode.py`**：启动超时从 3 秒延长到 10 秒，Windows 进程冷启动更慢；进程意外退出时读取 stderr 并记录日志，便于诊断
+- **`src/adapters/opencode.py`**：health check 新增备用路径 `/health`、`/api/health`，兼容不同 opencode 版本
+- **`start.bat`**：去除所有中文注释，修复 Windows CMD（GBK 编码）下因 UTF-8 中文字符报 "not recognized as an internal or external command" 错误
+
+### 文档
+
+- **README.md** 新增「Windows 运行说明」章节（前置要求、虚拟环境、配置、启动、后台运行、常见问题、与 Linux/macOS 差异表）
+- **doc/AIGUIDE.md** 各步骤补充 Windows 命令差异（依赖安装、环境变量设置、启动脚本、端口排查、后台运行）
+- **AGENTS.md** 更新临时路径描述、启动命令、配置路径、环境变量、平台兼容性表
+
+---
+
 ## [v0.1.3] - 2026-03-21
 
 **开发人**: ERROR403

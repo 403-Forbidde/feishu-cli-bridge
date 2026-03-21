@@ -545,7 +545,6 @@ def _build_thinking_card() -> Dict[str, Any]:
     """
     思考中卡片（CardKit 失败时的 IM 回退）
 
-    完全照搬 OpenClaw-Lark builder.js buildThinkingCard() 实现。
     仅在 CardKit 流程失败时发送，作为等待动画的替代。
     """
     return {
@@ -566,7 +565,6 @@ def _build_streaming_card(
     """
     流式输出卡片（IM Patch 回退时使用）
 
-    完全照搬 OpenClaw-Lark builder.js buildStreamingCard() 实现。
     CardKit 正常工作时不会调用此函数，CardKit 通过 cardElement.content
     直接更新元素内容，无需重建整张卡片。
 
@@ -771,10 +769,7 @@ def _build_complete_card(
 
 
 def _append_token_stats(parts: List[str], token_stats: Dict) -> None:
-    """将 token 统计信息追加到 parts 列表。支持两种格式。
-
-    完全照搬 OpenClaw 格式：📊 {tokens} ({percent}%) · Context: {size}K
-    """
+    """将 token 统计信息追加到 parts 列表。支持两种格式。"""
     # 格式 A: OpenCode 格式 (total_tokens, context_used, context_window)
     if "total_tokens" in token_stats:
         total_tokens = token_stats.get("total_tokens", 0)
@@ -1016,7 +1011,6 @@ def optimize_markdown_style(text: str, card_version: int = 2) -> str:
     """
     优化 Markdown 样式以适配飞书卡片显示
 
-    完全照搬 OpenClaw-Lark markdown-style.js 实现：
     - 标题降级：H1 → H4，H2~H6 → H5（有 H1~H3 时才降级）
     - 连续标题间增加 <br> 段落间距
     - 表格前后增加 <br> 段落间距（4a-4e 规则）
@@ -1125,8 +1119,6 @@ def _strip_invalid_image_keys(text: str) -> str:
 
     飞书 CardKit 只接受 img_xxx 格式的图片 key 或远程 HTTP(S) URL，
     其他格式会导致 CardKit 错误 200570。
-
-    完全照搬 OpenClaw-Lark 实现。
     """
     if "![" not in text:
         return text

@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import tempfile
 import time
 from pathlib import Path
 from typing import Optional, AsyncIterator, Callable, Dict, Any
@@ -416,7 +417,7 @@ class FeishuAPI:
                 return None
 
             # 准备保存目录
-            save_dir = Path("/tmp/feishu_images")
+            save_dir = Path(tempfile.gettempdir()) / "feishu_images"
             save_dir.mkdir(exist_ok=True)
 
             # 清理超过 24h 的旧文件

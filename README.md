@@ -1,22 +1,27 @@
 # Feishu CLI Bridge
 
-程序员专属：用飞书私聊向 OpenCode、Codex 等 CLI 编程工具下达指令，享受流式打字机输出体验。
+程序员专属：用飞书私聊向本地 CLI AI 工具下达指令，享受流式打字机输出体验。当前已接入 **OpenCode**，Codex 与 Kimi CLI 支持规划中。
 
-**版本**: v0.1.3
+**版本**: v0.1.4
 **开发**: ERROR403
 **更新日期**: 2026-03-21
 
 ## 使用场景
 
-单人编程辅助。在任意设备上打开飞书，向自己的机器人发送编程指令，机器人将指令转发给本地 CLI 工具执行，流式返回结果。典型场景：
+单人编程辅助。在任意设备上打开飞书，向自己的机器人发送编程指令，机器人将指令转发给运行在本地的 CLI AI 工具执行，流式返回结果。
+
+**支持平台**：Windows、Linux、macOS（Apple Silicon / Intel）
+
+典型场景：
 
 - 在手机上查看代码或让 AI 解释某个实现
 - 在会议间隙发起一个后台重构任务
 - 切换不同项目目录，让 AI 在对应上下文中工作
+- 在 Windows 开发环境中通过飞书调用本地 OpenCode
 
 ## 功能特性
 
-- 🤖 **多 CLI 支持** — OpenCode、Codex，可同时启用，按 `@` 前缀指定
+- 🤖 **OpenCode 接入** — HTTP/SSE 方式接入，自动管理 `opencode serve` 生命周期（Codex、Kimi CLI 规划中）
 - 💬 **CardKit 流式输出** — 真正的打字机效果，逐字动画显示，左下角 loading 动画
 - 💭 **思考过程展示** — 可折叠思考面板，实时显示 AI 推理过程
 - 📊 **Token 统计** — Footer 紧凑显示耗时、Token 消耗、上下文占用率、模型名
@@ -25,6 +30,65 @@
 - 🎮 **TUI 命令** — 斜杠命令管理会话（`/new` `/session`）、切换模型（`/model`）、切换 Agent 模式（`/mode`）
 - 🔄 **工作目录隔离** — 每个项目对应独立 OpenCode session，工具调用 CWD 精确
 - ⚡ **智能节流** — CardKit 100ms / IM Patch 1500ms 双模式，长间隙批处理优化
+
+## Roadmap
+
+> 欢迎通过 Issues 反馈优先级或提交 PR。
+
+### 里程碑总览
+
+| 里程碑 | 核心交付 | 状态 |
+|--------|---------|------|
+| **v0.1.x** | OpenCode 接入 · CardKit 流式输出 · TUI 命令 · 多平台支持 | ✅ 已完成 |
+| **v0.2.0** | Codex CLI 适配器 | 🔜 规划中 |
+| **v0.3.0** | Kimi CLI 适配器（Wire 协议） | 🔜 规划中 |
+
+---
+
+### ✅ v0.1.x — 已完成
+
+- [x] **OpenCode 适配器**（HTTP/SSE）：自动启动 `opencode serve`，`POST /session` 会话管理，SSE 事件流接收
+- [x] CardKit 流式输出（打字机效果 + loading 动画，100ms 节流）
+- [x] IM Patch 降级回退（CardKit 不可用时自动切换，1500ms 节流）
+- [x] 可折叠思考面板（Reasoning 过程实时展示）
+- [x] 图片 / 文件输入（base64 FilePart，视觉模型识别）
+- [x] 多项目管理（`/pl` 交互式卡片切换工作目录）
+- [x] TUI 命令（`/new` `/session` `/model` `/mode` `/reset` `/help`）
+- [x] LRU 会话持久化（最多 15 个，`.sessions/*.json`）
+- [x] 跨平台支持：Windows / Linux / macOS
+
+---
+
+### 🔜 v0.2.0 — Codex CLI 适配器
+
+**目标**：将 [Codex CLI](https://github.com/openai/codex) 以子进程模式接入，通过 `@codex` 前缀调用。
+
+| 特性 | 说明 |
+|------|------|
+| 子进程流式输出 | `codex --stream` 模式，逐行解析 stdout |
+| 独立会话管理 | 与 OpenCode session 隔离，LRU 复用 |
+| 与 OpenCode 并行启用 | `@opencode` / `@codex` 自由切换，无默认冲突 |
+| 图片输入支持 | 与 OpenCode 路径对齐，附件统一预处理 |
+
+**实现路径**：完善 `src/adapters/codex.py`，预计新增约 150 行。
+
+---
+
+### 🔜 v0.3.0 — Kimi CLI 适配器（Wire 协议）
+
+**目标**：将 [Kimi CLI](https://kimi.moonshot.cn) 以 Wire 协议接入，通过 `@kimi` 前缀调用。
+
+| 特性 | 说明 |
+|------|------|
+| Wire 协议（JSON-RPC 2.0 over stdin/stdout） | 比 HTTP/SSE 延迟更低，无需启动独立 HTTP server |
+| 持久化子进程池 | 每个 session 对应独立长驻 kimi 进程，上下文完整保留 |
+| 思维链流式展示 | `--thinking` 模式下推理过程实时显示在可折叠面板 |
+| `--yolo` 全自动模式 | 工具调用无需人工确认，配置开关控制 |
+| 与 OpenCode / Codex 并行启用 | `@kimi` / `@opencode` / `@codex` 三路自由切换 |
+
+**实现路径**：新增 `src/adapters/kimicode.py`，预计约 400 行。
+
+---
 
 ## 快速开始
 
@@ -39,9 +103,27 @@ uv pip install -r requirements.txt
 ### 2. 创建飞书自建应用
 
 1. 进入[飞书开发者控制台](https://open.feishu.cn/app)，创建**自建应用**
-2. 权限管理中开启：`im:message`、`im:message:send_as_bot`、`im:messageReaction:readonly`、`im:messageReaction:write`、`contact:user.id:readonly`
+2. 权限管理中开启所需权限（推荐批量导入，见下方说明）
 3. 事件订阅 → 添加事件 `im.message.receive_v1`，连接方式选**长连接**
-4. 记录 **App ID** 和 **App Secret**
+4. 创建版本并发布（企业内部应用无需审核，发布后立即生效）
+5. 记录 **App ID** 和 **App Secret**
+
+**权限配置（二选一）：**
+
+**方式 A — 批量导入（推荐）：** 在权限管理页面点击「导入权限」，将 [`doc/BOTAUTH.md`](doc/BOTAUTH.md) 的 JSON 内容粘贴进去，一次性导入所有必需权限。
+
+**方式 B — 手动开启：** 搜索并逐一添加以下权限：
+
+| 权限 scope | 用途 |
+|-----------|------|
+| `im:message` | 读取消息 |
+| `im:message:send_as_bot` | 以机器人身份发消息 |
+| `im:message.reactions:read` | 读取 Emoji Reaction（打字提示） |
+| `im:message.reactions:write_only` | 添加/删除 Emoji Reaction |
+| `im:resource` | 下载消息中的图片/文件 |
+| `contact:user.id:readonly` | 读取用户 ID |
+| `cardkit:card:read` | CardKit 流式卡片（可选，不开启则自动降级） |
+| `cardkit:card:write` | CardKit 流式卡片（可选，不开启则自动降级） |
 
 ### 3. 配置
 
@@ -137,6 +219,126 @@ which opencode   # 应输出可执行文件路径
 | launchd 服务自启 | ❌ | 🔜 计划支持 |
 
 macOS 如需后台常驻，目前推荐结合终端复用工具（`tmux` / `screen`）使用 `./start.sh`。
+
+## Windows 运行说明
+
+`start.bat` 在 Windows 上可直接运行，无需管理员权限。
+
+### 前置要求
+
+- **Python 3.12+**：从 [python.org](https://www.python.org/downloads/windows/) 下载安装包，安装时务必勾选「**Add Python to PATH**」
+- **opencode CLI**：从 opencode 官方 Releases 下载 Windows 版二进制，放入 PATH 可访问的目录
+
+验证安装：
+
+```cmd
+python --version
+opencode --version
+```
+
+### 安装依赖（虚拟环境）
+
+```cmd
+cd C:\path\to\cli-feishu-bridge
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+激活后命令行前缀会出现 `(.venv)`。
+
+### 配置
+
+```cmd
+copy config.example.yaml config.yaml
+REM 用记事本或 VS Code 打开，填写 app_id 和 app_secret
+notepad config.yaml
+```
+
+或使用环境变量（临时，当前窗口有效）：
+
+```cmd
+set FEISHU_APP_ID=cli_xxx
+set FEISHU_APP_SECRET=xxx
+```
+
+永久设置（系统级）：
+
+```powershell
+[System.Environment]::SetEnvironmentVariable("FEISHU_APP_ID", "cli_xxx", "User")
+[System.Environment]::SetEnvironmentVariable("FEISHU_APP_SECRET", "xxx", "User")
+```
+
+### 启动
+
+`start.bat` 会自动检测并激活 `.venv`，无需每次手动激活：
+
+```cmd
+start.bat           REM CardKit 流式模式（默认）
+start.bat --legacy  REM 传统 IM Patch 模式（CardKit 不可用时）
+start.bat --help    REM 显示帮助
+```
+
+也可直接用 Python：
+
+```cmd
+python -m src.main
+python start.py
+```
+
+### 后台运行（可选）
+
+**方式一：PowerShell 隐藏窗口**
+
+```powershell
+Start-Process python -ArgumentList "-m src.main" -WorkingDirectory $PWD -WindowStyle Hidden
+```
+
+**方式二：Windows 任务计划程序（开机自启）**
+
+```cmd
+schtasks /create /tn "FeiShuBridge" /tr "python -m src.main" /sc onlogon /ru %USERNAME% /sd C:\path\to\cli-feishu-bridge /f
+```
+
+停止：
+
+```cmd
+schtasks /end /tn "FeiShuBridge"
+schtasks /delete /tn "FeiShuBridge" /f
+```
+
+### 常见问题
+
+**端口 4096 被占用**
+
+```cmd
+netstat -ano | findstr :4096
+taskkill /PID <pid> /F
+```
+
+或在 `config.yaml` 中改端口：
+
+```yaml
+cli:
+  opencode:
+    server_port: 4097
+```
+
+**VCRUNTIME 缺失报错**
+
+从微软官网安装 [Visual C++ Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist)。
+
+### 与 Linux/macOS 的差异
+
+| 特性 | Linux | macOS | Windows |
+|------|-------|-------|---------|
+| 启动脚本 | `./start.sh` | `./start.sh` | `start.bat` |
+| 开发模式运行 | ✅ | ✅ | ✅ |
+| systemd 服务自启 | ✅ | ❌ | ❌ |
+| 任务计划程序自启 | ❌ | ❌ | ✅ |
+| launchd 自启 | ❌ | 🔜 | ❌ |
+
+---
 
 ## 使用方法
 
@@ -258,10 +460,16 @@ feishu-cli-bridge/
 │   └── AIGUIDE.md         # AI 模型部署指南
 ├── config.yaml
 ├── requirements.txt
-└── start.sh
+├── start.sh           # Linux/macOS 启动脚本
+└── start.bat          # Windows 启动脚本
 ```
 
 ## 更新日志
+
+### v0.1.4 (2026-03-21)
+- ✅ Windows 兼容性支持（`start.bat`、跨平台临时目录、SIGTERM 保护、ProactorEventLoop）
+- ✅ 配置路径自动适配：Windows 使用 `%APPDATA%`，Linux/macOS 继续使用 XDG
+- ✅ 新增 Windows 运行说明文档
 
 ### v0.1.3 (2026-03-21)
 - ✅ systemd 用户服务支持（`scripts/install_service.sh` / `uninstall_service.sh`）
