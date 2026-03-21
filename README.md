@@ -199,6 +199,9 @@ feishu-cli-bridge/
 
 ## 更新日志
 
+### v0.1.1 (2026-03-21)
+- ✅ `/new` 卡片显示完整模型 ID（如 `anthropic/claude-sonnet-4-20250514`）
+
 ### v0.1.0 (2026-03-21)
 - ✅ `/model` 命令卡片化：与 `/mode` 同风格，当前模型绿色高亮，点击按钮原地切换
 - ✅ 模型列表改为配置驱动：在 `config.yaml` 的 `cli.opencode.models` 中维护常用模型
