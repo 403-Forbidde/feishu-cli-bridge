@@ -154,7 +154,7 @@ def build_new_session_card(
     rows.append(_kv("📂 目录", f"`{display_dir}`"))
 
     if model:
-        rows.append(_kv("🤖 模型", f"`{_simplify_model_name(model)}`"))
+        rows.append(_kv("🤖 模型", f"`{model}`"))
 
     elements: List[Dict[str, Any]] = [
         *rows,

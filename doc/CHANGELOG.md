@@ -1,5 +1,17 @@
 # 更新日志
 
+## [v0.1.1] - 2026-03-21
+
+**开发人**: ERROR403
+
+### 修复
+
+- **`/new` 卡片模型名称显示不完整** (`src/feishu/card_builder.py`)
+  - 原：经 `_simplify_model_name()` 压缩，如 `anthropic/claude-sonnet-4-20250514` 只显示 `Claude-Sonnet`
+  - 现：直接渲染完整模型 ID，保留 `provider/model` 全路径，便于确认当前使用的精确模型版本
+
+---
+
 ## [v0.1.0] - 2026-03-21
 
 **开发人**: ERROR403
