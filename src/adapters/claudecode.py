@@ -4,7 +4,7 @@ import asyncio
 import json
 import os
 import tempfile
-from typing import Optional, List, AsyncIterator
+from typing import Optional, List, Dict, AsyncIterator
 from pathlib import Path
 
 from .base import BaseCLIAdapter, StreamChunk, StreamChunkType, Message
@@ -116,7 +116,11 @@ class ClaudeCodeAdapter(BaseCLIAdapter):
         return None
 
     async def execute_stream(
-        self, prompt: str, context: List[Message], working_dir: str
+        self,
+        prompt: str,
+        context: List[Message],
+        working_dir: str,
+        attachments: Optional[List[Dict]] = None,
     ) -> AsyncIterator[StreamChunk]:
         """执行 Claude Code 并流式返回输出"""
         # Claude Code 通常通过 .claude/ 目录管理会话

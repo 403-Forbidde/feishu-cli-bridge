@@ -74,7 +74,11 @@ class BaseCLIAdapter(ABC):
 
     @abstractmethod
     async def execute_stream(
-        self, prompt: str, context: List[Message], working_dir: str
+        self,
+        prompt: str,
+        context: List[Message],
+        working_dir: str,
+        attachments: Optional[List[Dict]] = None,
     ) -> AsyncIterator[StreamChunk]:
         """
         执行 CLI 命令并返回流式输出

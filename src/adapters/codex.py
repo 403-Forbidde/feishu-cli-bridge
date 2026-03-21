@@ -3,7 +3,7 @@ import asyncio
 import json
 import os
 import tempfile
-from typing import Optional, List, AsyncIterator
+from typing import Optional, List, Dict, AsyncIterator
 
 from .base import BaseCLIAdapter, StreamChunk, StreamChunkType, Message
 
@@ -148,7 +148,8 @@ class CodexAdapter(BaseCLIAdapter):
         self,
         prompt: str,
         context: List[Message],
-        working_dir: str
+        working_dir: str,
+        attachments: Optional[List[Dict]] = None,
     ) -> AsyncIterator[StreamChunk]:
         """执行 Codex 并流式返回输出"""
         # Codex 支持通过 --history 参数传递历史

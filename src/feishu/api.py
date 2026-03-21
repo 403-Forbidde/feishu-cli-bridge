@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import time
+from pathlib import Path
 from typing import Optional, AsyncIterator, Callable, Dict, Any
 from dataclasses import dataclass
 from functools import partial
@@ -18,6 +19,8 @@ from lark_oapi.api.im.v1 import (
     CreateMessageReactionResponse,
     DeleteMessageReactionRequest,
     DeleteMessageReactionResponse,
+    GetMessageResourceRequest,
+    GetMessageResourceResponse,
     PatchMessageRequest,
     PatchMessageRequestBody,
     PatchMessageResponse,
@@ -371,6 +374,77 @@ class FeishuAPI:
         except Exception as e:
             logger.debug(f"Failed to remove typing reaction: {e}")
 
+    async def download_message_resource(
+        self,
+        message_id: str,
+        file_key: str,
+        resource_type: str = "image",
+        filename: str = "",
+    ) -> Optional[str]:
+        """
+        下载飞书消息中的图片或文件到本地临时目录
+
+        Args:
+            message_id: 消息 ID
+            file_key: 文件 key（image_key 或 file_key）
+            resource_type: "image" 或 "file"
+            filename: 保存的文件名（不含路径），空时自动生成
+
+        Returns:
+            本地文件绝对路径，失败返回 None
+        """
+        try:
+            request = (
+                GetMessageResourceRequest.builder()
+                .message_id(message_id)
+                .file_key(file_key)
+                .type(resource_type)
+                .build()
+            )
+
+            response: GetMessageResourceResponse = await self._run_sync(
+                self.client.im.v1.message_resource.get, request
+            )
+
+            # GetMessageResourceResponse 直接挂载 .file 和 .file_name，
+            # 不像其他接口嵌套在 .data 下；文件下载成功时 code 可能为 None
+            file_content = response.file
+            if file_content is None:
+                logger.error(
+                    f"Failed to download resource: {response.code} - {response.msg}"
+                )
+                return None
+
+            # 准备保存目录
+            save_dir = Path("/tmp/feishu_images")
+            save_dir.mkdir(exist_ok=True)
+
+            # 清理超过 24h 的旧文件
+            _cleanup_old_files(save_dir, max_age_hours=24)
+
+            # 确定文件名（优先用 SDK 返回的 file_name）
+            if not filename:
+                filename = response.file_name or (
+                    f"{file_key}.jpg" if resource_type == "image" else f"{file_key}.bin"
+                )
+
+            save_path = save_dir / filename
+
+            # 写入文件（IO[Any] 对象直接 read）
+            if hasattr(file_content, "read"):
+                data = file_content.read()
+            else:
+                data = bytes(file_content)
+
+            await asyncio.to_thread(save_path.write_bytes, data)
+
+            logger.info(f"Downloaded resource to: {save_path}")
+            return str(save_path)
+
+        except Exception as e:
+            logger.error(f"Failed to download message resource: {e}")
+            return None
+
     async def stream_reply(
         self,
         chat_id: str,
@@ -592,6 +666,17 @@ class FeishuAPI:
             else:
                 await self.send_text(chat_id, f"❌ 处理失败: {str(e)[:200]}")
             raise
+
+
+def _cleanup_old_files(directory: Path, max_age_hours: int = 24):
+    """删除目录中超过指定时间的文件"""
+    cutoff = time.time() - max_age_hours * 3600
+    try:
+        for f in directory.iterdir():
+            if f.is_file() and f.stat().st_mtime < cutoff:
+                f.unlink(missing_ok=True)
+    except Exception:
+        pass
 
 
 def _convert_stats(token_stats: TokenStats) -> Dict[str, Any]:

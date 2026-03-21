@@ -5,8 +5,8 @@ import json
 import logging
 import threading
 import time
-from typing import Optional, Callable, Awaitable, Dict, Any
-from dataclasses import dataclass
+from typing import Optional, Callable, Awaitable, Dict, Any, List
+from dataclasses import dataclass, field
 
 import lark_oapi as lark
 from lark_oapi.ws import Client as WSClient
@@ -45,6 +45,7 @@ class FeishuMessage:
     thread_id: Optional[str] = None
     mention_users: list = None
     parent_id: Optional[str] = None  # 回复的消息 ID
+    attachments: Optional[List[Dict]] = None  # [{path, mime_type, filename}]
 
     def __post_init__(self):
         if self.mention_users is None:

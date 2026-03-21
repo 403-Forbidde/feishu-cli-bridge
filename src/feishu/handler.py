@@ -2,7 +2,8 @@
 
 import json
 import logging
-from typing import Optional
+import mimetypes
+from typing import Optional, List, Dict
 from pathlib import Path
 
 from .client import FeishuMessage, FeishuClient
@@ -121,6 +122,13 @@ class MessageHandler:
                 return
             # 注意：这里简单处理，只要群聊中有 @ 就响应
             # 实际应该检查是否是 @ 当前机器人
+
+        # 下载附件（图片/文件）
+        if message.attachments:
+            resolved = await self._download_attachments(
+                message.message_id, message.attachments
+            )
+            message.attachments = resolved if resolved else None
 
         # 解析命令
         content = message.content.strip()
@@ -242,6 +250,7 @@ class MessageHandler:
                 prompt=content,
                 context=history[:-1],  # 排除刚添加的用户消息
                 working_dir=working_dir,
+                attachments=message.attachments,
             )
 
             # 统计信息提供者
@@ -314,8 +323,10 @@ class MessageHandler:
             except:
                 content_obj = {"text": content_str}
 
-            # 提取文本内容
+            # 提取文本内容和附件元数据
             text = ""
+            pending_attachments: List[Dict] = []
+
             if msg_type == "text":
                 text = (
                     content_obj.get("text", "")
@@ -324,12 +335,36 @@ class MessageHandler:
                 )
             elif msg_type == "post":
                 text = self._extract_text_from_post(content_obj)
+                pending_attachments = self._extract_images_from_post(content_obj)
+            elif msg_type == "image":
+                image_key = content_obj.get("image_key", "")
+                if image_key:
+                    text = "[图片]"
+                    pending_attachments = [{
+                        "file_key": image_key,
+                        "resource_type": "image",
+                        "filename": f"{image_key}.jpg",
+                        "mime_type": "image/jpeg",
+                    }]
+            elif msg_type == "file":
+                file_key = content_obj.get("file_key", "")
+                file_name = content_obj.get("file_name", "attachment")
+                if file_key:
+                    mime_type, _ = mimetypes.guess_type(file_name)
+                    mime_type = mime_type or "application/octet-stream"
+                    text = f"[文件: {file_name}]"
+                    pending_attachments = [{
+                        "file_key": file_key,
+                        "resource_type": "file",
+                        "filename": file_name,
+                        "mime_type": mime_type,
+                    }]
 
             # 获取回复的消息 ID
             parent_id = message_data.get("parent_id") or message_data.get("root_id")
 
             logger.debug(
-                f"📄 解析消息: type={msg_type}, chat_type={message_data.get('chat_type', '')}, parent_id={parent_id}"
+                f"📄 解析消息: type={msg_type}, chat_type={message_data.get('chat_type', '')}, parent_id={parent_id}, attachments={len(pending_attachments)}"
             )
 
             return FeishuMessage(
@@ -343,6 +378,7 @@ class MessageHandler:
                 thread_id=message_data.get("thread_id"),
                 mention_users=[],
                 parent_id=parent_id,
+                attachments=pending_attachments if pending_attachments else None,
             )
 
         except Exception as e:
@@ -363,6 +399,46 @@ class MessageHandler:
                         elif tag == "at":
                             texts.append(f"@{sub_item.get('user_name', 'user')}")
         return " ".join(texts)
+
+    def _extract_images_from_post(self, content: dict) -> List[Dict]:
+        """从富文本消息中提取嵌入图片"""
+        attachments = []
+        content_list = content.get("content", [])
+        for item in content_list:
+            if isinstance(item, list):
+                for sub_item in item:
+                    if isinstance(sub_item, dict) and sub_item.get("tag") == "img":
+                        image_key = sub_item.get("image_key", "")
+                        if image_key:
+                            attachments.append({
+                                "file_key": image_key,
+                                "resource_type": "image",
+                                "filename": f"{image_key}.jpg",
+                                "mime_type": "image/jpeg",
+                            })
+        return attachments
+
+    async def _download_attachments(
+        self, message_id: str, pending: List[Dict]
+    ) -> List[Dict]:
+        """下载待处理附件，返回带 path 字段的附件列表"""
+        result = []
+        for att in pending:
+            path = await self.api.download_message_resource(
+                message_id=message_id,
+                file_key=att["file_key"],
+                resource_type=att["resource_type"],
+                filename=att["filename"],
+            )
+            if path:
+                result.append({
+                    "path": path,
+                    "mime_type": att["mime_type"],
+                    "filename": att["filename"],
+                })
+            else:
+                logger.warning(f"Failed to download attachment: {att['file_key']}")
+        return result
 
     async def _handle_reset(self, message: FeishuMessage):
         """处理重置命令"""

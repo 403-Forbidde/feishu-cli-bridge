@@ -1,5 +1,55 @@
 # 更新日志
 
+## [v0.0.4] - 2026-03-21
+
+**开发人**: ERROR403
+
+### 新增
+
+- **图片消息输入** (`src/feishu/handler.py`, `src/feishu/api.py`)
+  - 处理 `msg_type == "image"` 的飞书消息，自动下载图片到 `/tmp/feishu_images/`
+  - 处理 `msg_type == "file"` 的飞书消息，支持 PDF、代码文件等各类格式
+  - 处理富文本（`post`）消息中嵌入的图片（`tag == "img"`）
+  - MIME 类型自动推断（`mimetypes.guess_type` 根据文件名推断）
+  - 24h 临时文件自动清理机制
+
+- **飞书文件下载 API** (`src/feishu/api.py`)
+  - `FeishuAPI.download_message_resource(message_id, file_key, resource_type, filename)` 方法
+  - 使用 `lark_oapi.api.im.v1.GetMessageResourceRequest` 下载图片/文件
+  - `_cleanup_old_files()` 辅助函数清理过期临时文件
+
+- **适配器附件支持** (`src/adapters/base.py`, `src/adapters/opencode.py`)
+  - `execute_stream()` 新增 `attachments: Optional[List[Dict]] = None` 参数
+  - `OpenCodeAdapter._send_message()` 将附件转 base64 data URL，构建 `FilePart`
+  - `claudecode.py`、`codex.py` stub 适配器同步更新签名
+
+- **FeishuMessage 扩展** (`src/feishu/client.py`)
+  - 新增 `attachments: Optional[List[Dict]] = None` 字段
+  - 附件格式: `{path, mime_type, filename}`（下载完成后赋值）
+
+### 修复
+
+- **切换到 `prompt_async` 端点** (`src/adapters/opencode.py`)
+  - 问题：`/session/{id}/message` 端点对 `FilePart` 视觉输入处理不当，模型收到文件路径文本而非图片数据
+  - 修复：改用 `/session/{id}/prompt_async` 端点（204 立即返回，响应通过 SSE `/event` 推送）
+  - 效果：与 ISSUES.md 技术调研测试路径一致，模型可正确识别图片内容
+
+- **`GetMessageResourceResponse` 属性访问错误** (`src/feishu/api.py`)
+  - 问题：错误使用 `response.data.file`，该响应类直接挂载 `.file` 和 `.file_name`
+  - 修复：改为 `response.file`，并用 `file is None` 判断下载是否成功
+
+- **文件名重复** (`src/feishu/api.py`)
+  - 问题：`save_path = save_dir / f"{file_key}_{filename}"` 导致路径含重复 key
+  - 修复：改为 `save_dir / filename`（filename 本身已含 file_key）
+
+### 技术细节
+
+- 图片 base64 转换：在客户端完成，生成 `data:{mime};base64,{b64}` data URL
+- OpenCode FilePart 格式: `{"type": "file", "mime": "image/jpeg", "url": "data:...", "filename": "..."}`
+- 架构影响：`prompt_async` 对文本消息同样适用，更符合 SSE 事件驱动设计
+
+---
+
 ## [v0.0.3] - 2026-03-20
 
 **开发人**: ERROR403

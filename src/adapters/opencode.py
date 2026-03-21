@@ -1,6 +1,7 @@
 """OpenCode CLI 适配器 - 使用 HTTP Server API"""
 
 import asyncio
+import base64
 import json
 import os
 import time
@@ -246,12 +247,34 @@ class OpenCodeAdapter(BaseCLIAdapter):
         return None
 
     async def _send_message(
-        self, session_id: str, prompt: str, context: List[Message]
+        self,
+        session_id: str,
+        prompt: str,
+        context: List[Message],
+        attachments: Optional[List[Dict[str, Any]]] = None,
     ) -> bool:
         """发送消息到会话"""
         try:
             # 构建消息内容
             parts = [{"type": "text", "text": prompt}]
+
+            # 添加图片/文件 parts（读取文件转 base64 data URL，确保模型可直接读取）
+            if attachments:
+                for att in attachments:
+                    try:
+                        with open(att["path"], "rb") as f:
+                            raw = f.read()
+                        b64 = base64.b64encode(raw).decode()
+                        data_url = f"data:{att['mime_type']};base64,{b64}"
+                        parts.append({
+                            "type": "file",
+                            "mime": att["mime_type"],
+                            "url": data_url,
+                            "filename": att["filename"],
+                        })
+                    except Exception as e:
+                        if self.logger:
+                            self.logger.warning(f"Failed to encode attachment {att['path']}: {e}")
 
             # 解析模型字符串 (格式: provider/model)
             model_parts = self.default_model.split("/", 1)
@@ -268,13 +291,14 @@ class OpenCodeAdapter(BaseCLIAdapter):
             }
 
             if self.logger:
-                self.logger.debug(f"Sending message: {body}")
+                self.logger.debug(f"Sending message: parts={len(parts)}")
 
+            # 使用 prompt_async 端点：立即返回 204，响应通过 SSE /event 推送
             response = await self._client.post(
-                f"/session/{session_id}/message", json=body
+                f"/session/{session_id}/prompt_async", json=body
             )
 
-            if response.status_code not in [200, 201]:
+            if response.status_code not in [200, 201, 204]:
                 if self.logger:
                     self.logger.error(
                         f"Failed to send message: {response.status_code} - {response.text}"
@@ -372,7 +396,11 @@ class OpenCodeAdapter(BaseCLIAdapter):
             )
 
     async def execute_stream(
-        self, prompt: str, context: List[Message], working_dir: str
+        self,
+        prompt: str,
+        context: List[Message],
+        working_dir: str,
+        attachments: Optional[List[Dict[str, Any]]] = None,
     ) -> AsyncIterator[StreamChunk]:
         """执行 OpenCode 并流式返回输出"""
 
@@ -398,13 +426,16 @@ class OpenCodeAdapter(BaseCLIAdapter):
         self._seen_assistant_message = False
 
         if self.logger:
+            att_info = f", attachments={len(attachments)}" if attachments else ""
             self.logger.info(
-                f"Sending prompt to session {session_id}: {prompt[:50]}..."
+                f"Sending prompt to session {session_id}: {prompt[:50]}...{att_info}"
             )
 
         # 发送消息（异步，不等待响应）
         # 实际的消息通过 SSE 接收
-        asyncio.create_task(self._send_message(session_id, prompt, context))
+        asyncio.create_task(
+            self._send_message(session_id, prompt, context, attachments)
+        )
 
         # 等待一小段时间让消息开始处理
         await asyncio.sleep(0.5)
