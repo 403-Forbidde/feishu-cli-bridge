@@ -21,4 +21,10 @@ fi
 # 启动应用（切换到脚本所在目录，强制使用本地 config.yaml 避免加载服务配置）
 cd "$(dirname "$0")"
 export CONFIG_FILE="$(pwd)/config.yaml"
+
+# 自动激活虚拟环境（macOS/Linux 通用，存在 .venv 时生效）
+if [ -f ".venv/bin/activate" ]; then
+    source ".venv/bin/activate"
+fi
+
 python3 -m src.main

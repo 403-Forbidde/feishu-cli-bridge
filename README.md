@@ -80,14 +80,31 @@ python start.py
 
 # 安装 Python 3
 brew install python3
-
-# 安装项目依赖
-pip3 install -r requirements.txt
 ```
 
 > **注意**：macOS 系统自带的 `python3` 版本可能较旧，建议通过 Homebrew 安装最新版本。
 
+### 安装依赖（需使用虚拟环境）
+
+macOS Python 3.12+ 起系统禁止直接向全局环境安装包（PEP 668），必须先创建虚拟环境：
+
+```bash
+# 在项目目录下创建虚拟环境
+cd ~/cli-feishu-bridge
+python3 -m venv .venv
+
+# 激活虚拟环境
+source .venv/bin/activate
+
+# 安装依赖
+pip install -r requirements.txt
+```
+
+激活后命令行提示符会出现 `(.venv)` 前缀，表示虚拟环境已生效。
+
 ### 启动
+
+虚拟环境**无需每次手动激活**，`start.sh` 会自动检测并激活项目目录下的 `.venv`：
 
 ```bash
 ./start.sh           # CardKit 流式模式（默认）
