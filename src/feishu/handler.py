@@ -708,6 +708,12 @@ class MessageHandler:
             user_id=message.sender_id, cli_type=cli_type, working_dir=working_dir
         )
 
+        # 获取当前项目信息
+        current_project = (
+            await self.project_manager.get_current_project()
+            if self.project_manager else None
+        )
+
         # 创建命令上下文
         context = CommandContext(
             user_id=message.sender_id,
@@ -716,6 +722,8 @@ class MessageHandler:
             working_dir=working_dir,
             session_id=session.session_id if session else None,
             current_model=adapter.get_current_model(),
+            project_name=current_project.name if current_project else None,
+            project_display_name=current_project.display_name if current_project else None,
         )
 
         try:
@@ -734,17 +742,16 @@ class MessageHandler:
                 await self.api.send_text(message.chat_id, result.content)
 
             elif result.type == TUIResultType.CARD:
-                # 发送卡片消息
-                from .card_builder import build_card_content
-
-                card_data = build_card_content(
-                    "complete",
-                    {
-                        "text": result.content,
-                        "metadata": {},
-                    },
-                )
-                await self.api.send_card_message(message.chat_id, card_data)
+                # 发送卡片消息：优先使用 metadata 中的预构建卡片
+                card_json = result.metadata.get("card_json")
+                if card_json:
+                    await self.api.send_card_message(message.chat_id, card_json)
+                else:
+                    from .card_builder import build_card_content
+                    card_data = build_card_content(
+                        "complete", {"text": result.content, "metadata": {}}
+                    )
+                    await self.api.send_card_message(message.chat_id, card_data)
 
             elif result.type == TUIResultType.INTERACTIVE:
                 # 发送交互式消息

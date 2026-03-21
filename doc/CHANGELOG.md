@@ -1,5 +1,36 @@
 # 更新日志
 
+## [v0.0.8] - 2026-03-21
+
+**开发人**: ERROR403
+
+### 新增
+
+- **`/new` 命令卡片化** (`src/tui_commands/opencode.py`, `src/feishu/card_builder.py`)
+  - 原：返回纯文本 `TUIResult.text()`，样式简陋
+  - 现：返回 Schema 2.0 绿色 header 卡片，`column_set` 原生两列布局（左侧灰色标签 / 右侧内容）
+  - 展示字段：📋 会话名称 + 短 ID（`FSB-` 格式）、💼 当前项目、📂 工作目录、🤖 模型
+  - 项目、模型字段可选，无配置时自动隐藏对应行
+  - 底部灰色注释说明 CLI 工具名称
+
+- **`CommandContext` 注入项目信息** (`src/tui_commands/base.py`, `src/feishu/handler.py`)
+  - `CommandContext` 新增 `project_name`、`project_display_name` 两个可选字段
+  - `_handle_tui_command` 构建 context 时从 `project_manager.get_current_project()` 自动填入
+
+### 改进
+
+- **TUI CARD 结果处理统一** (`src/feishu/handler.py`)
+  - `_handle_tui_command` 的 CARD 分支改为优先读取 `result.metadata["card_json"]`，与项目命令路径逻辑一致
+  - 无预构建卡片时回退到 `build_card_content("complete", ...)` 原有逻辑
+
+### 技术细节
+
+- `build_new_session_card()` 采用 Schema 2.0（`body.elements`），区别于项目列表卡片的 Schema 1.0
+- Schema 1.0 `lark_md` 不支持 markdown 表格语法；Schema 2.0 `column_set` 是正确的两列布局方案
+- 左列 `width: auto` 自动收窄，右列 `weight: 4` 占剩余宽度，图标与文字对齐无错位
+
+---
+
 ## [v0.0.7] - 2026-03-21
 
 **开发人**: ERROR403

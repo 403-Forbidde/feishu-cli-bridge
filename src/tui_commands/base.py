@@ -75,6 +75,8 @@ class CommandContext:
     working_dir: str
     session_id: Optional[str] = None
     current_model: Optional[str] = None
+    project_name: Optional[str] = None           # 当前项目标识（英文）
+    project_display_name: Optional[str] = None   # 当前项目显示名
     timestamp: float = field(default_factory=time.time)
 
 

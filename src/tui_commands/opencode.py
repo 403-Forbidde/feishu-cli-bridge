@@ -50,22 +50,24 @@ class OpenCodeTUICommands(TUIBaseCommand):
     async def _handle_new(self, context: CommandContext) -> TUIResult:
         """处理 /new 命令 - 新建会话
 
-        调用适配器创建新会话，返回新会话信息。
+        调用适配器创建新会话，返回新会话信息卡片。
         """
         try:
             # 调用适配器创建新会话
             if hasattr(self.adapter, "create_new_session"):
                 session_info = await self.adapter.create_new_session()
                 if session_info:
-                    display_id = self._generate_session_display_id(
-                        session_info.get("id", "")
+                    from ..feishu.card_builder import build_new_session_card
+                    card = build_new_session_card(
+                        session_id=session_info.get("id", ""),
+                        session_title=session_info.get("title", "新会话"),
+                        working_dir=context.working_dir,
+                        model=context.current_model,
+                        cli_type=context.cli_type,
+                        project_name=context.project_name,
+                        project_display_name=context.project_display_name,
                     )
-                    return TUIResult.text(
-                        f"✅ **已创建新会话**\n\n"
-                        f"**ID:** `{display_id}`\n"
-                        f"**标题:** {session_info.get('title', '新会话')}\n\n"
-                        f"💡 新消息将使用此会话继续对话"
-                    )
+                    return TUIResult.card("", metadata={"card_json": card})
 
             return TUIResult.error("创建会话失败: 适配器不支持 create_new_session")
 

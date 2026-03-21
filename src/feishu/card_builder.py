@@ -72,6 +72,112 @@ def build_card_content(
 
 
 # ---------------------------------------------------------------------------
+# 新建会话卡片（Schema 1.0，与项目管理风格统一）
+# ---------------------------------------------------------------------------
+
+
+def build_new_session_card(
+    session_id: str,
+    session_title: str,
+    working_dir: str,
+    model: Optional[str] = None,
+    cli_type: str = "",
+    project_name: Optional[str] = None,
+    project_display_name: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    构建「新建会话成功」卡片（Schema 1.0，与项目列表卡片风格一致）
+
+    Args:
+        session_id:           新会话原始 ID
+        session_title:        新会话标题
+        working_dir:          当前工作目录
+        model:                当前模型 ID（可选）
+        cli_type:             CLI 工具类型（如 opencode / claudecode）
+        project_name:         当前项目标识（可选）
+        project_display_name: 当前项目显示名（可选）
+
+    Returns:
+        飞书卡片 JSON（Schema 1.0，含 config/header/elements）
+    """
+    import os
+
+    # 显示用的短 ID：取后 8 位
+    short_id = session_id[-8:] if len(session_id) > 8 else session_id
+    display_id = f"FSB-{short_id}"
+
+    # 工作目录美化：home 目录替换为 ~
+    home = os.path.expanduser("~")
+    display_dir = working_dir.replace(home, "~") if working_dir.startswith(home) else working_dir
+
+    cli_label = {"opencode": "OpenCode", "claudecode": "Claude Code", "codex": "Codex"}.get(
+        cli_type.lower(), cli_type or "AI"
+    )
+
+    def _kv(key: str, value: str) -> Dict[str, Any]:
+        """Schema 2.0 两列行：左侧灰色标签，右侧内容"""
+        return {
+            "tag": "column_set",
+            "flex_mode": "none",
+            "columns": [
+                {
+                    "tag": "column",
+                    "width": "auto",
+                    "vertical_align": "top",
+                    "elements": [{
+                        "tag": "markdown",
+                        "content": f"<font color='grey'>{key}</font>",
+                        "text_size": "normal",
+                    }],
+                },
+                {
+                    "tag": "column",
+                    "width": "weighted",
+                    "weight": 4,
+                    "vertical_align": "top",
+                    "elements": [{
+                        "tag": "markdown",
+                        "content": value,
+                        "text_size": "normal",
+                    }],
+                },
+            ],
+        }
+
+    rows = [_kv("📋 会话", f"**{session_title or '新会话'}**  `{display_id}`")]
+
+    if project_display_name or project_name:
+        label = project_display_name or project_name
+        name_suffix = f"  `{project_name}`" if project_name and project_display_name else ""
+        rows.append(_kv("💼 项目", f"{label}{name_suffix}"))
+
+    rows.append(_kv("📂 目录", f"`{display_dir}`"))
+
+    if model:
+        rows.append(_kv("🤖 模型", f"`{_simplify_model_name(model)}`"))
+
+    elements: List[Dict[str, Any]] = [
+        *rows,
+        {"tag": "hr"},
+        {
+            "tag": "markdown",
+            "content": f"<font color='grey'>💡 新消息将在此会话中与 {cli_label} 对话</font>",
+            "text_size": "notation",
+        },
+    ]
+
+    return {
+        "schema": "2.0",
+        "config": {"wide_screen_mode": True},
+        "header": {
+            "title": {"tag": "plain_text", "content": "✅ 已创建新会话"},
+            "template": "green",
+        },
+        "body": {"elements": elements},
+    }
+
+
+# ---------------------------------------------------------------------------
 # 项目列表交互式卡片（Schema 1.0 + action/button，支持点击回调）
 # ---------------------------------------------------------------------------
 
