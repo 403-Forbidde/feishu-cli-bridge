@@ -79,17 +79,18 @@ def build_card_content(
 def build_project_list_card(
     projects: list,
     current_project_name: Optional[str] = None,
+    confirming_project: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    构建带「切换」按钮的项目列表卡片（Schema 1.0 格式）
+    构建带「切换」「删除」按钮的项目列表卡片（Schema 1.0 格式）
 
     Schema 1.0 的 action + button 支持 value 回调；
-    点击「切换」后飞书推送 im.card.action.trigger_v1 事件，
-    handler 收到后调用 ProjectManager.switch_project()。
+    点击按钮后飞书推送 im.card.action.trigger_v1 事件，handler 处理。
 
     Args:
         projects:             Project 对象列表
         current_project_name: 当前激活项目名（用于标记 ⭐）
+        confirming_project:   处于二次确认删除状态的项目名
 
     Returns:
         飞书卡片 JSON（Schema 1.0，含 config/header/elements）
@@ -111,66 +112,138 @@ def build_project_list_card(
             path = str(p.path)
             is_current = name == current_project_name
             exists = p.exists()
+            is_confirming = name == confirming_project
 
-            status_icon = "🟢" if exists else "🔴"
-            current_mark = " ⭐ **当前**" if is_current else ""
             last_active = p.last_active.strftime("%m-%d %H:%M") if isinstance(p.last_active, datetime) else str(p.last_active)[:16]
 
-            # 项目信息行
-            elements.append({
-                "tag": "div",
-                "text": {
-                    "tag": "lark_md",
-                    "content": (
-                        f"{status_icon} **{i}. {display_name}**{current_mark}\n"
-                        f"标识: `{name}` · 活跃: {last_active}\n"
-                        f"路径: `{path}`"
-                    ),
-                },
-            })
-
-            # 操作按钮行
             if is_current:
-                # 当前项目仅显示提示，不显示切换按钮
+                # 当前激活项目：顶部醒目标识 + 信息行（🟢）+ 无操作按钮
                 elements.append({
                     "tag": "div",
                     "text": {
                         "tag": "lark_md",
-                        "content": "<font color='grey'>✓ 正在使用此项目</font>",
+                        "content": "<font color='green'>**▶ 当前激活项目**</font>",
                     },
                 })
-            elif not exists:
                 elements.append({
                     "tag": "div",
                     "text": {
                         "tag": "lark_md",
-                        "content": "<font color='red'>⚠️ 目录不存在</font>",
+                        "content": (
+                            f"🟢 **{i}. {display_name}**\n"
+                            f"标识: `{name}` · 活跃: {last_active}\n"
+                            f"路径: `{path}`"
+                        ),
                     },
                 })
             else:
+                # 非激活项目：⚪ 存在 / 🔴 目录不存在
+                inactive_icon = "🟡" if exists else "🔴"
+                not_exists_hint = " · <font color='red'>⚠️ 目录不存在</font>" if not exists else ""
                 elements.append({
-                    "tag": "action",
-                    "actions": [{
-                        "tag": "button",
-                        "text": {"tag": "plain_text", "content": f"🔄 切换到 {display_name}"},
-                        "type": "primary",
-                        "value": {
-                            "action": "switch_project",
-                            "project_name": name,
-                        },
-                    }],
+                    "tag": "div",
+                    "text": {
+                        "tag": "lark_md",
+                        "content": (
+                            f"{inactive_icon} **{i}. {display_name}**{not_exists_hint}\n"
+                            f"标识: `{name}` · 活跃: {last_active}\n"
+                            f"路径: `{path}`"
+                        ),
+                    },
                 })
+
+                # 操作按钮行
+                if is_confirming:
+                    elements.append({
+                        "tag": "action",
+                        "actions": [
+                            {
+                                "tag": "button",
+                                "text": {"tag": "plain_text", "content": "⚠️ 确认删除"},
+                                "type": "danger",
+                                "value": {
+                                    "action": "delete_project_confirmed",
+                                    "project_name": name,
+                                },
+                            },
+                            {
+                                "tag": "button",
+                                "text": {"tag": "plain_text", "content": "取消"},
+                                "type": "default",
+                                "value": {
+                                    "action": "delete_project_cancel",
+                                    "project_name": name,
+                                },
+                            },
+                        ],
+                    })
+                elif not exists:
+                    # 目录不存在：仅删除
+                    elements.append({
+                        "tag": "action",
+                        "actions": [{
+                            "tag": "button",
+                            "text": {"tag": "plain_text", "content": "🗑️ 删除"},
+                            "type": "danger",
+                            "value": {
+                                "action": "delete_project_confirm",
+                                "project_name": name,
+                            },
+                        }],
+                    })
+                else:
+                    # 正常项目：切换 + 删除
+                    elements.append({
+                        "tag": "action",
+                        "actions": [
+                            {
+                                "tag": "button",
+                                "text": {"tag": "plain_text", "content": f"🔄 切换到 {display_name}"},
+                                "type": "primary",
+                                "value": {
+                                    "action": "switch_project",
+                                    "project_name": name,
+                                },
+                            },
+                            {
+                                "tag": "button",
+                                "text": {"tag": "plain_text", "content": "🗑️ 删除"},
+                                "type": "danger",
+                                "value": {
+                                    "action": "delete_project_confirm",
+                                    "project_name": name,
+                                },
+                            },
+                        ],
+                    })
 
             if i < len(projects):
                 elements.append({"tag": "hr"})
 
-    # 底部提示
+    # 底部说明
     elements.append({"tag": "hr"})
     elements.append({
         "tag": "div",
         "text": {
             "tag": "lark_md",
-            "content": "<font color='grey'>💡 点击「切换」按钮切换项目，或使用 `/ps <标识>` 命令</font>",
+            "content": "📌 **命令说明**",
+        },
+    })
+    elements.append({
+        "tag": "div",
+        "text": {
+            "tag": "lark_md",
+            "content": (
+                "`/pa <路径> <项目名称>` — 添加已有目录为项目\n"
+                "`/pc <路径> <项目名称>` — 创建新目录并添加项目"
+            ),
+        },
+    })
+    elements.append({
+        "tag": "div",
+        "text": {
+            "tag": "lark_md",
+            "content": "<font color='grey'>点击「🗑️ 删除」仅从列表移除，不会删除磁盘上的目录</font>",
         },
     })
 

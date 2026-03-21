@@ -166,26 +166,22 @@ async def execute_project_command(
 
         elif sub_cmd in ("add", "create"):
             if not args:
-                hint = "/pa <路径> [名称] [显示名]" if sub_cmd == "add" else "/pc <路径> [名称] [显示名]"
+                hint = "/pa <路径> <项目名称>" if sub_cmd == "add" else "/pc <路径> <项目名称>"
                 return TUIResult.error(f"请提供路径。用法: `{hint}`")
             path, name, display_name = _parse_add_args(args)
             if not path:
                 return TUIResult.error("路径不能为空")
 
             if sub_cmd == "add":
-                project = await project_manager.add_project(path, name=name, display_name=display_name)
-                action = "添加"
+                await project_manager.add_project(path, name=name, display_name=display_name)
             else:
-                project = await project_manager.create_project(path, name=name, display_name=display_name)
-                action = "创建"
+                await project_manager.create_project(path, name=name, display_name=display_name)
 
-            return TUIResult.text(
-                f"✅ 项目已{action}\n\n"
-                f"**名称**: {project.display_name}\n"
-                f"**标识**: `{project.name}`\n"
-                f"**路径**: `{project.path}`\n\n"
-                f"已自动切换到此项目。使用 `/pl` 查看所有项目。"
-            )
+            projects = await project_manager.list_projects()
+            current = project_manager.current_project_name
+            from ..feishu.card_builder import build_project_list_card
+            card = build_project_list_card(projects, current)
+            return TUIResult.card("", metadata={"card_json": card})
 
         elif sub_cmd == "switch":
             if not args:
@@ -259,8 +255,8 @@ def _get_help_text() -> str:
     return """📁 **项目管理命令**
 
 **快捷命令:**
-`/pa <路径> [名称]` — 添加已有目录为项目
-`/pc <路径> [名称]` — 创建新目录并添加为项目
+`/pa <路径> <项目名称>` — 添加已有目录为项目
+`/pc <路径> <项目名称>` — 创建新目录并添加为项目
 `/pl` — 列出所有项目
 `/ps <标识>` — 切换到指定项目
 `/prm <标识>` — 从列表移除项目（不删除目录）
@@ -268,9 +264,8 @@ def _get_help_text() -> str:
 
 **示例:**
 ```
-/pa ~/code/my-app
-/pa ~/code/my-app myapp 我的应用
-/pc ~/code/new-project
+/pa ~/code/my-app myapp
+/pc ~/code/new-project myproject
 /pl
 /ps myapp
 /prm myapp

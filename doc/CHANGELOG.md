@@ -1,5 +1,42 @@
 # 更新日志
 
+## [v0.0.7] - 2026-03-21
+
+**开发人**: ERROR403
+
+### 新增
+
+- **项目列表卡片删除功能** (`src/feishu/card_builder.py`, `src/feishu/handler.py`)
+  - 非激活项目新增「🗑️ 删除」按钮（`danger` 类型），与「🔄 切换」并排显示
+  - 二次确认机制：首次点击更新卡片为确认状态（「⚠️ 确认删除」+「取消」），防止误操作
+  - 当前激活项目**不显示删除按钮**，禁止直接删除正在使用的项目
+  - 目录不存在的项目仅显示「🗑️ 删除」（无切换按钮）
+  - `handle_card_callback` 新增四个 action 分支：`delete_project_confirm` / `delete_project_cancel` / `delete_project_confirmed`
+  - 删除成功后卡片自动更新，Toast 提示 "✅ 已删除项目: {显示名}"
+
+### 改进
+
+- **激活/非激活项目视觉区分** (`src/feishu/card_builder.py`)
+  - 当前激活项目：顶部绿色 `▶ 当前激活项目` 标识 + 🟢 状态图标
+  - 非激活且目录存在：🟡 状态图标（原 🟢，避免与激活项目混淆）
+  - 非激活且目录不存在：🔴 状态图标 + 红色 "⚠️ 目录不存在" 内联提示
+
+- **`/pa`、`/pc` 命令响应改为卡片** (`src/tui_commands/project.py`)
+  - 原：返回 `TUIResult.text()` 纯文本确认信息
+  - 现：返回完整项目列表卡片（`TUIResult.card()`），新增项目已激活，卡片效果与 `/pl` 一致
+
+- **卡片底部说明优化** (`src/feishu/card_builder.py`)
+  - 拆分为三层：`📌 命令说明` 标题 → 命令格式（全色对比度）→ 删除行为注释（灰色）
+  - 明确 `/pa <路径> <项目名称>` 格式，说明删除仅移除列表不删除磁盘目录
+
+### 技术细节
+
+- `build_project_list_card()` 新增 `confirming_project: Optional[str]` 参数，控制二次确认状态渲染
+- 按钮 `value` 格式：`{"action": "delete_project_confirm|cancel|confirmed", "project_name": "<标识>"}`
+- 确认状态卡片通过 IM Patch 更新，与切换项目逻辑复用同一更新路径
+
+---
+
 ## [v0.0.6] - 2026-03-21
 
 **开发人**: ERROR403

@@ -587,6 +587,75 @@ class MessageHandler:
                     return {"toast": {"type": "error", "content": e.message,
                                       "i18n": {"zh_cn": e.message}}}
 
+            elif action_type in ("delete_project_confirm", "delete_project_cancel",
+                                "delete_project_confirmed"):
+                if not self.project_manager:
+                    return {"toast": {"type": "error", "content": "项目管理功能未启用",
+                                      "i18n": {"zh_cn": "项目管理功能未启用"}}}
+                project_name = button_value.get("project_name")
+                if not project_name:
+                    return {"toast": {"type": "error", "content": "未指定项目",
+                                      "i18n": {"zh_cn": "未指定项目"}}}
+
+                from ..project.models import ProjectError
+                from .card_builder import build_project_list_card
+
+                if action_type == "delete_project_confirm":
+                    # 第一次点击：更新卡片为二次确认状态
+                    projects = await self.project_manager.list_projects()
+                    current = await self.project_manager.get_current_project()
+                    current_name = current.name if current else None
+                    updated_card = build_project_list_card(
+                        projects, current_name, confirming_project=project_name
+                    )
+                    return {
+                        "toast": {
+                            "type": "warning",
+                            "content": f"⚠️ 确认删除项目 {project_name}？",
+                            "i18n": {"zh_cn": f"⚠️ 确认删除项目 {project_name}？"},
+                        },
+                        "update_card": {"message_id": message_id, "card": updated_card},
+                    }
+
+                elif action_type == "delete_project_cancel":
+                    # 取消：恢复正常卡片
+                    projects = await self.project_manager.list_projects()
+                    current = await self.project_manager.get_current_project()
+                    current_name = current.name if current else None
+                    updated_card = build_project_list_card(projects, current_name)
+                    return {
+                        "toast": {
+                            "type": "info",
+                            "content": "已取消删除",
+                            "i18n": {"zh_cn": "已取消删除"},
+                        },
+                        "update_card": {"message_id": message_id, "card": updated_card},
+                    }
+
+                else:  # delete_project_confirmed
+                    # 确认删除
+                    try:
+                        project = await self.project_manager.get_project(project_name)
+                        display_name = project.display_name if project else project_name
+                        await self.project_manager.remove_project(project_name)
+                        logger.info(f"卡片回调删除项目成功: {project_name}")
+
+                        projects = await self.project_manager.list_projects()
+                        current = await self.project_manager.get_current_project()
+                        current_name = current.name if current else None
+                        updated_card = build_project_list_card(projects, current_name)
+                        return {
+                            "toast": {
+                                "type": "success",
+                                "content": f"✅ 已删除项目: {display_name}",
+                                "i18n": {"zh_cn": f"✅ 已删除项目: {display_name}"},
+                            },
+                            "update_card": {"message_id": message_id, "card": updated_card},
+                        }
+                    except ProjectError as e:
+                        return {"toast": {"type": "error", "content": e.message,
+                                          "i18n": {"zh_cn": e.message}}}
+
             else:
                 logger.warning(f"未知卡片回调 action: {action_type}")
                 return {"toast": {"type": "error", "content": "未知操作",
