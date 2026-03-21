@@ -2,7 +2,7 @@
 
 程序员专属：用飞书私聊向 OpenCode、Claude Code、Codex 等 CLI 编程工具下达指令，享受流式打字机输出体验。
 
-**版本**: v0.0.9
+**版本**: v0.1.0
 **开发**: ERROR403
 **更新日期**: 2026-03-21
 
@@ -198,6 +198,10 @@ feishu-cli-bridge/
 ```
 
 ## 更新日志
+
+### v0.1.0 (2026-03-21)
+- ✅ `/model` 命令卡片化：与 `/mode` 同风格，当前模型绿色高亮，点击按钮原地切换
+- ✅ 模型列表改为配置驱动：在 `config.yaml` 的 `cli.opencode.models` 中维护常用模型
 
 ### v0.0.9 (2026-03-21)
 - ✅ `/mode` 命令：Agent 模式切换卡片（Build / Plan / oh-my-openagent 全系列）
