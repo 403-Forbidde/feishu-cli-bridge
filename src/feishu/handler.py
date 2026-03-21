@@ -116,15 +116,6 @@ class MessageHandler:
             logger.debug(f"⏭️ 消息 {message.message_id} 已处理过，跳过")
             return
 
-        # 2. 检查是否是 @ 机器人（群聊需要）
-        if message.chat_type == "group":
-            # 检查内容中是否包含 @
-            if "@_user_" not in message.content:
-                logger.debug("⏭️ 群聊消息没有 @，忽略")
-                return
-            # 注意：这里简单处理，只要群聊中有 @ 就响应
-            # 实际应该检查是否是 @ 当前机器人
-
         # 下载附件（图片/文件）
         if message.attachments:
             resolved = await self._download_attachments(
@@ -134,13 +125,6 @@ class MessageHandler:
 
         # 解析命令
         content = message.content.strip()
-
-        # 移除 @ 标记（先处理，以便正确识别命令）
-        if message.chat_type == "group":
-            # 移除 @_user_xxx 格式的 @
-            import re
-
-            content = re.sub(r"@_user_\w+\s*", "", content).strip()
 
         # 检测是否是回复交互式消息
         logger.debug(
@@ -187,13 +171,6 @@ class MessageHandler:
         if self.tui_router.is_tui_command(content):
             await self._handle_tui_command(content, message)
             return
-
-        # 移除 @ 标记
-        if message.chat_type == "group":
-            # 移除 @_user_xxx 格式的 @
-            import re
-
-            content = re.sub(r"@_user_\w+\s*", "", content).strip()
 
         if not content:
             return
@@ -480,26 +457,29 @@ class MessageHandler:
         help_text = """🤖 **飞书 CLI Bridge 使用指南**
 
 **基本用法：**
-• 私聊：直接发送消息
-• 群聊：@机器人 + 消息
+直接发送消息即可，支持文本、图片、文件
 
 **支持的 CLI 工具：**
-• **OpenCode** - 默认使用
-• **Claude Code** - @claude 使用
-• **Codex** - @codex 使用
+• **OpenCode** — 默认使用
+• **Claude Code** — `@claude` 指定
+• **Codex** — `@codex` 指定
 
-**命令：**
-• `/reset` 或 `/clear` - 清空当前会话上下文
-• `/help` - 显示帮助
+**会话 & 模型命令：**
+• `/new` — 创建新会话
+• `/session` — 列出会话，回复数字切换
+• `/model` — 列出模型，回复 ID 切换
+• `/reset` 或 `/clear` — 清空当前会话上下文
+
+**项目管理命令：**
+• `/pa <路径> [名称]` — 添加项目
+• `/pc <路径> [名称]` — 创建并添加项目
+• `/pl` — 项目列表（点击切换按钮）
+• `/ps <标识>` — 切换项目
+• `/pi` — 查看当前项目信息
 
 **提示：**
-• 每个工作目录有独立的会话
-• 最多保留 15 个最近会话
-• 消息右下角显示 Token 使用情况
-
-**示例：**
-• "帮我写一个 Python 脚本"
-• "@claude 解释一下这段代码"
+• 每个项目目录对应独立 AI 会话
+• 切换项目后工具调用自动在对应目录执行
 """
         await self.api.send_text(message.chat_id, help_text)
 
