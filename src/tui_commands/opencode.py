@@ -197,25 +197,21 @@ class OpenCodeTUICommands(TUIBaseCommand):
             return TUIResult.error(f"处理模型命令失败: {str(e)}")
 
     async def _list_models(self, context: CommandContext) -> TUIResult:
-        """列出可用模型"""
+        """列出可用模型（卡片形式）"""
         try:
-            # 调用适配器获取模型列表
             if hasattr(self.adapter, "list_models"):
                 models = await self.adapter.list_models()
 
                 if not models:
-                    return TUIResult.text("ℹ️ 暂无可用模型")
+                    return TUIResult.text("ℹ️ 暂无可用模型，请在 config.yaml 的 cli.opencode.models 中添加")
 
-                # 格式化模型列表
-                content = self._format_model_list(models, context.current_model)
-
-                # 创建交互式消息，支持回复模型ID切换
-                return TUIResult.interactive(
-                    content=content,
-                    interactive_id="model_select",
-                    options=[],  # 模型不需要选项列表，直接回复ID
-                    metadata={"command": "model", "models": models},
+                from ..feishu.card_builder import build_model_select_card
+                card = build_model_select_card(
+                    models=models,
+                    current_model=context.current_model or "",
+                    cli_type=context.cli_type,
                 )
+                return TUIResult.card("", metadata={"card_json": card})
 
             return TUIResult.error("列出模型失败: 适配器不支持 list_models")
 

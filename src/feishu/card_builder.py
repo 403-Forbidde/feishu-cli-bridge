@@ -450,6 +450,92 @@ def build_mode_select_card(
     }
 
 
+def build_model_select_card(
+    models: List[Dict[str, Any]],
+    current_model: str,
+    cli_type: str = "opencode",
+) -> Dict[str, Any]:
+    """
+    构建模型切换卡片（与 Agent 模式卡片风格一致）
+
+    当前模型用绿色高亮标识，其余模型显示名称 + ID + 切换按钮。
+    底部附 config.yaml 模型列表管理说明。
+
+    Args:
+        models:        可用模型列表，每项含 provider / model / name / full_id
+        current_model: 当前激活的模型 full_id（如 kimi-for-coding/k2p5）
+        cli_type:      CLI 工具类型（写入按钮 value，供 handler 路由）
+    """
+    elements: List[Dict[str, Any]] = []
+
+    current_info = next((m for m in models if m.get("full_id") == current_model), None)
+    current_name = current_info.get("name", current_model) if current_info else current_model
+
+    # ── 当前激活模型（绿色高亮，无切换按钮）──────────────────────────────
+    elements.append({
+        "tag": "div",
+        "text": {"tag": "lark_md", "content": "<font color='grey'>当前激活</font>"},
+    })
+    elements.append({
+        "tag": "div",
+        "text": {
+            "tag": "lark_md",
+            "content": (
+                f"<font color='green'>🟢 **{current_name}**</font>\n"
+                f"<font color='grey'>`{current_model}`</font>"
+            ),
+        },
+    })
+    elements.append({"tag": "hr"})
+
+    # ── 其余模型：名称 + ID + 切换按钮 ──────────────────────────────────
+    for model in models:
+        full_id = model.get("full_id", "")
+        if full_id == current_model:
+            continue
+
+        name = model.get("name", full_id)
+        elements.append({
+            "tag": "div",
+            "text": {
+                "tag": "lark_md",
+                "content": f"**{name}**\n<font color='grey'>`{full_id}`</font>",
+            },
+        })
+        elements.append({
+            "tag": "action",
+            "actions": [{
+                "tag": "button",
+                "text": {"tag": "plain_text", "content": "▶ 切换至此"},
+                "type": "primary",
+                "value": {
+                    "action": "switch_model",
+                    "model_id": full_id,
+                    "cli_type": cli_type,
+                },
+            }],
+        })
+
+    # ── 底部：模型列表管理说明 ────────────────────────────────────────────
+    elements.append({"tag": "hr"})
+    elements.append({
+        "tag": "div",
+        "text": {
+            "tag": "lark_md",
+            "content": "💡 <font color='grey'>在 `config.yaml` 中管理模型列表，格式参考 `config.example.yaml`</font>",
+        },
+    })
+
+    return {
+        "config": {"wide_screen_mode": True},
+        "header": {
+            "title": {"tag": "plain_text", "content": "🤖 切换模型"},
+            "template": "turquoise",
+        },
+        "elements": elements,
+    }
+
+
 # ---------------------------------------------------------------------------
 # 私有卡片构建函数
 # ---------------------------------------------------------------------------

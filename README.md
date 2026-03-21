@@ -93,7 +93,7 @@ python start.py
 |------|------|
 | `/new` | 创建新会话 |
 | `/session` | 列出最近 10 个会话，回复数字切换 |
-| `/model` | 列出可用模型，回复模型 ID 切换 |
+| `/model` | 列出可用模型（卡片），点击按钮切换；模型列表在 `config.yaml` 中维护 |
 | `/mode` | 列出 Agent 模式，点击卡片按钮切换（Build / Plan / oh-my-openagent） |
 | `/mode <agent>` | 直接切换到指定 Agent 模式 |
 | `/reset` 或 `/clear` | 清空当前会话上下文 |
@@ -145,6 +145,11 @@ cli:
     default_model: "kimi-for-coding/k2p5"
     default_agent: "build"
     timeout: 300
+    models:                        # /model 命令展示的常用模型列表
+      - id: "kimi-for-coding/k2p5"
+        name: "Kimi K2.5"
+      - id: "opencode/mimo-v2-pro-free"
+        name: "MiMo V2 Pro Free"
   claudecode:
     enabled: true
     command: "claude"

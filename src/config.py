@@ -28,6 +28,7 @@ class CLIConfig:
     command: str = ""
     default_model: str = ""
     timeout: int = 300
+    models: list = field(default_factory=list)  # 常用模型列表，每项为 "provider/model" 或 {id, name}
 
 
 @dataclass
@@ -141,6 +142,7 @@ def _parse_config(data: dict) -> Config:
             command=c.get("command", name),
             default_model=c.get("default_model", ""),
             timeout=c.get("timeout", 300),
+            models=c.get("models", []),
         )
 
     return Config(

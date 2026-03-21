@@ -1,5 +1,32 @@
 # 更新日志
 
+## [v0.1.0] - 2026-03-21
+
+**开发人**: ERROR403
+
+### 新增
+
+- **`/model` 命令卡片化** (`src/tui_commands/opencode.py`, `src/feishu/card_builder.py`, `src/feishu/handler.py`)
+  - 原：返回纯文本交互消息，需要手动回复模型 ID 切换，体验差
+  - 现：与 `/mode` 风格完全一致的卡片——当前模型绿色高亮，其余模型展示名称 + ID + 蓝色「▶ 切换至此」按钮
+  - 点击按钮通过 `im.card.action.trigger_v1` 回调切换，卡片原地重绘，toast 提示结果
+  - `handle_card_callback` 新增 `switch_model` action 分支
+  - 卡片底部一行灰色提示，引导用户查阅 `config.example.yaml` 管理模型列表
+
+- **模型列表改为配置驱动** (`src/config.py`, `src/feishu/handler.py`, `src/adapters/opencode.py`, `config.yaml`, `config.example.yaml`)
+  - 原：`list_models()` 硬编码静态列表，尝试过读 `GET /provider` API、读 `auth.json`，均存在问题（模型过多达 262 个、涉及敏感 API Key）
+  - 现：`config.yaml` 的 `cli.opencode.models` 中维护常用模型列表，`list_models()` 直接读配置，零 API 调用，零敏感文件访问
+  - 支持 `{id, name}` dict 格式及纯字符串 `"provider/model"` 两种写法
+  - `CLIConfig` 新增 `models: list` 字段，handler 透传给 adapter config dict
+
+### 技术细节
+
+- `build_model_select_card()` 新增于 `card_builder.py`，复用 `build_mode_select_card()` 的布局模式
+- 卡片 header 使用 `turquoise` 模板与 `/mode` 的 `blue` 区分
+- `_list_models()` 改为返回 `TUIResult.card`，不再使用 `TUIResult.interactive`
+
+---
+
 ## [v0.0.9] - 2026-03-21
 
 **开发人**: ERROR403

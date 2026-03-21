@@ -644,67 +644,35 @@ class OpenCodeAdapter(BaseCLIAdapter):
         return False
 
     async def list_models(self, provider: Optional[str] = None) -> List[Dict[str, Any]]:
-        """列出可用模型 - 只显示已配置 API key 的主要模型"""
-        return [
-            # OpenCode 官方模型（免费）
-            {
-                "provider": "opencode",
-                "model": "mimo-v2",
-                "name": "Mimo V2",
-                "full_id": "opencode/mimo-v2",
-            },
-            {
-                "provider": "opencode",
-                "model": "mimo-v2-pro-free",
-                "name": "Mimo V2 Pro Free",
-                "full_id": "opencode/mimo-v2-pro-free",
-            },
-            {
-                "provider": "opencode",
-                "model": "mimo-v2-omni-free",
-                "name": "Mimo V2 Omni Free",
-                "full_id": "opencode/mimo-v2-omni-free",
-            },
-            # Anthropic Claude 系列（需要 ANTHROPIC_API_KEY）
-            {
-                "provider": "anthropic",
-                "model": "claude-sonnet-4-20250514",
-                "name": "Claude Sonnet 4",
-                "full_id": "anthropic/claude-sonnet-4-20250514",
-            },
-            {
-                "provider": "anthropic",
-                "model": "claude-opus-4-20250514",
-                "name": "Claude Opus 4",
-                "full_id": "anthropic/claude-opus-4-20250514",
-            },
-            {
-                "provider": "anthropic",
-                "model": "claude-3-5-sonnet-20241022",
-                "name": "Claude 3.5 Sonnet",
-                "full_id": "anthropic/claude-3-5-sonnet-20241022",
-            },
-            # Kimi 系列（需要 MOONSHOT_API_KEY）
-            {
-                "provider": "moonshotai",
-                "model": "kimi-k2.5",
-                "name": "Kimi K2.5",
-                "full_id": "moonshotai/kimi-k2.5",
-            },
-            {
-                "provider": "moonshotai",
-                "model": "kimi-k2-thinking",
-                "name": "Kimi K2 Thinking",
-                "full_id": "moonshotai/kimi-k2-thinking",
-            },
-            # GPT 系列（需要 OPENAI_API_KEY）
-            {
-                "provider": "opencode",
-                "model": "gpt-5-nano",
-                "name": "GPT-5 Nano",
-                "full_id": "opencode/gpt-5-nano",
-            },
-        ]
+        """列出可用模型 - 直接从 config.yaml 的 models 列表读取"""
+        raw_models: list = self.config.get("models", [])
+        models: List[Dict[str, Any]] = []
+
+        for item in raw_models:
+            if isinstance(item, str):
+                full_id = item
+                name = item
+            elif isinstance(item, dict):
+                full_id = item.get("id", "")
+                name = item.get("name", full_id)
+            else:
+                continue
+
+            if "/" not in full_id:
+                continue
+
+            prov_id, model_id = full_id.split("/", 1)
+            if provider and prov_id != provider:
+                continue
+
+            models.append({
+                "provider": prov_id,
+                "model": model_id,
+                "name": name,
+                "full_id": full_id,
+            })
+
+        return models
 
     async def switch_model(self, model_id: str) -> bool:
         """切换当前会话使用的模型"""

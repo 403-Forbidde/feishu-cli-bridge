@@ -44,6 +44,15 @@ cli:
     default_model: "kimi-for-coding/k2p5"  # 格式: provider/model（环境变量: OPENCODE_MODEL）
     default_agent: "build"              # 默认 agent：build / plan / 自定义（环境变量: OPENCODE_AGENT）
     timeout: 300                        # 单次请求超时（秒）（环境变量: OPENCODE_TIMEOUT）
+    models:                             # /model 命令展示的常用模型列表
+      - id: "kimi-for-coding/k2p5"
+        name: "Kimi K2.5"
+      - id: "kimi-for-coding/kimi-k2-thinking"
+        name: "Kimi K2 Thinking"
+      - id: "opencode/mimo-v2-pro-free"
+        name: "MiMo V2 Pro Free"
+      - id: "opencode/mimo-v2-omni-free"
+        name: "MiMo V2 Omni Free"
 
   # Claude Code（Anthropic 官方 CLI）
   claudecode:

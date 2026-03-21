@@ -48,6 +48,7 @@ class MessageHandler:
                             "command": cli_config.command,
                             "default_model": cli_config.default_model,
                             "timeout": cli_config.timeout,
+                            "models": cli_config.models,
                         },
                     )
                     adapter.logger = logger
@@ -655,6 +656,38 @@ class MessageHandler:
                     except ProjectError as e:
                         return {"toast": {"type": "error", "content": e.message,
                                           "i18n": {"zh_cn": e.message}}}
+
+            elif action_type == "switch_model":
+                model_id = button_value.get("model_id")
+                cli_type = button_value.get("cli_type", "opencode")
+                if not model_id:
+                    return {"toast": {"type": "error", "content": "未指定模型",
+                                      "i18n": {"zh_cn": "未指定模型"}}}
+
+                adapter = self.adapters.get(cli_type)
+                if not adapter or not hasattr(adapter, "switch_model"):
+                    return {"toast": {"type": "error", "content": "适配器不支持模型切换",
+                                      "i18n": {"zh_cn": "适配器不支持模型切换"}}}
+
+                await adapter.switch_model(model_id)
+                logger.info(f"卡片回调切换模型成功: {model_id}")
+
+                # 重绘卡片，高亮新选中的模型
+                models = await adapter.list_models()
+                from .card_builder import build_model_select_card
+                updated_card = build_model_select_card(models, model_id, cli_type=cli_type)
+                model_name = next((m.get("name", model_id) for m in models if m.get("full_id") == model_id), model_id)
+                return {
+                    "toast": {
+                        "type": "success",
+                        "content": f"✅ 已切换到: {model_name}",
+                        "i18n": {"zh_cn": f"✅ 已切换到: {model_name}"},
+                    },
+                    "update_card": {
+                        "message_id": message_id,
+                        "card": updated_card,
+                    },
+                }
 
             elif action_type == "switch_mode":
                 agent_id = button_value.get("agent_id")
