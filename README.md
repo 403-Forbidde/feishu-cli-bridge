@@ -2,7 +2,7 @@
 
 程序员专属：用飞书私聊向 OpenCode、Claude Code、Codex 等 CLI 编程工具下达指令，享受流式打字机输出体验。
 
-**版本**: v0.0.6
+**版本**: v0.0.9
 **开发**: ERROR403
 **更新日期**: 2026-03-21
 
@@ -22,7 +22,7 @@
 - 📊 **Token 统计** — Footer 紧凑显示耗时、Token 消耗、上下文占用率、模型名
 - 🖼️ **图片/文件输入** — 直接发送图片或文件，模型视觉识别后分析
 - 📁 **项目管理** — 管理多个工作目录，`/pl` 交互式卡片一键切换项目
-- 🎮 **TUI 命令** — 斜杠命令管理会话（`/new` `/session`）、切换模型（`/model`）
+- 🎮 **TUI 命令** — 斜杠命令管理会话（`/new` `/session`）、切换模型（`/model`）、切换 Agent 模式（`/mode`）
 - 🔄 **工作目录隔离** — 每个项目对应独立 OpenCode session，工具调用 CWD 精确
 - ⚡ **智能节流** — CardKit 100ms / IM Patch 1500ms 双模式，长间隙批处理优化
 
@@ -94,6 +94,8 @@ python start.py
 | `/new` | 创建新会话 |
 | `/session` | 列出最近 10 个会话，回复数字切换 |
 | `/model` | 列出可用模型，回复模型 ID 切换 |
+| `/mode` | 列出 Agent 模式，点击卡片按钮切换（Build / Plan / oh-my-openagent） |
+| `/mode <agent>` | 直接切换到指定 Agent 模式 |
 | `/reset` 或 `/clear` | 清空当前会话上下文 |
 | `/help` | 显示帮助 |
 
@@ -141,6 +143,7 @@ cli:
     enabled: true
     command: "opencode"
     default_model: "kimi-for-coding/k2p5"
+    default_agent: "build"
     timeout: 300
   claudecode:
     enabled: true
@@ -190,6 +193,19 @@ feishu-cli-bridge/
 ```
 
 ## 更新日志
+
+### v0.0.9 (2026-03-21)
+- ✅ `/mode` 命令：Agent 模式切换卡片（Build / Plan / oh-my-openagent 全系列）
+- ✅ 自动检测 oh-my-openagent：未安装显示内置模式，已安装切换为神话命名 Agent 列表
+- ✅ 卡片按钮切换：当前模式绿色高亮，其余显示蓝色「▶ 切换至此」按钮，原地重绘
+
+### v0.0.8 (2026-03-21)
+- ✅ `/new` 命令卡片化：Schema 2.0 两列布局展示会话信息
+- ✅ `/mode plan` 等直接切换命令返回与 `/mode` 样式统一的卡片
+
+### v0.0.7 (2026-03-21)
+- ✅ 项目列表卡片删除功能，二次确认防误操作
+- ✅ `/pa`、`/pc` 命令响应改为卡片
 
 ### v0.0.6 (2026-03-21)
 - ✅ `/pl` 返回交互式卡片，点击按钮直接切换项目（无需手动输入 `/ps`）
