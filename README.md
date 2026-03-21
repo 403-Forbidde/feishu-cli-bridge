@@ -45,15 +45,14 @@ uv pip install -r requirements.txt
 
 ### 3. 配置
 
-编辑 `config.yaml`：
+从模板生成配置文件，填写飞书凭据：
 
-```yaml
-feishu:
-  app_id: "your_app_id"
-  app_secret: "your_app_secret"
+```bash
+cp config.example.yaml config.yaml
+# 编辑 config.yaml，填写 app_id 和 app_secret
 ```
 
-或通过环境变量（推荐，避免凭据写入文件）：
+或只用环境变量（无需 config.yaml）：
 
 ```bash
 export FEISHU_APP_ID="your_app_id"

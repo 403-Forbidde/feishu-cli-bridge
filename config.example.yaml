@@ -1,0 +1,94 @@
+# =============================================================================
+# Feishu CLI Bridge — 配置模板
+# =============================================================================
+# 使用方式：
+#   cp config.example.yaml config.yaml
+#   然后填写飞书凭据（feishu.app_id / feishu.app_secret）
+#
+# 所有字段均支持环境变量覆盖，环境变量优先级高于 config.yaml。
+# config.yaml 已列入 .gitignore，凭据不会被提交到代码库。
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# 飞书自建应用凭据（必填）
+# 环境变量: FEISHU_APP_ID / FEISHU_APP_SECRET
+# 在飞书开发者控制台 https://open.feishu.cn/app 获取
+# -----------------------------------------------------------------------------
+feishu:
+  app_id: "your_app_id"         # 格式: cli_xxxxxxxxxxxxxxxx
+  app_secret: "your_app_secret" # 应用密钥
+  encrypt_key: ""               # 事件加密密钥（未启用加密时留空）
+  verification_token: ""        # 事件验证 Token（未启用验证时留空）
+
+
+# -----------------------------------------------------------------------------
+# 会话管理
+# -----------------------------------------------------------------------------
+session:
+  max_sessions: 10          # 最大保留会话数，超出时 LRU 淘汰（环境变量: MAX_SESSIONS）
+  max_history: 20           # 单会话最大历史轮数（环境变量: MAX_HISTORY）
+  storage_dir: ".sessions"  # 会话 JSON 存储目录（环境变量: SESSION_DIR）
+
+
+# -----------------------------------------------------------------------------
+# CLI 工具配置
+# 支持同时启用多个工具，发消息时通过 @opencode / @claude / @codex 指定
+# 默认优先级: opencode > claudecode > codex
+# -----------------------------------------------------------------------------
+cli:
+  # OpenCode（推荐，支持多模型 + HTTP/SSE 流式）
+  opencode:
+    enabled: true                       # 环境变量: OPENCODE_ENABLED
+    command: "opencode"                 # 可执行文件名或绝对路径（环境变量: OPENCODE_CMD）
+    default_model: "kimi-for-coding/k2p5"  # 格式: provider/model（环境变量: OPENCODE_MODEL）
+    timeout: 300                        # 单次请求超时（秒）（环境变量: OPENCODE_TIMEOUT）
+
+  # Claude Code（Anthropic 官方 CLI）
+  claudecode:
+    enabled: true
+    command: "claude"                   # 环境变量: CLAUDECODE_CMD
+    default_model: "claude-sonnet-4-5"  # 环境变量: CLAUDECODE_MODEL
+    timeout: 300                        # 环境变量: CLAUDECODE_TIMEOUT
+
+  # Codex（默认关闭）
+  codex:
+    enabled: false
+    command: "codex"                    # 环境变量: CODEX_CMD
+    default_model: "gpt-4o"            # 环境变量: CODEX_MODEL
+    timeout: 300                        # 环境变量: CODEX_TIMEOUT
+
+
+# -----------------------------------------------------------------------------
+# 流式输出参数（通常不需要修改）
+# -----------------------------------------------------------------------------
+streaming:
+  update_interval: 0.3    # 内容累积窗口（秒）（环境变量: STREAM_INTERVAL）
+  min_chunk_size: 20       # 触发更新的最小字符数（环境变量: MIN_CHUNK_SIZE）
+  max_message_length: 8000 # 单条消息最大字符数（环境变量: MAX_MSG_LENGTH）
+
+
+# -----------------------------------------------------------------------------
+# 图片 / 文件处理
+# -----------------------------------------------------------------------------
+image:
+  enabled: true   # 是否处理图片和文件消息
+  cache_ttl: 300  # 临时文件保留时间（秒），到期后自动清理
+
+
+# -----------------------------------------------------------------------------
+# 项目管理
+# -----------------------------------------------------------------------------
+project:
+  storage_path: ""   # 项目列表 JSON 路径，留空使用默认值:
+                     # ~/.config/cli-feishu-bridge/projects.json
+                     # 环境变量: PROJECT_STORAGE_PATH
+  max_projects: 50   # 最大项目数（环境变量: MAX_PROJECTS）
+
+
+# -----------------------------------------------------------------------------
+# 调试 / 日志
+# -----------------------------------------------------------------------------
+debug:
+  log_level: "INFO"  # DEBUG / INFO / WARNING / ERROR（环境变量: LOG_LEVEL）
+  save_logs: true    # 是否保存日志文件到 logs/ 目录（环境变量: SAVE_LOGS）
