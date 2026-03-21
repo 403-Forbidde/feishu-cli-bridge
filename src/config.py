@@ -44,12 +44,19 @@ class DebugConfig:
 
 
 @dataclass
+class ProjectConfig:
+    storage_path: str = ""  # 留空则使用默认 ~/.config/cli-feishu-bridge/projects.json
+    max_projects: int = 50
+
+
+@dataclass
 class Config:
     feishu: FeishuConfig = field(default_factory=FeishuConfig)
     session: SessionConfig = field(default_factory=SessionConfig)
     cli: Dict[str, CLIConfig] = field(default_factory=dict)
     streaming: StreamingConfig = field(default_factory=StreamingConfig)
     debug: DebugConfig = field(default_factory=DebugConfig)
+    project: ProjectConfig = field(default_factory=ProjectConfig)
 
 
 def load_config(config_path: str = "config.yaml") -> Config:
@@ -111,6 +118,10 @@ def _load_from_env() -> Config:
             log_level=os.getenv("LOG_LEVEL", "INFO"),
             save_logs=os.getenv("SAVE_LOGS", "true").lower() == "true",
         ),
+        project=ProjectConfig(
+            storage_path=os.getenv("PROJECT_STORAGE_PATH", ""),
+            max_projects=int(os.getenv("MAX_PROJECTS", "50")),
+        ),
     )
 
 
@@ -121,6 +132,7 @@ def _parse_config(data: dict) -> Config:
     cli_data = data.get("cli", {})
     streaming_data = data.get("streaming", {})
     debug_data = data.get("debug", {})
+    project_data = data.get("project", {})
 
     cli_configs = {}
     for name, c in cli_data.items():
@@ -152,6 +164,10 @@ def _parse_config(data: dict) -> Config:
         debug=DebugConfig(
             log_level=debug_data.get("log_level", "INFO"),
             save_logs=debug_data.get("save_logs", True),
+        ),
+        project=ProjectConfig(
+            storage_path=project_data.get("storage_path", ""),
+            max_projects=project_data.get("max_projects", 50),
         ),
     )
 

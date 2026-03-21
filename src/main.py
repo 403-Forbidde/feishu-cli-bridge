@@ -8,6 +8,7 @@ from pathlib import Path
 from .config import load_config, get_config
 from .utils.logger import setup_logger
 from .feishu import FeishuClient, FeishuAPI, MessageHandler
+from .project import ProjectManager
 
 # 全局变量用于信号处理
 shutdown_event = asyncio.Event()
@@ -59,9 +60,16 @@ async def main():
         app_id=config.feishu.app_id,
         app_secret=config.feishu.app_secret
     )
-    
+
+    # 创建项目管理器
+    project_manager = ProjectManager(
+        config_path=Path(config.project.storage_path) if config.project.storage_path else None,
+        max_projects=config.project.max_projects,
+    )
+    logger.info(f"项目管理器已启动，当前项目: {project_manager.current_project_name or '无'}")
+
     # 创建消息处理器
-    handler = MessageHandler(config, feishu_api)
+    handler = MessageHandler(config, feishu_api, project_manager=project_manager)
     
     # 创建飞书 WebSocket 客户端
     feishu_client = FeishuClient(

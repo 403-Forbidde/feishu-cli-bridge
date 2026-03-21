@@ -1,5 +1,53 @@
 # 更新日志
 
+## [v0.0.5] - 2026-03-21
+
+**开发人**: ERROR403
+
+### 新增
+
+- **项目管理功能** (`src/project/`, `src/tui_commands/project.py`)
+  - `ProjectManager`：增删改查、原子写入持久化（`~/.config/cli-feishu-bridge/projects.json`）、`asyncio.Lock` 并发保护
+  - `Project` 数据模型：`name`（英文标识）、`display_name`（可中文）、`path`、`created_at`、`last_active`、`description`、`session_ids`
+  - 支持 50 个项目，按最后活跃时间降序排列
+  - 路径验证：目录存在性、重复检测、rwx 权限校验
+
+- **项目命令集** (`src/tui_commands/project.py`)
+  - `/pa <路径> [名称] [显示名]` — 添加已有目录为项目
+  - `/pc <路径> [名称] [显示名]` — 创建新目录并添加为项目
+  - `/pl` — 列出所有项目（带当前项目标记 ★）
+  - `/ps <标识>` — 切换到指定项目
+  - `/prm <标识>` — 从列表移除项目（不删除目录）
+  - `/pi [标识]` — 查看项目信息（省略标识查看当前项目）
+  - 智能参数解析：中文自动识别为显示名，支持引号路径
+
+- **工作目录自动切换** (`src/feishu/handler.py`)
+  - `_get_working_dir()` 优先读 `ProjectManager.get_current_project().path`
+  - 普通对话和 TUI 命令均从当前激活项目取 `working_dir`
+  - 切换项目后自动关联 session_id 到对应项目
+
+- **ProjectManager 集成** (`src/main.py`)
+  - 启动时初始化 `ProjectManager` 并注入 `MessageHandler`
+
+### 修复
+
+- **OpenCode 工具调用工作目录不隔离** (`src/adapters/opencode.py`) — Issue #8
+  - 根本原因：OpenCode server 通过全局中间件读取每个 HTTP 请求的 `directory` **query 参数**，完全忽略进程级 `cwd` 和 `PWD` 环境变量
+  - 修复：三处请求均加 `params={"directory": working_dir}`：
+    - `POST /session?directory=X` — session 在目录 X 的实例中创建
+    - `POST /session/{id}/prompt_async?directory=X` — 工具调用（bash/read_file 等）在目录 X 执行
+    - `GET /event?directory=X` — SSE 只接收目录 X 实例的事件
+  - 同步简化架构：移除无效的"排他单实例"多进程逻辑，改为单一 server + `_sessions: Dict[working_dir, OpenCodeSession]` 按目录缓存 session
+  - 参考来源：OpenCode 官方 `server.ts` 源码 + `opencode-telegram-bridge` TypeScript 实现
+
+### 技术细节
+
+- `directory` query 参数来源：OpenCode `server.ts` 全局中间件 `c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()`
+- 项目配置文件：`~/.config/cli-feishu-bridge/projects.json`，原子写入（写 `.tmp` 再 rename）
+- 每个工作目录在 OpenCode server 中对应独立的 Instance，session 归属于 Instance
+
+---
+
 ## [v0.0.4] - 2026-03-21
 
 **开发人**: ERROR403

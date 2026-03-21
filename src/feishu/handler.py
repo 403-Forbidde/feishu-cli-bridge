@@ -16,6 +16,8 @@ from ..session import SessionManager
 from ..config import Config
 from ..tui_commands import create_router, TUIResultType
 from ..tui_commands.base import CommandContext
+from ..tui_commands.project import is_project_command, execute_project_command
+from ..project.manager import ProjectManager
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +25,10 @@ logger = logging.getLogger(__name__)
 class MessageHandler:
     """飞书消息处理器"""
 
-    def __init__(self, config: Config, feishu_api: FeishuAPI):
+    def __init__(self, config: Config, feishu_api: FeishuAPI, project_manager: Optional[ProjectManager] = None):
         self.config = config
         self.api = feishu_api
+        self.project_manager = project_manager
         self.session_mgr = SessionManager(
             storage_dir=config.session.storage_dir,
             max_sessions=config.session.max_sessions,
@@ -82,14 +85,13 @@ class MessageHandler:
 
         return None
 
-    def _get_working_dir(self, message: FeishuMessage) -> str:
-        """
-        获取工作目录
-        对于个人使用，使用固定的工作目录或根据会话决定
-        """
-        # 可以使用环境变量或配置指定默认工作目录
+    async def _get_working_dir(self) -> str:
+        """获取工作目录：优先使用当前激活项目路径，否则使用进程工作目录"""
+        if self.project_manager:
+            project = await self.project_manager.get_current_project()
+            if project and project.exists():
+                return str(project.path)
         import os
-
         return os.getcwd()
 
     async def handle_message(self, event_data: dict):
@@ -176,6 +178,11 @@ class MessageHandler:
                 await self._handle_interactive_reply(message)
                 return
 
+        # 优先检测项目管理命令（/pa /pc /pl /ps /prm /pi /project）
+        if is_project_command(content):
+            await self._handle_project_command(content, message)
+            return
+
         # 检测是否是 TUI 命令（斜杠命令）
         if self.tui_router.is_tui_command(content):
             await self._handle_tui_command(content, message)
@@ -218,12 +225,20 @@ class MessageHandler:
                 content = content[len(prefix) :].strip()
 
         # 获取工作目录
-        working_dir = self._get_working_dir(message)
+        working_dir = await self._get_working_dir()
 
         # 获取或创建会话
         session = self.session_mgr.get_or_create(
             user_id=message.sender_id, cli_type=cli_type, working_dir=working_dir
         )
+
+        # 关联会话到当前项目并更新活跃时间
+        if self.project_manager and session:
+            current_project = await self.project_manager.get_current_project()
+            if current_project:
+                await self.project_manager.add_session_to_project(
+                    current_project.name, session.session_id
+                )
 
         # 获取适配器
         adapter = self.adapters.get(cli_type)
@@ -442,7 +457,7 @@ class MessageHandler:
 
     async def _handle_reset(self, message: FeishuMessage):
         """处理重置命令"""
-        working_dir = self._get_working_dir(message)
+        working_dir = await self._get_working_dir()
 
         # 尝试重置所有可能的 CLI 类型会话
         cleared = []
@@ -520,6 +535,21 @@ class MessageHandler:
             logger.exception("Error processing interactive reply")
             await self.api.send_text(message.chat_id, f"❌ 处理失败: {str(e)}")
 
+    async def _handle_project_command(self, content: str, message: FeishuMessage):
+        """处理项目管理命令 (/pa /pc /pl /ps /prm /pi)"""
+        if not self.project_manager:
+            await self.api.send_text(message.chat_id, "⚠️ 项目管理功能未启用")
+            return
+        try:
+            result = await execute_project_command(content, self.project_manager)
+            if result.type == TUIResultType.ERROR:
+                await self.api.send_text(message.chat_id, f"❌ {result.content}")
+            else:
+                await self.api.send_text(message.chat_id, result.content)
+        except Exception as e:
+            logger.exception("处理项目命令失败")
+            await self.api.send_text(message.chat_id, f"❌ 项目命令执行失败: {e}")
+
     async def _handle_tui_command(self, content: str, message: FeishuMessage):
         """处理 TUI 命令
 
@@ -557,7 +587,7 @@ class MessageHandler:
             return
 
         # 获取工作目录和会话
-        working_dir = self._get_working_dir(message)
+        working_dir = await self._get_working_dir()
         session = self.session_mgr.get_or_create(
             user_id=message.sender_id, cli_type=cli_type, working_dir=working_dir
         )

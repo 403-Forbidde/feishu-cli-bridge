@@ -5,7 +5,7 @@ import base64
 import json
 import os
 import time
-from typing import Optional, List, AsyncIterator, Dict, Any
+from typing import Optional, List, AsyncIterator, Dict, Any, Tuple
 from dataclasses import dataclass, field
 
 import httpx
@@ -20,10 +20,11 @@ class OpenCodeSession:
     id: str
     title: str
     created_at: float = field(default_factory=time.time)
+    working_dir: str = ""  # 此会话绑定的工作目录
 
 
 class OpenCodeServerManager:
-    """OpenCode Server 进程管理器"""
+    """OpenCode Server 进程管理器（单实例，工作目录隔离通过 session directory 参数实现）"""
 
     def __init__(self, port: int = 4096, hostname: str = "127.0.0.1"):
         self.port = port
@@ -44,7 +45,6 @@ class OpenCodeServerManager:
                 self._is_running = True
                 return True
 
-            # 启动新实例
             cmd = [
                 "opencode",
                 "serve",
@@ -59,7 +59,7 @@ class OpenCodeServerManager:
                     *cmd,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
-                    start_new_session=True,  # 避免继承父进程的信号
+                    start_new_session=True,
                 )
 
                 # 等待服务启动
@@ -99,16 +99,22 @@ class OpenCodeServerManager:
 class OpenCodeAdapter(BaseCLIAdapter):
     """OpenCode CLI 适配器 - 使用 HTTP Server API
 
-    通过 opencode serve 启动 HTTP 服务，使用 SSE 接收真正的流式输出
+    通过 opencode serve 启动 HTTP 服务，使用 SSE 接收真正的流式输出。
+    单一 Server 实例，工作目录隔离通过创建 session 时传 directory 参数实现。
+    每个 working_dir 对应独立的 OpenCode session，保证工具调用 CWD 隔离。
     """
 
     def __init__(self, config: dict):
         super().__init__(config)
         self._current_stats: Optional[TokenStats] = None
+        # 单一服务器实例
         self._server_manager: Optional[OpenCodeServerManager] = None
         self._client: Optional[httpx.AsyncClient] = None
-        self._active_session: Optional[OpenCodeSession] = None
-        self._session_context: Dict[str, Any] = {}
+        self._server_lock = asyncio.Lock()
+        # 每个工作目录对应一个 OpenCode 会话（key = working_dir）
+        self._sessions: Dict[str, OpenCodeSession] = {}
+        # 当前活跃工作目录（TUI 命令使用）
+        self._active_working_dir: str = ""
         self._seen_assistant_message = (
             False  # 标记是否已看到 AI 回复（用于过滤用户输入）
         )
@@ -132,21 +138,46 @@ class OpenCodeAdapter(BaseCLIAdapter):
             return 128000
 
     async def _ensure_server(self) -> bool:
-        """确保 OpenCode Server 正在运行"""
-        if self._server_manager is None:
+        """确保单一 OpenCode Server 正在运行"""
+        async with self._server_lock:
+            # 检查已有实例是否健康
+            if self._server_manager is not None and await self._server_manager._check_health():
+                return True
+
+            # 启动新实例
             port = self.config.get("server_port", 4096)
             hostname = self.config.get("server_hostname", "127.0.0.1")
             self._server_manager = OpenCodeServerManager(port, hostname)
 
-        if self._client is None:
             timeout = httpx.Timeout(300.0, connect=10.0)
+            if self._client:
+                try:
+                    await self._client.aclose()
+                except Exception:
+                    pass
             self._client = httpx.AsyncClient(
                 base_url=self._server_manager.base_url,
                 timeout=timeout,
                 headers={"Content-Type": "application/json"},
             )
 
-        return await self._server_manager.start()
+            started = await self._server_manager.start()
+            if started and self.logger:
+                self.logger.info(f"OpenCode server started: port={port}")
+            return started
+
+    async def _get_or_create_session(self, working_dir: str) -> Optional[OpenCodeSession]:
+        """获取或创建指定工作目录的 OpenCode 会话"""
+        if working_dir in self._sessions:
+            return self._sessions[working_dir]
+
+        if self._client is None:
+            return None
+
+        session = await self._create_session(self._client, working_dir=working_dir)
+        if session:
+            self._sessions[working_dir] = session
+        return session
 
     def build_command(self, prompt: str, working_dir: str) -> List[str]:
         """构建命令（保留兼容性，实际不使用）"""
@@ -208,34 +239,37 @@ class OpenCodeAdapter(BaseCLIAdapter):
         return None
 
     async def _create_session(
-        self, title: str = "Feishu Bridge Session"
+        self,
+        client: httpx.AsyncClient,
+        title: str = "Feishu Bridge Session",
+        working_dir: str = "",
     ) -> Optional[OpenCodeSession]:
-        """创建新的 OpenCode 会话"""
+        """创建新的 OpenCode 会话。
+
+        directory 通过 query 参数传递（服务端全局中间件读取），
+        决定该请求所属的工作目录实例，session 将在此目录上下文中创建。
+        """
         try:
-            import uuid
-            import time
+            body: Dict[str, Any] = {"title": title}
 
-            # 生成唯一的 client_session_id 避免服务端复用
-            client_session_id = str(uuid.uuid4())[:8]
-
-            # 添加更多唯一标识确保创建新会话
-            body = {
-                "title": title,
-                "client_session_id": client_session_id,
-                "force_new": True,
-                "timestamp": time.time(),
-            }
+            # directory 作为 query 参数，由服务端中间件处理：
+            # c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
+            params = {"directory": working_dir} if working_dir else {}
 
             if self.logger:
-                self.logger.debug(f"Creating session with body: {body}")
+                self.logger.debug(f"Creating session: dir={working_dir!r}")
 
-            response = await self._client.post("/session", json=body)
+            response = await client.post("/session", json=body, params=params)
             if response.status_code == 200:
                 data = response.json()
                 session_id = data.get("id")
                 if self.logger:
-                    self.logger.info(f"Session created: {session_id}")
-                return OpenCodeSession(id=session_id, title=data.get("title", title))
+                    self.logger.info(
+                        f"Session created: {session_id} dir={working_dir!r}"
+                    )
+                return OpenCodeSession(
+                    id=session_id, title=data.get("title", title), working_dir=working_dir
+                )
             else:
                 if self.logger:
                     self.logger.error(
@@ -248,15 +282,16 @@ class OpenCodeAdapter(BaseCLIAdapter):
 
     async def _send_message(
         self,
+        client: httpx.AsyncClient,
         session_id: str,
         prompt: str,
         context: List[Message],
+        working_dir: str = "",
         attachments: Optional[List[Dict[str, Any]]] = None,
     ) -> bool:
-        """发送消息到会话"""
+        """发送消息到会话。directory 通过 query 参数传递，确保工具调用在正确目录执行"""
         try:
-            # 构建消息内容
-            parts = [{"type": "text", "text": prompt}]
+            parts: List[Dict[str, Any]] = [{"type": "text", "text": prompt}]
 
             # 添加图片/文件 parts（读取文件转 base64 data URL，确保模型可直接读取）
             if attachments:
@@ -284,18 +319,22 @@ class OpenCodeAdapter(BaseCLIAdapter):
                 provider_id = "opencode"
                 model_id = self.default_model
 
-            # 构建请求体 - model 必须是对象格式
-            body = {
+            body: Dict[str, Any] = {
                 "parts": parts,
                 "model": {"providerID": provider_id, "modelID": model_id},
             }
 
+            # directory 作为 query 参数，服务端中间件决定此 prompt 的工作目录上下文
+            params = {"directory": working_dir} if working_dir else {}
+
             if self.logger:
-                self.logger.debug(f"Sending message: parts={len(parts)}")
+                self.logger.debug(
+                    f"Sending message: parts={len(parts)} dir={working_dir!r}"
+                )
 
             # 使用 prompt_async 端点：立即返回 204，响应通过 SSE /event 推送
-            response = await self._client.post(
-                f"/session/{session_id}/prompt_async", json=body
+            response = await client.post(
+                f"/session/{session_id}/prompt_async", json=body, params=params
             )
 
             if response.status_code not in [200, 201, 204]:
@@ -312,9 +351,17 @@ class OpenCodeAdapter(BaseCLIAdapter):
                 self.logger.error(f"Failed to send message: {e}")
             return False
 
-    async def _listen_events(self, session_id: str) -> AsyncIterator[StreamChunk]:
+    async def _listen_events(
+        self,
+        client: httpx.AsyncClient,
+        session_id: str,
+        working_dir: str = "",
+    ) -> AsyncIterator[StreamChunk]:
         """
-        监听 SSE 事件流，对不同类型事件分别处理：
+        监听 SSE 事件流，对不同类型事件分别处理。
+
+        directory 作为 query 参数传递，确保收到的事件属于正确的目录实例：
+          GET /event?directory=/code/myproject
 
         - CONTENT (message.part.delta): 增量 delta，缓冲后批量发送
             * 第一批 ≥10 字符快速发出（建立响应感）
@@ -331,7 +378,8 @@ class OpenCodeAdapter(BaseCLIAdapter):
             # REASONING 去重：只在文本实际新增内容时才 yield
             last_reasoning_text = ""
 
-            async with self._client.stream("GET", "/event") as response:
+            params = {"directory": working_dir} if working_dir else {}
+            async with client.stream("GET", "/event", params=params) as response:
                 async for line in response.aiter_lines():
                     if not line.startswith("data: "):
                         continue
@@ -404,23 +452,24 @@ class OpenCodeAdapter(BaseCLIAdapter):
     ) -> AsyncIterator[StreamChunk]:
         """执行 OpenCode 并流式返回输出"""
 
-        # 确保 Server 运行
-        if not await self._ensure_server():
+        # 确保 Server 正在运行
+        started = await self._ensure_server()
+        if not started or self._client is None:
             yield StreamChunk(
                 type=StreamChunkType.ERROR, data="Failed to start OpenCode Server"
             )
             return
 
-        # 创建或复用会话
-        if self._active_session is None:
-            self._active_session = await self._create_session()
-            if self._active_session is None:
-                yield StreamChunk(
-                    type=StreamChunkType.ERROR, data="Failed to create session"
-                )
-                return
+        # 更新活跃工作目录（TUI 命令依赖此字段）
+        self._active_working_dir = working_dir
 
-        session_id = self._active_session.id
+        # 获取或创建该工作目录的会话（传 directory 参数保证 CWD 隔离）
+        session = await self._get_or_create_session(working_dir)
+        if session is None:
+            yield StreamChunk(
+                type=StreamChunkType.ERROR, data="Failed to create session"
+            )
+            return
 
         # 重置状态
         self._seen_assistant_message = False
@@ -428,20 +477,21 @@ class OpenCodeAdapter(BaseCLIAdapter):
         if self.logger:
             att_info = f", attachments={len(attachments)}" if attachments else ""
             self.logger.info(
-                f"Sending prompt to session {session_id}: {prompt[:50]}...{att_info}"
+                f"Sending prompt to session {session.id} (dir={working_dir!r}): {prompt[:50]}...{att_info}"
             )
 
-        # 发送消息（异步，不等待响应）
-        # 实际的消息通过 SSE 接收
+        # 发送消息（异步，不等待响应）；实际响应通过 SSE 接收
         asyncio.create_task(
-            self._send_message(session_id, prompt, context, attachments)
+            self._send_message(
+                self._client, session.id, prompt, context, working_dir, attachments
+            )
         )
 
         # 等待一小段时间让消息开始处理
         await asyncio.sleep(0.5)
 
-        # 监听流式事件
-        async for chunk in self._listen_events(session_id):
+        # 监听流式事件（带 directory 参数，确保收到正确目录实例的事件）
+        async for chunk in self._listen_events(self._client, session.id, working_dir):
             yield chunk
 
     def get_stats(self, context: List[Message], completion_text: str) -> TokenStats:
@@ -456,11 +506,18 @@ class OpenCodeAdapter(BaseCLIAdapter):
         return super().get_stats(context, completion_text)
 
     async def close(self):
-        """关闭适配器，清理资源"""
+        """关闭适配器，清理服务器资源"""
         if self._client:
-            await self._client.aclose()
+            try:
+                await self._client.aclose()
+            except Exception:
+                pass
         if self._server_manager:
-            await self._server_manager.stop()
+            try:
+                await self._server_manager.stop()
+            except Exception:
+                pass
+        self._sessions.clear()
 
     # ==================== TUI 命令支持 ====================
 
@@ -469,46 +526,45 @@ class OpenCodeAdapter(BaseCLIAdapter):
         """返回支持的 TUI 命令列表"""
         return ["new", "session", "model", "reset"]
 
+    def _get_active_client_session(self) -> Tuple[Optional[httpx.AsyncClient], Optional[OpenCodeSession]]:
+        """获取当前活跃工作目录的客户端和会话（供 TUI 命令使用）"""
+        return self._client, self._sessions.get(self._active_working_dir)
+
     async def create_new_session(self) -> Optional[Dict[str, Any]]:
-        """创建新会话"""
-        if not await self._ensure_server():
+        """创建新会话（在当前活跃工作目录下）"""
+        started = await self._ensure_server()
+        if not started or self._client is None:
             return None
 
         try:
-            import time
             import random
-            import uuid
 
-            # 生成唯一标题
             timestamp = time.strftime("%m%d_%H%M%S")
             random_suffix = random.randint(1000, 9999)
             title = f"Feishu Bridge {timestamp}_{random_suffix}"
 
-            # 记录旧会话
-            old_session_id = self._active_session.id if self._active_session else None
+            client, old_session = self._get_active_client_session()
+            old_session_id = old_session.id if old_session else None
             if self.logger:
                 self.logger.info(f"准备创建新会话，当前会话: {old_session_id}")
-                # 先列出所有会话，看当前有几个
                 existing_sessions = await self.list_sessions(limit=20)
                 self.logger.info(f"当前已有 {len(existing_sessions)} 个会话")
 
-            # 创建新会话
-            session = await self._create_session(title=title)
+            session = await self._create_session(
+                self._client, title=title, working_dir=self._active_working_dir
+            )
 
             if self.logger and session:
                 self.logger.info(f"_create_session 返回: {session.id}")
-                # 再次列出会话，看是否增加了
                 new_sessions = await self.list_sessions(limit=20)
                 self.logger.info(f"创建后共有 {len(new_sessions)} 个会话")
-
-                # 检查是否真的创建了新会话
                 if session.id == old_session_id:
                     self.logger.error(
                         f"错误：返回的会话 ID ({session.id}) 与旧会话相同！"
                     )
 
             if session:
-                self._active_session = session
+                self._sessions[self._active_working_dir] = session
                 return {
                     "id": session.id,
                     "title": session.title,
@@ -520,15 +576,15 @@ class OpenCodeAdapter(BaseCLIAdapter):
         return None
 
     async def list_sessions(self, limit: int = 10) -> List[Dict[str, Any]]:
-        """列出会话"""
-        if not await self._ensure_server():
+        """列出当前活跃目录服务器上的会话"""
+        started = await self._ensure_server()
+        if not started or self._client is None:
             return []
 
         try:
             response = await self._client.get("/session")
             if response.status_code == 200:
                 data = response.json()
-                # API 可能直接返回列表或包含 items 的字典
                 if isinstance(data, list):
                     sessions = data
                 elif isinstance(data, dict):
@@ -536,7 +592,6 @@ class OpenCodeAdapter(BaseCLIAdapter):
                 else:
                     sessions = []
 
-                # 格式化为统一格式
                 return [
                     {
                         "id": s.get("id"),
@@ -552,17 +607,18 @@ class OpenCodeAdapter(BaseCLIAdapter):
 
     async def switch_session(self, session_id: str) -> bool:
         """切换到指定会话"""
-        if not await self._ensure_server():
+        started = await self._ensure_server()
+        if not started or self._client is None:
             return False
 
         try:
-            # 验证会话是否存在
             response = await self._client.get(f"/session/{session_id}")
             if response.status_code == 200:
                 data = response.json()
-                self._active_session = OpenCodeSession(
+                self._sessions[self._active_working_dir] = OpenCodeSession(
                     id=data.get("id"),
                     title=data.get("title", "已恢复会话"),
+                    working_dir=self._active_working_dir,
                 )
                 return True
         except Exception as e:
@@ -571,19 +627,19 @@ class OpenCodeAdapter(BaseCLIAdapter):
         return False
 
     async def reset_session(self) -> bool:
-        """重置当前会话（清空对话历史）"""
-        if self._active_session:
-            # 创建新会话替换当前会话
-            new_session = await self._create_session()
-            if new_session:
-                self._active_session = new_session
-                return True
+        """重置当前会话（清空对话历史，保留工作目录）"""
+        if self._client is None:
+            return False
+        new_session = await self._create_session(
+            self._client, working_dir=self._active_working_dir
+        )
+        if new_session:
+            self._sessions[self._active_working_dir] = new_session
+            return True
         return False
 
     async def list_models(self, provider: Optional[str] = None) -> List[Dict[str, Any]]:
         """列出可用模型 - 只显示已配置 API key 的主要模型"""
-        # 返回常用且已配置的模型列表
-        # 这些应该是用户实际有 API key 的模型
         return [
             # OpenCode 官方模型（免费）
             {
@@ -647,12 +703,10 @@ class OpenCodeAdapter(BaseCLIAdapter):
 
     async def switch_model(self, model_id: str) -> bool:
         """切换当前会话使用的模型"""
-        # 验证模型格式
         if "/" not in model_id:
             return False
 
-        # 更新配置中的默认模型
-        # 注意：这只会影响新消息，当前正在进行的对话不会改变
+        # 更新配置中的默认模型（影响新消息）
         self.config["default_model"] = model_id
 
         if self.logger:
