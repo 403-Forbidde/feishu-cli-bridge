@@ -79,6 +79,7 @@ async def main():
         verification_token=config.feishu.verification_token
     )
     feishu_client.on_message(handler.handle_message)
+    feishu_client.on_card_callback(handler.handle_card_callback)
     
     # 设置信号处理
     def signal_handler(sig, frame):

@@ -11,6 +11,11 @@ from dataclasses import dataclass, field
 import lark_oapi as lark
 from lark_oapi.ws import Client as WSClient
 from lark_oapi.api.im.v1 import P2ImMessageReceiveV1
+from lark_oapi.event.callback.model.p2_card_action_trigger import (
+    P2CardActionTrigger,
+    P2CardActionTriggerResponse,
+    CallBackToast,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +77,7 @@ class FeishuClient:
         self._message_handler: Optional[Callable[[FeishuMessage], Awaitable[None]]] = (
             None
         )
+        self._card_callback_handler: Optional[Callable[[Dict[str, Any]], Awaitable[Dict[str, Any]]]] = None
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
@@ -85,6 +91,15 @@ class FeishuClient:
         self._message_handler = handler
         return handler
 
+    def on_card_callback(self, handler: Callable[[Dict[str, Any]], Awaitable[Dict[str, Any]]]):
+        """注册卡片按钮点击回调处理器
+
+        Args:
+            handler: 异步处理函数，接收回调数据字典，返回响应字典
+        """
+        self._card_callback_handler = handler
+        return handler
+
     def _create_event_handler(self) -> lark.EventDispatcherHandler:
         """创建事件处理器 - 参考 KimiBridge"""
         builder = lark.EventDispatcherHandler.builder(
@@ -93,6 +108,9 @@ class FeishuClient:
 
         # 注册消息接收事件处理器
         builder.register_p2_im_message_receive_v1(self._on_message_received)
+
+        # 注册卡片按钮点击回调
+        builder.register_p2_card_action_trigger(self._on_card_action_trigger)
 
         # 注册其他事件处理器（静默处理，避免日志噪音）
         builder.register_p2_im_message_reaction_created_v1(self._on_reaction_event)
@@ -108,6 +126,69 @@ class FeishuClient:
     def _on_read_event(self, event) -> None:
         """处理消息已读事件（静默忽略）"""
         pass
+
+    def _on_card_action_trigger(self, event: P2CardActionTrigger) -> P2CardActionTriggerResponse:
+        """处理卡片按钮点击回调（WebSocket 线程，必须 3s 内同步返回）"""
+        response = P2CardActionTriggerResponse()
+
+        if not self._card_callback_handler or not self._loop:
+            logger.warning("卡片回调处理器或事件循环未设置")
+            _set_toast(response, "error", "功能未启用")
+            return response
+
+        try:
+            event_data = _extract_card_event_data(event)
+            # 在主 asyncio 事件循环中执行异步处理器
+            future = asyncio.run_coroutine_threadsafe(
+                self._card_callback_handler(event_data), self._loop
+            )
+            result = future.result(timeout=2.5)
+
+            # 提取 update_card 指令，单独发起 patch（无法在响应中内联更新）
+            if result and "update_card" in result:
+                update_info = result.pop("update_card")
+                msg_id = update_info.get("message_id")
+                card = update_info.get("card")
+                if msg_id and card:
+                    asyncio.run_coroutine_threadsafe(
+                        self._patch_card(msg_id, card), self._loop
+                    )
+
+            # 设置 Toast 响应
+            toast_data = result.get("toast") if result else None
+            if toast_data:
+                _set_toast(response, toast_data.get("type", "info"),
+                           toast_data.get("i18n", {}).get("zh_cn", toast_data.get("content", "")))
+
+        except Exception as e:
+            logger.error(f"卡片回调处理异常: {e}")
+            _set_toast(response, "error", f"处理失败: {e}")
+
+        return response
+
+    async def _patch_card(self, message_id: str, card: Dict[str, Any]) -> None:
+        """用 IM Patch 方式更新卡片消息内容"""
+        import json
+        from lark_oapi.api.im.v1 import PatchMessageRequest, PatchMessageRequestBody
+
+        body = PatchMessageRequestBody.builder().content(
+            json.dumps(card, ensure_ascii=False)
+        ).build()
+        request = (
+            PatchMessageRequest.builder()
+            .message_id(message_id)
+            .request_body(body)
+            .build()
+        )
+        client = lark.Client.builder().app_id(self.app_id).app_secret(self.app_secret).build()
+        try:
+            resp = await asyncio.to_thread(client.im.v1.message.patch, request)
+            if not resp.success():
+                logger.warning(f"卡片更新失败: {resp.code} - {resp.msg}")
+            else:
+                logger.info(f"卡片已更新: {message_id}")
+        except Exception as e:
+            logger.error(f"卡片更新异常: {e}")
 
     def _on_message_received(self, event: P2ImMessageReceiveV1) -> None:
         """
@@ -315,6 +396,12 @@ class FeishuClient:
         返回是否启动成功
         """
         try:
+            # 保存主事件循环引用（供卡片回调线程使用）
+            try:
+                self._loop = asyncio.get_running_loop()
+            except RuntimeError:
+                self._loop = asyncio.get_event_loop()
+
             logger.info("🚀 正在启动飞书 WebSocket 长连接订阅...")
 
             # 创建事件处理器
@@ -377,3 +464,39 @@ class FeishuClient:
     @property
     def is_connected(self) -> bool:
         return self._running
+
+
+# ---------------------------------------------------------------------------
+# 模块级辅助函数
+# ---------------------------------------------------------------------------
+
+
+def _extract_card_event_data(event: P2CardActionTrigger) -> Dict[str, Any]:
+    """将 P2CardActionTrigger 对象转换为统一的字典格式"""
+    ev = event.event or {}
+    action = getattr(ev, "action", None)
+    operator = getattr(ev, "operator", None)
+    context = getattr(ev, "context", None)
+    return {
+        "open_id": getattr(operator, "open_id", "") if operator else "",
+        "user_id": getattr(operator, "user_id", "") if operator else "",
+        "token": getattr(ev, "token", ""),
+        "action": {
+            "tag": getattr(action, "tag", "") if action else "",
+            "name": getattr(action, "name", "") if action else "",
+            "value": getattr(action, "value", {}) if action else {},
+        },
+        "context": {
+            "open_message_id": getattr(context, "open_message_id", "") if context else "",
+            "open_chat_id": getattr(context, "open_chat_id", "") if context else "",
+        },
+    }
+
+
+def _set_toast(response: P2CardActionTriggerResponse, toast_type: str, content: str) -> None:
+    """为 P2CardActionTriggerResponse 设置 Toast 提示"""
+    toast = CallBackToast()
+    toast.type = toast_type
+    toast.content = content
+    toast.i18n = {"zh_cn": content}
+    response.toast = toast

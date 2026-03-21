@@ -544,11 +544,78 @@ class MessageHandler:
             result = await execute_project_command(content, self.project_manager)
             if result.type == TUIResultType.ERROR:
                 await self.api.send_text(message.chat_id, f"❌ {result.content}")
+            elif result.type == TUIResultType.CARD:
+                card = result.metadata.get("card_json")
+                if card:
+                    await self.api.send_card_message(message.chat_id, card)
+                else:
+                    await self.api.send_text(message.chat_id, result.content)
             else:
                 await self.api.send_text(message.chat_id, result.content)
         except Exception as e:
             logger.exception("处理项目命令失败")
             await self.api.send_text(message.chat_id, f"❌ 项目命令执行失败: {e}")
+
+    async def handle_card_callback(self, event_data: dict) -> dict:
+        """处理卡片按钮点击回调（im.card.action.trigger_v1）
+
+        Args:
+            event_data: 卡片回调事件数据（由 FeishuClient._on_card_action_trigger 构建）
+
+        Returns:
+            响应字典，可含 toast / update_card 字段
+        """
+        try:
+            action = event_data.get("action", {})
+            button_value = action.get("value", {})
+            action_type = button_value.get("action")
+            message_id = event_data.get("context", {}).get("open_message_id")
+
+            logger.info(f"卡片回调: action={action_type}, message_id={message_id}")
+
+            if action_type == "switch_project":
+                if not self.project_manager:
+                    return {"toast": {"type": "error", "content": "项目管理功能未启用",
+                                      "i18n": {"zh_cn": "项目管理功能未启用"}}}
+                project_name = button_value.get("project_name")
+                if not project_name:
+                    return {"toast": {"type": "error", "content": "未指定项目",
+                                      "i18n": {"zh_cn": "未指定项目"}}}
+
+                from ..project.models import ProjectError
+                try:
+                    project = await self.project_manager.switch_project(project_name)
+                    logger.info(f"卡片回调切换项目成功: {project_name}")
+
+                    # 构建更新后的项目列表卡片
+                    from .card_builder import build_project_list_card
+                    projects = await self.project_manager.list_projects()
+                    updated_card = build_project_list_card(projects, project.name)
+
+                    return {
+                        "toast": {
+                            "type": "success",
+                            "content": f"✅ 已切换到: {project.display_name}",
+                            "i18n": {"zh_cn": f"✅ 已切换到: {project.display_name}"},
+                        },
+                        "update_card": {
+                            "message_id": message_id,
+                            "card": updated_card,
+                        },
+                    }
+                except ProjectError as e:
+                    return {"toast": {"type": "error", "content": e.message,
+                                      "i18n": {"zh_cn": e.message}}}
+
+            else:
+                logger.warning(f"未知卡片回调 action: {action_type}")
+                return {"toast": {"type": "error", "content": "未知操作",
+                                  "i18n": {"zh_cn": "未知操作"}}}
+
+        except Exception as e:
+            logger.exception("处理卡片回调异常")
+            return {"toast": {"type": "error", "content": f"处理失败: {e}",
+                              "i18n": {"zh_cn": f"处理失败: {e}"}}}
 
     async def _handle_tui_command(self, content: str, message: FeishuMessage):
         """处理 TUI 命令

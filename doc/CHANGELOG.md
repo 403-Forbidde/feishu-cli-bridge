@@ -1,5 +1,51 @@
 # 更新日志
 
+## [v0.0.6] - 2026-03-21
+
+**开发人**: ERROR403
+
+### 新增
+
+- **项目列表交互式卡片** (`src/feishu/card_builder.py`) — Issue #9
+  - `build_project_list_card(projects, current_project_name)` — Schema 1.0 格式带按钮卡片
+  - 每个项目显示状态图标（🟢/🔴）、名称、标识、路径、最后活跃时间
+  - 当前项目显示 ⭐ **当前** 标记和"✓ 正在使用此项目"提示
+  - 非当前且目录存在的项目显示「🔄 切换到 xxx」按钮（`primary` 类型）
+  - 目录不存在的项目显示 ⚠️ 红色提示
+  - 卡片标题蓝色 header，底部提示快捷命令用法
+
+- **卡片按钮点击回调** (`src/feishu/client.py`)
+  - 注册 `register_p2_card_action_trigger` 监听按钮点击事件
+  - `_on_card_action_trigger()` 通过 `asyncio.run_coroutine_threadsafe` 在主事件循环执行异步 handler（2.5s 超时）
+  - `_patch_card()` 切换成功后用 IM Patch 更新卡片，刷新当前项目标记
+  - `on_card_callback()` 方法供外部注册异步回调处理器
+  - `start_sync()` 中保存主事件循环引用
+
+- **卡片回调处理** (`src/feishu/handler.py`)
+  - `handle_card_callback(event_data)` — 处理 `switch_project` action：调用 `ProjectManager.switch_project()` → 构建更新卡片 → 返回 Toast + update_card
+  - 返回成功 Toast："✅ 已切换到: {display_name}"
+  - 异常时返回错误 Toast
+
+### 改进
+
+- **`/pl` 命令返回交互式卡片** (`src/tui_commands/project.py`)
+  - 原来：返回 `TUIResult.text()` 纯文本列表
+  - 现在：返回 `TUIResult.card()` 含 `metadata["card_json"]`，触发实际卡片消息
+
+- **`_handle_project_command()` 支持 CARD 类型** (`src/feishu/handler.py`)
+  - 检测 `TUIResultType.CARD` 时调用 `send_card_message()` 发送真实卡片
+
+- **`main.py` 注册卡片回调** (`src/main.py`)
+  - `feishu_client.on_card_callback(handler.handle_card_callback)`
+
+### 技术细节
+
+- 按钮 `value` 格式：`{"action": "switch_project", "project_name": "<标识>"}`
+- 飞书卡片回调必须在 3s 内同步返回，通过 `run_coroutine_threadsafe` + 2.5s 超时保证
+- 卡片更新（刷新当前项目标记）通过 IM Patch 在 Toast 响应之后异步执行
+
+---
+
 ## [v0.0.5] - 2026-03-21
 
 **开发人**: ERROR403

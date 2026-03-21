@@ -160,8 +160,9 @@ async def execute_project_command(
         if sub_cmd == "list":
             projects = await project_manager.list_projects()
             current = project_manager.current_project_name
-            text = _format_project_list(projects, current)
-            return TUIResult.text(text)
+            from ..feishu.card_builder import build_project_list_card
+            card = build_project_list_card(projects, current)
+            return TUIResult.card("", metadata={"card_json": card})
 
         elif sub_cmd in ("add", "create"):
             if not args:

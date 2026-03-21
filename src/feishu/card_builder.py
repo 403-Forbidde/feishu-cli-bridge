@@ -16,6 +16,7 @@
 
 import logging
 import re
+from datetime import datetime
 from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -68,6 +69,120 @@ def build_card_content(
         )
     else:
         raise ValueError(f"未知的卡片状态: {state}")
+
+
+# ---------------------------------------------------------------------------
+# 项目列表交互式卡片（Schema 1.0 + action/button，支持点击回调）
+# ---------------------------------------------------------------------------
+
+
+def build_project_list_card(
+    projects: list,
+    current_project_name: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    构建带「切换」按钮的项目列表卡片（Schema 1.0 格式）
+
+    Schema 1.0 的 action + button 支持 value 回调；
+    点击「切换」后飞书推送 im.card.action.trigger_v1 事件，
+    handler 收到后调用 ProjectManager.switch_project()。
+
+    Args:
+        projects:             Project 对象列表
+        current_project_name: 当前激活项目名（用于标记 ⭐）
+
+    Returns:
+        飞书卡片 JSON（Schema 1.0，含 config/header/elements）
+    """
+    elements: List[Dict[str, Any]] = []
+
+    if not projects:
+        elements.append({
+            "tag": "div",
+            "text": {
+                "tag": "lark_md",
+                "content": "📭 暂无项目\n\n使用 `/pa <路径>` 添加项目，或 `/pc <路径>` 创建新项目。",
+            },
+        })
+    else:
+        for i, p in enumerate(projects, 1):
+            name = p.name
+            display_name = p.display_name
+            path = str(p.path)
+            is_current = name == current_project_name
+            exists = p.exists()
+
+            status_icon = "🟢" if exists else "🔴"
+            current_mark = " ⭐ **当前**" if is_current else ""
+            last_active = p.last_active.strftime("%m-%d %H:%M") if isinstance(p.last_active, datetime) else str(p.last_active)[:16]
+
+            # 项目信息行
+            elements.append({
+                "tag": "div",
+                "text": {
+                    "tag": "lark_md",
+                    "content": (
+                        f"{status_icon} **{i}. {display_name}**{current_mark}\n"
+                        f"标识: `{name}` · 活跃: {last_active}\n"
+                        f"路径: `{path}`"
+                    ),
+                },
+            })
+
+            # 操作按钮行
+            if is_current:
+                # 当前项目仅显示提示，不显示切换按钮
+                elements.append({
+                    "tag": "div",
+                    "text": {
+                        "tag": "lark_md",
+                        "content": "<font color='grey'>✓ 正在使用此项目</font>",
+                    },
+                })
+            elif not exists:
+                elements.append({
+                    "tag": "div",
+                    "text": {
+                        "tag": "lark_md",
+                        "content": "<font color='red'>⚠️ 目录不存在</font>",
+                    },
+                })
+            else:
+                elements.append({
+                    "tag": "action",
+                    "actions": [{
+                        "tag": "button",
+                        "text": {"tag": "plain_text", "content": f"🔄 切换到 {display_name}"},
+                        "type": "primary",
+                        "value": {
+                            "action": "switch_project",
+                            "project_name": name,
+                        },
+                    }],
+                })
+
+            if i < len(projects):
+                elements.append({"tag": "hr"})
+
+    # 底部提示
+    elements.append({"tag": "hr"})
+    elements.append({
+        "tag": "div",
+        "text": {
+            "tag": "lark_md",
+            "content": "<font color='grey'>💡 点击「切换」按钮切换项目，或使用 `/ps <标识>` 命令</font>",
+        },
+    })
+
+    title_text = f"📁 项目列表（共 {len(projects)} 个）" if projects else "📁 项目列表"
+    return {
+        "config": {"wide_screen_mode": True},
+        "header": {
+            "title": {"tag": "plain_text", "content": title_text},
+            "template": "blue",
+        },
+        "elements": elements,
+    }
 
 
 # ---------------------------------------------------------------------------
