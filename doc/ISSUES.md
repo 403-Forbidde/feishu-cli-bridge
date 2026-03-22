@@ -768,7 +768,8 @@ save_path = save_dir / Path(filename).name  # 只取基础文件名
 
 ### Issue #22: OpenCode `_sessions` 字典无并发锁保护
 
-**状态**: 📋 待修复
+**状态**: ✅ 已修复
+**时间**: 2026-03-22
 **优先级**: 中
 **发现时间**: 2026-03-21
 
@@ -776,7 +777,7 @@ save_path = save_dir / Path(filename).name  # 只取基础文件名
 `opencode.py:159` 的 `self._sessions` 在并发消息场景下，`_get_or_create_session` 和 `create_new_session` 同时执行时可能产生竞态——两个协程对同一 `working_dir` 均触发 `_create_session`，产生重复 API 调用和 session 泄漏。
 
 **修复方案**:
-添加 `self._sessions_lock = asyncio.Lock()`，在 `_get_or_create_session` 中使用 `async with self._sessions_lock`。
+添加 `self._sessions_lock: Optional[asyncio.Lock] = None`（懒初始化，防止跨循环绑定），在 `_get_or_create_session` 中用 `async with self._sessions_lock` 包裹整个读-创建-写操作。
 
 **相关文件**: `src/adapters/opencode.py`
 
@@ -784,17 +785,19 @@ save_path = save_dir / Path(filename).name  # 只取基础文件名
 
 ### Issue #23: `asyncio.get_event_loop()` 弃用用法
 
-**状态**: 📋 待修复
+**状态**: ✅ 已修复
+**时间**: 2026-03-22
 **优先级**: 中
 **发现时间**: 2026-03-21
 
 **问题描述**:
 以下位置在异步函数中使用了已弃用的 `asyncio.get_event_loop()`，在 Python 3.10+ 触发 `DeprecationWarning`：
-- `opencode.py:424,443`：`asyncio.get_event_loop().time()`
-- `flush_controller.py:102`：`loop = asyncio.get_event_loop()`
+- `opencode.py`：`asyncio.get_event_loop().time()` × 2
+- `flush_controller.py`：`loop = asyncio.get_event_loop()` × 4
 
 **修复方案**:
-统一替换为 `asyncio.get_running_loop()`（在 async 函数中）或 `time.monotonic()`。
+- `opencode.py`：替换为 `time.monotonic()`（仅需时间戳，无需 loop 对象）
+- `flush_controller.py`：替换为 `asyncio.get_running_loop()`（需要 loop 对象调用 `call_later` / `create_future`，均在 async 上下文中）
 
 **相关文件**: `src/adapters/opencode.py`, `src/feishu/flush_controller.py`
 

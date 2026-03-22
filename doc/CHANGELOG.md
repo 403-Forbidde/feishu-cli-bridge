@@ -1,5 +1,29 @@
 # 更新日志
 
+## [v0.1.6] - 2026-03-22
+
+**开发人**: ERROR403
+
+### 修复
+
+- **`parse_chunk` 签名破坏基类接口** (`src/adapters/opencode.py`)
+  - OpenCode 内部实现 `parse_chunk(raw_line, state)` 与基类抽象方法 `parse_chunk(raw_line)` 签名不符，违反 Liskov 替换原则
+  - 修复：将内部实现重命名为 `_parse_event(raw_line, state)`，保留公开的 `parse_chunk(raw_line)` stub 满足基类接口；`_listen_events` 调用改为 `_parse_event`
+
+- **`asyncio.get_event_loop()` 弃用用法** (`src/adapters/opencode.py`, `src/feishu/flush_controller.py`) — Issue #23
+  - `opencode.py` 两处 `asyncio.get_event_loop().time()` → `time.monotonic()`
+  - `flush_controller.py` 四处 `asyncio.get_event_loop()` → `asyncio.get_running_loop()`（均在 async 上下文，需要 loop 对象调用 `call_later` / `create_future`）
+
+- **`_send_message` fire-and-forget 丢失错误** (`src/adapters/opencode.py`)
+  - 原：`asyncio.create_task(self._send_message(...))` + `await asyncio.sleep(0.5)` 发送失败时异常静默丢弃，且 0.5s hardcoded sleep 在高负载时不可靠
+  - 修复：改为 `sent = await self._send_message(...)`，发送失败时立即 yield ERROR chunk 并返回；`prompt_async` 端点返回 204 即代表接受，实际执行异步进行，await 后直接监听 SSE 不会丢失事件
+
+- **`_sessions` 字典无并发锁** (`src/adapters/opencode.py`) — Issue #22
+  - `_get_or_create_session` 无锁，并发请求同一 `working_dir` 时可能重复调用 `_create_session`，产生 session 泄漏
+  - 修复：添加 `_sessions_lock`（懒初始化 `asyncio.Lock`），用 `async with self._sessions_lock` 包裹读-创建-写原子操作
+
+---
+
 ## [v0.1.5] - 2026-03-22
 
 **开发人**: ERROR403

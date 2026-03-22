@@ -99,7 +99,7 @@ class FlushController:
         """等待任何进行中的刷新完成。"""
         if not self.flush_in_progress:
             return
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         future = loop.create_future()
         self.flush_resolvers.append(future)
         await future
@@ -144,7 +144,7 @@ class FlushController:
                 and not self.pending_flush_timer
             ):
                 self.needs_reflush = False
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 self.pending_flush_timer = loop.call_later(
                     0,
                     lambda: asyncio.create_task(self._flush_and_clear_timer()),
@@ -179,7 +179,7 @@ class FlushController:
             if elapsed > THROTTLE_CONSTANTS.LONG_GAP_THRESHOLD_MS:
                 # 长间隙后：短暂批处理，确保首次可见更新有实质内容
                 self.last_update_time = now
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 self.pending_flush_timer = loop.call_later(
                     THROTTLE_CONSTANTS.BATCH_AFTER_GAP_MS / 1000,
                     lambda: asyncio.create_task(self._flush_and_clear_timer()),
@@ -190,7 +190,7 @@ class FlushController:
         elif not self.pending_flush_timer:
             # 在节流窗口内 —— 安排延迟刷新
             delay = (throttle_ms - elapsed) / 1000
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             self.pending_flush_timer = loop.call_later(
                 delay,
                 lambda: asyncio.create_task(self._flush_and_clear_timer()),

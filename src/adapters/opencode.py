@@ -176,6 +176,7 @@ class OpenCodeAdapter(BaseCLIAdapter):
         self._server_lock: Optional[asyncio.Lock] = None  # 懒初始化，避免绑定到错误的事件循环
         # 每个工作目录对应一个 OpenCode 会话（key = working_dir）
         self._sessions: Dict[str, OpenCodeSession] = {}
+        self._sessions_lock: Optional[asyncio.Lock] = None  # 懒初始化，防止跨循环绑定
         # 当前活跃工作目录（TUI 命令使用）
         self._active_working_dir: str = ""
 
@@ -285,23 +286,30 @@ class OpenCodeAdapter(BaseCLIAdapter):
             return started
 
     async def _get_or_create_session(self, working_dir: str) -> Optional[OpenCodeSession]:
-        """获取或创建指定工作目录的 OpenCode 会话"""
-        if working_dir in self._sessions:
-            return self._sessions[working_dir]
+        """获取或创建指定工作目录的 OpenCode 会话（加锁防并发重复创建）"""
+        if self._sessions_lock is None:
+            self._sessions_lock = asyncio.Lock()
+        async with self._sessions_lock:
+            if working_dir in self._sessions:
+                return self._sessions[working_dir]
 
-        if self._client is None:
-            return None
+            if self._client is None:
+                return None
 
-        session = await self._create_session(self._client, working_dir=working_dir)
-        if session:
-            self._sessions[working_dir] = session
-        return session
+            session = await self._create_session(self._client, working_dir=working_dir)
+            if session:
+                self._sessions[working_dir] = session
+            return session
 
     def build_command(self, prompt: str, working_dir: str) -> List[str]:
         """构建命令（保留兼容性，实际不使用）"""
         return ["opencode", "run", prompt, "--format", "json", "--dir", working_dir]
 
-    def parse_chunk(self, raw_line: bytes, state: StreamState) -> Optional[StreamChunk]:
+    def parse_chunk(self, raw_line: bytes) -> Optional[StreamChunk]:
+        """基类接口 stub — OpenCode 内部通过 _parse_event(raw_line, state) 调用"""
+        return None
+
+    def _parse_event(self, raw_line: bytes, state: StreamState) -> Optional[StreamChunk]:
         """解析 SSE 事件数据（使用局部状态，避免多轮对话并发冲突）"""
         try:
             data = json.loads(raw_line.decode("utf-8"))
@@ -468,7 +476,7 @@ class OpenCodeAdapter(BaseCLIAdapter):
         """监听 SSE 事件流（使用局部状态）"""
         try:
             content_buffer = ""
-            last_content_flush = asyncio.get_event_loop().time()
+            last_content_flush = time.monotonic()
             has_sent_first_content = False
             last_reasoning_text = ""
 
@@ -478,13 +486,13 @@ class OpenCodeAdapter(BaseCLIAdapter):
                     if not line.startswith("data: "):
                         continue
 
-                    chunk = self.parse_chunk(line[6:].encode("utf-8"), state)
+                    chunk = self._parse_event(line[6:].encode("utf-8"), state)
                     if not chunk:
                         continue
 
                     if chunk.type == StreamChunkType.CONTENT:
                         content_buffer += chunk.data
-                        now = asyncio.get_event_loop().time()
+                        now = time.monotonic()
                         elapsed = now - last_content_flush
 
                         if not has_sent_first_content and len(content_buffer) >= 10:
@@ -545,12 +553,13 @@ class OpenCodeAdapter(BaseCLIAdapter):
             prompt_hash=hash(prompt.strip())
         )
 
-        # 发送消息（异步，不等待响应）
-        asyncio.create_task(
-            self._send_message(self._client, session.id, prompt, context, working_dir, attachments)
+        # 发送消息（prompt_async 返回 204 后立即监听 SSE 事件流）
+        sent = await self._send_message(
+            self._client, session.id, prompt, context, working_dir, attachments
         )
-
-        await asyncio.sleep(0.5)
+        if not sent:
+            yield StreamChunk(type=StreamChunkType.ERROR, data="Failed to send message to OpenCode")
+            return
 
         # 监听流式事件（传递局部状态）
         async for chunk in self._listen_events(self._client, session.id, working_dir, state):
