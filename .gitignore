@@ -58,3 +58,6 @@ htmlcov/
 *.tmp
 *.bak
 *.backup
+
+# 本地工具脚本
+scripts/push_github.sh
