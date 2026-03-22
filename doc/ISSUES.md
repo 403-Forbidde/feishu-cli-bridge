@@ -574,7 +574,7 @@ class Project:
     session_ids: List[str] = []
 ```
 
-存储位置：`~/.config/cli-feishu-bridge/projects.json`，原子写入（先写 `.tmp` 再 rename）。
+存储位置：`~/.config/feishu-cli-bridge/projects.json`，原子写入（先写 `.tmp` 再 rename）。
 
 ```json
 {

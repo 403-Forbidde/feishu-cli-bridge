@@ -15,7 +15,7 @@
 - **`src/main.py`**：`signal.SIGTERM` 注册改为 `hasattr` 判断保护，避免 Windows 上 `AttributeError`（Linux/macOS 无影响）
 - **`src/main.py`**：`asyncio.Event()` 从模块顶层移入 `main()` 函数内部，修复 Python ≤3.9 上 "Future attached to a different loop" 错误（Python 3.10+ 上此问题已不存在，但代码更规范）
 - **`src/main.py`**：`WindowsProactorEventLoopPolicy` 仅在 Python < 3.12 时设置；Python 3.12+ Windows 已默认 ProactorEventLoop，设置反而触发废弃警告
-- **`src/config.py`**：配置文件查找路径分平台：Windows 使用 `%APPDATA%\cli-feishu-bridge\config.yaml`，Linux/macOS 继续使用 XDG 路径 `~/.config/cli-feishu-bridge/config.yaml`
+- **`src/config.py`**：配置文件查找路径分平台：Windows 使用 `%APPDATA%\feishu-cli-bridge\config.yaml`，Linux/macOS 继续使用 XDG 路径 `~/.config/feishu-cli-bridge/config.yaml`
 
 ### 修复（Windows 实测）
 
@@ -40,19 +40,19 @@
 ### 新增
 
 - **systemd 用户服务支持**（仅 Linux）
-  - `scripts/install_service.sh` — 一键安装：自动推导代码目录、创建 `~/.config/cli-feishu-bridge/`、复制配置模板、写入 `~/.config/systemd/user/cli-feishu-bridge.service`、重载 daemon，并打印后续步骤
+  - `scripts/install_service.sh` — 一键安装：自动推导代码目录、创建 `~/.config/feishu-cli-bridge/`、复制配置模板、写入 `~/.config/systemd/user/feishu-cli-bridge.service`、重载 daemon，并打印后续步骤
   - `scripts/uninstall_service.sh` — 停止、禁用、删除 service 文件、重载 daemon
   - 服务以 `WorkingDirectory=%h`（用户 home）运行，`PYTHONPATH` 指向代码目录
   - 支持 `loginctl enable-linger` 说明，适配无桌面会话环境
 
 - **`DebugConfig.log_dir` 配置项**（`src/config.py`, `config.example.yaml`）
   - 新增 `debug.log_dir` 字段（留空 = 自动），环境变量 `LOG_DIR`
-  - 留空时日志落在配置文件同级 `logs/` 目录，服务模式下自动归入 `~/.config/cli-feishu-bridge/logs/`
+  - 留空时日志落在配置文件同级 `logs/` 目录，服务模式下自动归入 `~/.config/feishu-cli-bridge/logs/`
 
 ### 改进
 
 - **配置文件自动发现**（`src/config.py`）
-  - `load_config()` 新增 `_find_config_file()`，按优先级查找：`CONFIG_FILE` 环境变量 → `$XDG_CONFIG_HOME/cli-feishu-bridge/config.yaml` → `./config.yaml`
+  - `load_config()` 新增 `_find_config_file()`，按优先级查找：`CONFIG_FILE` 环境变量 → `$XDG_CONFIG_HOME/feishu-cli-bridge/config.yaml` → `./config.yaml`
   - 新增 `get_config_dir() -> Path`，返回实际加载的配置文件目录，供路径解析使用
 
 - **路径解析基于配置文件目录**（`src/main.py`）
@@ -63,7 +63,7 @@
   - 新增 `log_dir: Optional[Union[str, Path]] = None` 参数，替代原硬编码的 `Path("logs")`
 
 - **`start.sh` 路径自适应**（`start.sh`）
-  - 去掉硬编码的 `/code/cli-feishu-bridge`，改为 `cd "$(dirname "$0")"` 自适应脚本位置
+  - 去掉硬编码的 `/code/feishu-cli-bridge`，改为 `cd "$(dirname "$0")"` 自适应脚本位置
   - 显式设置 `CONFIG_FILE=$(pwd)/config.yaml`，确保开发启动始终使用本地配置，与服务配置隔离
 
 ### 文档
@@ -286,7 +286,7 @@
 ### 新增
 
 - **项目管理功能** (`src/project/`, `src/tui_commands/project.py`)
-  - `ProjectManager`：增删改查、原子写入持久化（`~/.config/cli-feishu-bridge/projects.json`）、`asyncio.Lock` 并发保护
+  - `ProjectManager`：增删改查、原子写入持久化（`~/.config/feishu-cli-bridge/projects.json`）、`asyncio.Lock` 并发保护
   - `Project` 数据模型：`name`（英文标识）、`display_name`（可中文）、`path`、`created_at`、`last_active`、`description`、`session_ids`
   - 支持 50 个项目，按最后活跃时间降序排列
   - 路径验证：目录存在性、重复检测、rwx 权限校验
@@ -322,7 +322,7 @@
 ### 技术细节
 
 - `directory` query 参数来源：OpenCode `server.ts` 全局中间件 `c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()`
-- 项目配置文件：`~/.config/cli-feishu-bridge/projects.json`，原子写入（写 `.tmp` 再 rename）
+- 项目配置文件：`~/.config/feishu-cli-bridge/projects.json`，原子写入（写 `.tmp` 再 rename）
 - 每个工作目录在 OpenCode server 中对应独立的 Instance，session 归属于 Instance
 
 ---

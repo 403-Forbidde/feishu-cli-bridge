@@ -33,7 +33,7 @@ opencode --version        # OpenCode CLI（主要 AI 后端，必须在 PATH 中
 **Linux / macOS：**
 
 ```bash
-cd /path/to/cli-feishu-bridge
+cd /path/to/feishu-cli-bridge
 
 # 方式一：pip（推荐先创建虚拟环境，macOS 3.12+ 必须）
 python3 -m venv .venv
@@ -47,7 +47,7 @@ uv pip install -r requirements.txt
 **Windows（CMD）：**
 
 ```cmd
-cd C:\path\to\cli-feishu-bridge
+cd C:\path\to\feishu-cli-bridge
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
@@ -157,7 +157,7 @@ cli:
         name: "Kimi K2.5"
 
 project:
-  storage_path: ""       # 留空 = 平台默认（Linux/macOS: ~/.config/cli-feishu-bridge/projects.json，Windows: %APPDATA%\cli-feishu-bridge\projects.json）
+  storage_path: ""       # 留空 = 平台默认（Linux/macOS: ~/.config/feishu-cli-bridge/projects.json，Windows: %APPDATA%\feishu-cli-bridge\projects.json）
   max_projects: 50
 ```
 
@@ -335,7 +335,7 @@ nohup ./start.sh > bridge.log 2>&1 &
 **Windows（任务计划程序，开机自启）：**
 
 ```cmd
-schtasks /create /tn "FeiShuBridge" /tr "python -m src.main" /sc onlogon /ru %USERNAME% /sd C:\path\to\cli-feishu-bridge /f
+schtasks /create /tn "FeiShuBridge" /tr "python -m src.main" /sc onlogon /ru %USERNAME% /sd C:\path\to\feishu-cli-bridge /f
 
 REM 停止
 schtasks /end /tn "FeiShuBridge"

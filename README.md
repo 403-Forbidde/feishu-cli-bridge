@@ -40,8 +40,8 @@
 | 里程碑 | 核心交付 | 状态 |
 |--------|---------|------|
 | **v0.1.x** | OpenCode 接入 · CardKit 流式输出 · TUI 命令 · 多平台支持 | ✅ 已完成 |
-| **v0.2.0** | Codex CLI 适配器 | 🔜 规划中 |
-| **v0.3.0** | Kimi CLI 适配器（Wire 协议） | 🔜 规划中 |
+| **v0.2.0** | Kimi CLI 适配器（Wire 协议） | 🔜 规划中 |
+| **v1.0.0** | Codex CLI 适配器 | 🔜 规划中 |
 
 ---
 
@@ -59,22 +59,7 @@
 
 ---
 
-### 🔜 v0.2.0 — Codex CLI 适配器
-
-**目标**：将 [Codex CLI](https://github.com/openai/codex) 以子进程模式接入，通过 `@codex` 前缀调用。
-
-| 特性 | 说明 |
-|------|------|
-| 子进程流式输出 | `codex --stream` 模式，逐行解析 stdout |
-| 独立会话管理 | 与 OpenCode session 隔离，LRU 复用 |
-| 与 OpenCode 并行启用 | `@opencode` / `@codex` 自由切换，无默认冲突 |
-| 图片输入支持 | 与 OpenCode 路径对齐，附件统一预处理 |
-
-**实现路径**：完善 `src/adapters/codex.py`，预计新增约 150 行。
-
----
-
-### 🔜 v0.3.0 — Kimi CLI 适配器（Wire 协议）
+### 🔜 v0.2.0 — Kimi CLI 适配器（Wire 协议）
 
 **目标**：将 [Kimi CLI](https://kimi.moonshot.cn) 以 Wire 协议接入，通过 `@kimi` 前缀调用。
 
@@ -84,9 +69,24 @@
 | 持久化子进程池 | 每个 session 对应独立长驻 kimi 进程，上下文完整保留 |
 | 思维链流式展示 | `--thinking` 模式下推理过程实时显示在可折叠面板 |
 | `--yolo` 全自动模式 | 工具调用无需人工确认，配置开关控制 |
-| 与 OpenCode / Codex 并行启用 | `@kimi` / `@opencode` / `@codex` 三路自由切换 |
+| 与 OpenCode 并行启用 | `@kimi` / `@opencode` 自由切换，无默认冲突 |
 
 **实现路径**：新增 `src/adapters/kimicode.py`，预计约 400 行。
+
+---
+
+### 🔜 v1.0.0 — Codex CLI 适配器
+
+**目标**：将 [Codex CLI](https://github.com/openai/codex) 以子进程模式接入，通过 `@codex` 前缀调用。
+
+| 特性 | 说明 |
+|------|------|
+| 子进程流式输出 | `codex --stream` 模式，逐行解析 stdout |
+| 独立会话管理 | 与 OpenCode / Kimi session 隔离，LRU 复用 |
+| 与 OpenCode / Kimi 并行启用 | `@opencode` / `@kimi` / `@codex` 三路自由切换 |
+| 图片输入支持 | 与 OpenCode 路径对齐，附件统一预处理 |
+
+**实现路径**：完善 `src/adapters/codex.py`，预计新增约 150 行。
 
 ---
 
@@ -121,7 +121,7 @@ opencode --version
 
 ```bash
 git clone <repo_url>
-cd cli-feishu-bridge
+cd feishu-cli-bridge
 
 # 创建虚拟环境（Ubuntu 24.04 Python 3.12+ 必须）
 python3 -m venv .venv
@@ -224,7 +224,7 @@ macOS Python 3.12+ 起系统禁止直接向全局环境安装包（PEP 668），
 
 ```bash
 # 在项目目录下创建虚拟环境
-cd ~/cli-feishu-bridge
+cd ~/feishu-cli-bridge
 python3 -m venv .venv
 
 # 激活虚拟环境
@@ -291,7 +291,7 @@ opencode --version
 ### 安装依赖（虚拟环境）
 
 ```cmd
-cd C:\path\to\cli-feishu-bridge
+cd C:\path\to\feishu-cli-bridge
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
@@ -349,7 +349,7 @@ Start-Process python -ArgumentList "-m src.main" -WorkingDirectory $PWD -WindowS
 **方式二：Windows 任务计划程序（开机自启）**
 
 ```cmd
-schtasks /create /tn "FeiShuBridge" /tr "python -m src.main" /sc onlogon /ru %USERNAME% /sd C:\path\to\cli-feishu-bridge /f
+schtasks /create /tn "FeiShuBridge" /tr "python -m src.main" /sc onlogon /ru %USERNAME% /sd C:\path\to\feishu-cli-bridge /f
 ```
 
 停止：
@@ -475,7 +475,7 @@ cli:
         name: "MiMo V2 Pro Free"
 # 项目管理
 project:
-  storage_path: ""    # 留空使用默认 ~/.config/cli-feishu-bridge/projects.json
+  storage_path: ""    # 留空使用默认 ~/.config/feishu-cli-bridge/projects.json
   max_projects: 50
 ```
 
@@ -597,5 +597,3 @@ MIT License
 ## 致谢
 
 - [Lark OpenAPI SDK](https://github.com/larksuite/oapi-sdk-python)
-- OpenClaw-Lark (ByteDance，MIT License) — 卡片样式和流式调度参考
-- kimibridge — 流式输出实现参考
