@@ -21,15 +21,17 @@
 
 ## 功能特性
 
-- 🤖 **OpenCode 接入** — HTTP/SSE 方式接入，自动管理 `opencode serve` 生命周期（Codex、Kimi CLI 规划中）
-- 💬 **CardKit 流式输出** — 真正的打字机效果，逐字动画显示，左下角 loading 动画
-- 💭 **思考过程展示** — 可折叠思考面板，实时显示 AI 推理过程
-- 📊 **Token 统计** — Footer 紧凑显示耗时、Token 消耗、上下文占用率、模型名
-- 🖼️ **图片/文件输入** — 直接发送图片或文件，模型视觉识别后分析
-- 📁 **项目管理** — 管理多个工作目录，`/pl` 交互式卡片一键切换项目
-- 🎮 **TUI 命令** — 斜杠命令管理会话（`/new` `/session`）、切换模型（`/model`）、切换 Agent 模式（`/mode`）
-- 🔄 **工作目录隔离** — 每个项目对应独立 OpenCode session，工具调用 CWD 精确
-- ⚡ **智能节流** — CardKit 100ms / IM Patch 1500ms 双模式，长间隙批处理优化
+- 🤖 **OpenCode 接入** — HTTP/SSE 方式，自动启动并管理 `opencode serve`，自动预授权外部目录访问（无头模式工具调用不阻塞）
+- 🎭 **Agent 模式** — 内置 Build / Plan 模式；自动检测 oh-my-openagent，已安装时切换为 7 个专业 Agent，`/mode` 卡片一键切换
+- 🔀 **模型切换** — `/model` 卡片展示 `config.yaml` 中配置的模型列表，点击按钮即时切换，无需重启
+- 💬 **CardKit 流式输出** — 真正的打字机效果，100ms 节流推送；CardKit 不可用时自动降级 IM Patch（1500ms）
+- 💭 **思考过程展示** — 可折叠思考面板，实时显示 AI 推理过程，工具调用步骤完成后继续等待文字回复
+- 📊 **Token 统计** — 右对齐 Footer 紧凑显示耗时、Token 消耗、上下文占用率、模型名
+- 🖼️ **图片/文件输入** — 发送图片或文件自动下载并 base64 编码，作为 FilePart 传给模型视觉识别
+- 📁 **项目管理** — `/pl` 交互式卡片管理多个工作目录，点击「切换」按钮直接切换，带删除二次确认
+- 🔄 **工作目录隔离** — 每个项目对应独立 OpenCode session，工具调用（bash/read_file 等）CWD 精确隔离
+- ⚡ **智能节流** — 长间隙后先批处理再刷新，避免首次更新内容过少
+- 🌐 **跨平台支持** — Windows / Linux / macOS，Linux 含 systemd 用户服务一键安装
 
 ## Roadmap
 
@@ -534,64 +536,11 @@ feishu-cli-bridge/
 
 ## 更新日志
 
-### v0.1.4 (2026-03-21)
-- ✅ Windows 兼容性支持（`start.bat`、跨平台临时目录、SIGTERM 保护、ProactorEventLoop）
-- ✅ 配置路径自动适配：Windows 使用 `%APPDATA%`，Linux/macOS 继续使用 XDG
-- ✅ 新增 Windows 运行说明文档
-
-### v0.1.3 (2026-03-21)
-- ✅ systemd 用户服务支持（`scripts/install_service.sh` / `uninstall_service.sh`）
-- ✅ 配置文件自动发现（`CONFIG_FILE` 环境变量 → XDG → `./config.yaml`）
-- ✅ 路径解析基于配置文件目录，开发 / 服务模式自动隔离
-- ✅ `start.sh` 去掉硬编码路径，强制使用本地 `config.yaml`
-- ✅ 新增 macOS 运行说明
-
-### v0.1.2 (2026-03-21)
-- ✅ 移除 Claude Code（claudecode）支持，仅保留 OpenCode 和 Codex
-
-### v0.1.1 (2026-03-21)
-- ✅ `/new` 卡片显示完整模型 ID（如 `anthropic/claude-sonnet-4-20250514`）
-
-### v0.1.0 (2026-03-21)
-- ✅ `/model` 命令卡片化：与 `/mode` 同风格，当前模型绿色高亮，点击按钮原地切换
-- ✅ 模型列表改为配置驱动：在 `config.yaml` 的 `cli.opencode.models` 中维护常用模型
-
-### v0.0.9 (2026-03-21)
-- ✅ `/mode` 命令：Agent 模式切换卡片（Build / Plan / oh-my-openagent 全系列）
-- ✅ 自动检测 oh-my-openagent：未安装显示内置模式，已安装切换为神话命名 Agent 列表
-- ✅ 卡片按钮切换：当前模式绿色高亮，其余显示蓝色「▶ 切换至此」按钮，原地重绘
-
-### v0.0.8 (2026-03-21)
-- ✅ `/new` 命令卡片化：Schema 2.0 两列布局展示会话信息
-- ✅ `/mode plan` 等直接切换命令返回与 `/mode` 样式统一的卡片
-
-### v0.0.7 (2026-03-21)
-- ✅ 项目列表卡片删除功能，二次确认防误操作
-- ✅ `/pa`、`/pc` 命令响应改为卡片
-
-### v0.0.6 (2026-03-21)
-- ✅ `/pl` 返回交互式卡片，点击按钮直接切换项目（无需手动输入 `/ps`）
-- ✅ 飞书卡片回调：切换成功后卡片自动刷新当前项目标记
-
-### v0.0.5 (2026-03-21)
-- ✅ 项目管理功能（`/pa /pc /pl /ps /prm /pi` 命令集）
-- ✅ 切换项目后 AI 工具在对应目录执行（真正多项目隔离）
-- ✅ 修复 OpenCode 工作目录不隔离（`directory` query 参数）
-
-### v0.0.4 (2026-03-21)
-- ✅ 图片/文件输入（发送图片，模型视觉识别）
-- ✅ 切换为 `prompt_async` 端点（与 SSE 事件流架构对齐）
-
-### v0.0.3 (2026-03-20)
-- ✅ 卡片样式美化（自动 emoji 分类图标、紧凑 Footer）
-
-### v0.0.2 (2026-03-20)
-- ✅ TUI 命令（`/new`、`/session`、`/model`、`/reset`）
-- ✅ 交互式消息回复（回复数字/模型 ID 切换）
-
-### v0.0.1 (2026-03-20)
-- ✅ CardKit 流式输出（打字机效果 + loading 动画）
-- ✅ 可折叠思考面板 + Schema 2.0 卡片格式
+### v0.1.6 (2026-03-22)
+- ✅ 修复 `parse_chunk` 接口签名与基类不符（内部重命名为 `_parse_event`）
+- ✅ 修复 `asyncio.get_event_loop()` 弃用用法（替换为 `time.monotonic()` / `get_running_loop()`）
+- ✅ 修复消息发送 fire-and-forget 丢失错误，改为 await 直接调用
+- ✅ 修复 `_sessions` 并发竞态，添加 `asyncio.Lock` 保护
 
 完整日志见 [doc/CHANGELOG.md](doc/CHANGELOG.md)
 
