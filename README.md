@@ -92,321 +92,174 @@
 
 ---
 
-## 快速开始（Linux · Ubuntu 24.04）
+## 快速开始
 
-> macOS 和 Windows 用户请跳转至下方对应平台章节。
+### 第一步：安装前置依赖
 
-### 前置要求
+所有平台均需要 **Python 3.12+**、**Node.js 18+ LTS** 和 **opencode CLI**。
 
-Ubuntu 24.04 内置 Python 3.12，需确保 `python3-venv` 已安装：
+**Linux（Ubuntu/Debian）：**
 
 ```bash
+# Python venv 支持
 sudo apt update && sudo apt install -y python3-venv python3-pip
-```
 
-安装 Node.js LTS（opencode 通过 npm 分发）：
-
-```bash
-# 通过 NodeSource 安装最新 LTS
-curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
+# Node.js LTS
+curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
 sudo apt-get install -y nodejs
-```
 
-安装 opencode CLI：
-
-```bash
+# opencode
 npm install -g opencode-ai
 ```
 
-验证安装：
+**macOS：**
 
 ```bash
-python3 --version   # 需 3.12+
-node --version      # 需 LTS（18+）
+brew install python3 node    # 需先安装 Homebrew: https://brew.sh
+npm install -g opencode-ai
+```
+
+> macOS 系统自带的 `python3` 版本可能较旧，务必用 Homebrew 安装。
+
+**Windows（CMD）：**
+
+- [Python 3.12+](https://www.python.org/downloads/windows/) — 安装时勾选「**Add Python to PATH**」
+- [Node.js LTS](https://nodejs.org/) — 安装时勾选「**Add to PATH**」
+- 安装完成后：`npm install -g opencode-ai`
+
+**验证：**
+
+```bash
+python3 --version   # Windows: python --version，需 3.12+
+node --version      # 需 18+
 opencode --version
 ```
 
-### 1. 克隆项目 & 创建虚拟环境
+---
+
+### 第二步：克隆项目 & 安装 Python 依赖
 
 ```bash
 git clone <repo_url>
 cd feishu-cli-bridge
+```
 
-# 创建虚拟环境（Ubuntu 24.04 Python 3.12+ 必须）
+**Linux / macOS：**
+
+```bash
 python3 -m venv .venv
 source .venv/bin/activate
-
-# 安装依赖
 pip install -r requirements.txt
 ```
 
-激活后命令行前缀会出现 `(.venv)`，表示虚拟环境已生效。
-
-### 2. 创建飞书自建应用
-
-1. 进入[飞书开发者控制台](https://open.feishu.cn/app)，创建**自建应用**
-2. 权限管理中开启所需权限（推荐批量导入，见下方说明）
-3. 事件订阅 → 添加事件 `im.message.receive_v1`，连接方式选**长连接**
-4. 创建版本并发布（企业内部应用无需审核，发布后立即生效）
-5. 记录 **App ID** 和 **App Secret**
-
-**权限配置（二选一）：**
-
-**方式 A — 批量导入（推荐）：** 在权限管理页面点击「导入权限」，将 [`doc/BOTAUTH.md`](doc/BOTAUTH.md) 的 JSON 内容粘贴进去，一次性导入所有必需权限。
-
-**方式 B — 手动开启：** 搜索并逐一添加以下权限：
-
-| 权限 scope | 用途 |
-|-----------|------|
-| `im:message` | 读取消息 |
-| `im:message:send_as_bot` | 以机器人身份发消息 |
-| `im:message.reactions:read` | 读取 Emoji Reaction（打字提示） |
-| `im:message.reactions:write_only` | 添加/删除 Emoji Reaction |
-| `im:resource` | 下载消息中的图片/文件 |
-| `contact:user.id:readonly` | 读取用户 ID |
-| `cardkit:card:read` | CardKit 流式卡片（可选，不开启则自动降级） |
-| `cardkit:card:write` | CardKit 流式卡片（可选，不开启则自动降级） |
-
-### 3. 配置
-
-从模板生成配置文件，填写飞书凭据：
-
-```bash
-cp config.example.yaml config.yaml
-# 用编辑器打开，填写 app_id 和 app_secret
-nano config.yaml
-```
-
-或只用环境变量（无需 config.yaml）：
-
-```bash
-export FEISHU_APP_ID="your_app_id"
-export FEISHU_APP_SECRET="your_app_secret"
-```
-
-### 4. 启动
-
-```bash
-# 推荐：start.sh 自动检测并激活 .venv，无需手动激活
-./start.sh           # CardKit 流式模式（默认）
-./start.sh --legacy  # 传统 IM Patch 模式
-
-# 或直接用 python3
-source .venv/bin/activate  # 若虚拟环境未激活
-python3 -m src.main
-```
-
-### 后台运行（systemd 用户服务）
-
-```bash
-# 安装 systemd 用户服务（开机自启，无需 root）
-bash scripts/install_service.sh
-
-# 管理服务
-systemctl --user status feishu-bridge
-systemctl --user stop feishu-bridge
-systemctl --user restart feishu-bridge
-
-# 卸载服务
-bash scripts/uninstall_service.sh
-```
-
-## macOS 运行说明（Apple Silicon / Intel）
-
-`./start.sh` 在 macOS 上可直接运行，无需任何代码修改。所有依赖均有 macOS arm64/x86_64 wheel，无 Linux 专属组件。
-
-### 前置要求
-
-```bash
-# 安装 Homebrew（如果没有）
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-# 安装 Python 3
-brew install python3
-
-# 安装 Node.js LTS
-brew install node
-```
-
-> **注意**：macOS 系统自带的 `python3` 版本可能较旧，建议通过 Homebrew 安装最新版本。
-
-### 安装依赖（需使用虚拟环境）
-
-macOS Python 3.12+ 起系统禁止直接向全局环境安装包（PEP 668），必须先创建虚拟环境：
-
-```bash
-# 在项目目录下创建虚拟环境
-cd ~/feishu-cli-bridge
-python3 -m venv .venv
-
-# 激活虚拟环境
-source .venv/bin/activate
-
-# 安装依赖
-pip install -r requirements.txt
-```
-
-激活后命令行提示符会出现 `(.venv)` 前缀，表示虚拟环境已生效。
-
-### 启动
-
-虚拟环境**无需每次手动激活**，`start.sh` 会自动检测并激活项目目录下的 `.venv`：
-
-```bash
-./start.sh           # CardKit 流式模式（默认）
-./start.sh --legacy  # 传统 IM Patch 模式
-```
-
-### CLI 工具安装
-
-opencode 和 codex 均需有对应平台的可执行文件。以 opencode 为例：
-
-```bash
-# 参考 opencode 官方文档安装 macOS 版本
-brew install opencode   # 如果 Homebrew 提供
-# 或从 GitHub Releases 下载 macOS 二进制
-```
-
-安装后验证：
-
-```bash
-which opencode   # 应输出可执行文件路径
-```
-
-### 与 Linux 的差异
-
-| 特性 | Linux | macOS |
-|------|-------|-------|
-| `./start.sh` 启动 | ✅ | ✅ |
-| 开发模式运行 | ✅ | ✅ |
-| systemd 服务自启 | ✅ `scripts/install_service.sh` | ❌ 暂不支持 |
-| launchd 服务自启 | ❌ | 🔜 计划支持 |
-
-macOS 如需后台常驻，目前推荐结合终端复用工具（`tmux` / `screen`）使用 `./start.sh`。
-
-## Windows 运行说明
-
-`start.bat` 在 Windows 上可直接运行，无需管理员权限。
-
-### 前置要求
-
-- **Python 3.12+**：从 [python.org](https://www.python.org/downloads/windows/) 下载安装包，安装时务必勾选「**Add Python to PATH**」
-- **Node.js LTS**：从 [nodejs.org](https://nodejs.org/) 下载 LTS 版本安装包，安装时勾选「**Add to PATH**」
-- **opencode CLI**：安装 Node.js 后通过 npm 全局安装：
+**Windows（CMD）：**
 
 ```cmd
-npm install -g opencode-ai
-```
-
-验证安装：
-
-```cmd
-python --version
-node --version
-opencode --version
-```
-
-### 安装依赖（虚拟环境）
-
-```cmd
-cd C:\path\to\feishu-cli-bridge
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-激活后命令行前缀会出现 `(.venv)`。
+激活后命令行前缀出现 `(.venv)` 即为成功。`start.sh` / `start.bat` 会自动激活虚拟环境，后续无需手动激活。
 
-### 配置
+---
 
-```cmd
-copy config.example.yaml config.yaml
-REM 用记事本或 VS Code 打开，填写 app_id 和 app_secret
-notepad config.yaml
+### 第三步：创建飞书自建应用
+
+1. 进入[飞书开发者控制台](https://open.feishu.cn/app)，创建**企业自建应用**
+2. **权限管理** — 推荐批量导入：将 [`doc/BOTAUTH.md`](doc/BOTAUTH.md) 的 JSON 粘贴到「导入权限」；或手动开启下表权限：
+
+   | 权限 scope | 用途 |
+   |-----------|------|
+   | `im:message` | 读取消息 |
+   | `im:message:send_as_bot` | 以机器人身份发消息 |
+   | `im:message.reactions:read` | ✏️ 打字提示 |
+   | `im:message.reactions:write_only` | 添加/删除 Reaction |
+   | `im:resource` | 下载图片/文件 |
+   | `contact:user.id:readonly` | 读取用户 ID |
+   | `cardkit:card:read` / `cardkit:card:write` | CardKit 流式卡片（不开则自动降级） |
+
+3. **事件与回调** → 连接方式选「**长连接**」→ 添加事件 `im.message.receive_v1`
+   > 不要填写卡片回调 URL，长连接会自动接收卡片按钮回调。
+4. **版本管理与发布** → 创建版本 → 发布（内部应用无需审核，立即生效）
+5. 记录「凭证与基础信息」中的 **App ID** 和 **App Secret**
+
+> 每次在控制台变更权限或事件订阅后，都需要重新发布版本才能生效。
+
+---
+
+### 第四步：配置
+
+```bash
+cp config.example.yaml config.yaml   # Windows: copy config.example.yaml config.yaml
 ```
 
-或使用环境变量（临时，当前窗口有效）：
+打开 `config.yaml`，填写飞书凭据（**只有这两项是必填的**）：
+
+```yaml
+feishu:
+  app_id: "cli_xxxxxxxxxxxxxxxx"
+  app_secret: "xxxxxxxxxxxxxx"
+```
+
+也可以不创建配置文件，直接用环境变量：
+
+```bash
+# Linux / macOS
+export FEISHU_APP_ID="cli_xxx"
+export FEISHU_APP_SECRET="xxx"
+```
 
 ```cmd
+REM Windows CMD（临时）
 set FEISHU_APP_ID=cli_xxx
 set FEISHU_APP_SECRET=xxx
 ```
 
-永久设置（系统级）：
+---
 
-```powershell
-[System.Environment]::SetEnvironmentVariable("FEISHU_APP_ID", "cli_xxx", "User")
-[System.Environment]::SetEnvironmentVariable("FEISHU_APP_SECRET", "xxx", "User")
-```
+### 第五步：启动
 
-### 启动
+| 平台 | 命令 |
+|------|------|
+| Linux / macOS | `./start.sh` |
+| Linux / macOS（IM Patch 降级） | `./start.sh --legacy` |
+| Windows | `start.bat` |
+| Windows（IM Patch 降级） | `start.bat --legacy` |
+| 任意平台（直接 Python） | `python3 -m src.main`（Windows: `python`） |
 
-`start.bat` 会自动检测并激活 `.venv`，无需每次手动激活：
+启动成功后日志会显示 `✅ CLI 工具可用: opencode` 和 `🚀 正在连接飞书...`。收到第一条飞书消息时，桥接程序会自动启动 `opencode serve`，无需手动操作。
 
-```cmd
-start.bat           REM CardKit 流式模式（默认）
-start.bat --legacy  REM 传统 IM Patch 模式（CardKit 不可用时）
-start.bat --help    REM 显示帮助
-```
-
-也可直接用 Python：
-
-```cmd
-python -m src.main
-python start.py
-```
+---
 
 ### 后台运行（可选）
 
-**方式一：PowerShell 隐藏窗口**
+**Linux — systemd 用户服务（推荐，开机自启）：**
 
-```powershell
-Start-Process python -ArgumentList "-m src.main" -WorkingDirectory $PWD -WindowStyle Hidden
+```bash
+bash scripts/install_service.sh   # 安装服务
+
+systemctl --user enable --now cli-feishu-bridge   # 启动并设为自启
+systemctl --user status  cli-feishu-bridge        # 查看状态
+systemctl --user restart cli-feishu-bridge        # 重启
+journalctl --user -u cli-feishu-bridge -f         # 实时日志
+
+bash scripts/uninstall_service.sh  # 卸载
 ```
 
-**方式二：Windows 任务计划程序（开机自启）**
+**macOS — nohup（无 launchd 支持，推荐配合 tmux）：**
+
+```bash
+nohup ./start.sh > bridge.log 2>&1 &
+```
+
+**Windows — 任务计划程序（开机自启）：**
 
 ```cmd
 schtasks /create /tn "FeiShuBridge" /tr "python -m src.main" /sc onlogon /ru %USERNAME% /sd C:\path\to\feishu-cli-bridge /f
+schtasks /end    /tn "FeiShuBridge"   & REM 停止
+schtasks /delete /tn "FeiShuBridge" /f  & REM 卸载
 ```
-
-停止：
-
-```cmd
-schtasks /end /tn "FeiShuBridge"
-schtasks /delete /tn "FeiShuBridge" /f
-```
-
-### 常见问题
-
-**端口 4096 被占用**
-
-```cmd
-netstat -ano | findstr :4096
-taskkill /PID <pid> /F
-```
-
-或在 `config.yaml` 中改端口：
-
-```yaml
-cli:
-  opencode:
-    server_port: 4097
-```
-
-**VCRUNTIME 缺失报错**
-
-从微软官网安装 [Visual C++ Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist)。
-
-### 与 Linux/macOS 的差异
-
-| 特性 | Linux | macOS | Windows |
-|------|-------|-------|---------|
-| 启动脚本 | `./start.sh` | `./start.sh` | `start.bat` |
-| 开发模式运行 | ✅ | ✅ | ✅ |
-| systemd 服务自启 | ✅ | ❌ | ❌ |
-| 任务计划程序自启 | ❌ | ❌ | ✅ |
-| launchd 自启 | ❌ | 🔜 | ❌ |
 
 ---
 
