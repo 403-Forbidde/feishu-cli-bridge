@@ -102,18 +102,25 @@ Ubuntu 24.04 内置 Python 3.12，需确保 `python3-venv` 已安装：
 sudo apt update && sudo apt install -y python3-venv python3-pip
 ```
 
-安装 opencode CLI（参考 [opencode 官方文档](https://opencode.ai)）：
+安装 Node.js LTS（opencode 通过 npm 分发）：
 
 ```bash
-# 通过 npm 安装
+# 通过 NodeSource 安装最新 LTS
+curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+sudo apt-get install -y nodejs
+```
+
+安装 opencode CLI：
+
+```bash
 npm install -g opencode-ai
-# 或下载二进制放入 PATH
 ```
 
 验证安装：
 
 ```bash
 python3 --version   # 需 3.12+
+node --version      # 需 LTS（18+）
 opencode --version
 ```
 
@@ -214,6 +221,9 @@ bash scripts/uninstall_service.sh
 
 # 安装 Python 3
 brew install python3
+
+# 安装 Node.js LTS
+brew install node
 ```
 
 > **注意**：macOS 系统自带的 `python3` 版本可能较旧，建议通过 Homebrew 安装最新版本。
@@ -279,12 +289,18 @@ macOS 如需后台常驻，目前推荐结合终端复用工具（`tmux` / `scre
 ### 前置要求
 
 - **Python 3.12+**：从 [python.org](https://www.python.org/downloads/windows/) 下载安装包，安装时务必勾选「**Add Python to PATH**」
-- **opencode CLI**：从 opencode 官方 Releases 下载 Windows 版二进制，放入 PATH 可访问的目录
+- **Node.js LTS**：从 [nodejs.org](https://nodejs.org/) 下载 LTS 版本安装包，安装时勾选「**Add to PATH**」
+- **opencode CLI**：安装 Node.js 后通过 npm 全局安装：
+
+```cmd
+npm install -g opencode-ai
+```
 
 验证安装：
 
 ```cmd
 python --version
+node --version
 opencode --version
 ```
 
