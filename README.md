@@ -517,21 +517,47 @@ project:
 ```
 feishu-cli-bridge/
 ├── src/
-│   ├── adapters/              # CLI 适配器（OpenCode/Codex）
-│   ├── feishu/                # 飞书模块（WebSocket/API/卡片/流式控制）
-│   ├── project/               # 项目管理（增删改查、JSON 持久化）
-│   ├── session/               # 会话管理（LRU 缓存）
-│   ├── tui_commands/          # TUI 斜杠命令（路由/交互/项目）
+│   ├── adapters/              # CLI 适配器
+│   │   ├── base.py            # 适配器抽象基类
+│   │   ├── opencode.py        # OpenCode HTTP/SSE 适配器
+│   │   └── codex.py           # Codex 子进程适配器
+│   ├── feishu/                # 飞书模块
+│   │   ├── client.py          # WebSocket 客户端（lark-oapi 封装）
+│   │   ├── handler.py         # 消息路由主编排器
+│   │   ├── api.py             # Feishu API 调用 + stream_reply 编排
+│   │   ├── streaming_controller.py  # 流式状态机
+│   │   ├── flush_controller.py      # 节流/互斥调度
+│   │   ├── cardkit_client.py  # CardKit HTTP 客户端
+│   │   ├── card_builder.py    # Schema 2.0 卡片 JSON 构建
+│   │   ├── formatter.py       # Markdown 后处理 + Emoji 图标
+│   │   └── dedup.py           # 消息去重
+│   ├── project/               # 项目管理
+│   │   ├── manager.py         # 增删改查、JSON 持久化
+│   │   └── models.py          # 项目数据模型
+│   ├── session/               # 会话管理
+│   │   └── manager.py         # LRU 缓存 + 持久化
+│   ├── tui_commands/          # TUI 斜杠命令
+│   │   ├── base.py            # 命令基类
+│   │   ├── opencode.py        # 会话/模型/模式命令
+│   │   ├── project.py         # 项目管理命令
+│   │   └── interactive.py     # 交互式回复跟踪
+│   ├── utils/
+│   │   └── logger.py          # 日志工具
 │   ├── config.py              # 配置管理（YAML + 环境变量）
 │   └── main.py                # 入口
+├── scripts/
+│   ├── install_service.sh     # systemd 用户服务安装
+│   └── uninstall_service.sh   # systemd 用户服务卸载
 ├── doc/
-│   ├── CHANGELOG.md
-│   ├── ISSUES.md
-│   └── AIGUIDE.md         # AI 模型部署指南
-├── config.yaml
+│   ├── CHANGELOG.md           # 完整版本历史
+│   ├── ISSUES.md              # Bug 追踪
+│   ├── AIGUIDE.md             # AI 模型部署指南
+│   └── BOTAUTH.md             # 飞书机器人权限 JSON（批量导入用）
+├── config.example.yaml        # 配置模板
 ├── requirements.txt
-├── start.sh           # Linux/macOS 启动脚本
-└── start.bat          # Windows 启动脚本
+├── start.py                   # Python 入口（直接运行）
+├── start.sh                   # Linux/macOS 启动脚本（自动激活 .venv）
+└── start.bat                  # Windows 启动脚本（自动激活 .venv）
 ```
 
 ## 更新日志
