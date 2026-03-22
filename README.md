@@ -106,7 +106,7 @@ sudo apt update && sudo apt install -y python3-venv python3-pip
 
 ```bash
 # 通过 NodeSource 安装最新 LTS
-curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
 sudo apt-get install -y nodejs
 ```
 
