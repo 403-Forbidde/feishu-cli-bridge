@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import time
+from pathlib import Path
 from typing import Optional, List, AsyncIterator, Dict, Any, Tuple
 from dataclasses import dataclass, field
 
@@ -22,6 +23,16 @@ class OpenCodeSession:
     title: str
     created_at: float = field(default_factory=time.time)
     working_dir: str = ""  # 此会话绑定的工作目录
+
+
+@dataclass
+class StreamState:
+    """流式处理状态（每轮对话独立）"""
+    seen_assistant_message: bool = False
+    user_text_skipped: bool = False
+    emitted_text_length: int = 0
+    prompt_hash: Optional[int] = None
+    current_stats: Optional[TokenStats] = None
 
 
 class OpenCodeServerManager:
@@ -56,12 +67,20 @@ class OpenCodeServerManager:
 
             cmd = [opencode_bin, "serve", "--port", str(self.port)]
 
+            # 注入 OPENCODE_PERMISSION 环境变量，预授权所有外部目录访问。
+            # 全局配置文件 (~/.config/opencode/opencode.json) 可能被项目级配置覆盖，
+            # 或在 opencode serve 已启动后写入（对已运行进程无效），而环境变量在进程
+            # 启动时即生效，是无头模式下最可靠的方式（Issue #27）。
+            env = os.environ.copy()
+            env["OPENCODE_PERMISSION"] = json.dumps({"external_directory": "allow"})
+
             try:
                 self.process = await asyncio.create_subprocess_exec(
                     *cmd,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                     start_new_session=True,
+                    env=env,
                 )
 
                 # 等待服务启动，最多 10 秒（Windows 冷启动更慢）
@@ -159,9 +178,6 @@ class OpenCodeAdapter(BaseCLIAdapter):
         self._sessions: Dict[str, OpenCodeSession] = {}
         # 当前活跃工作目录（TUI 命令使用）
         self._active_working_dir: str = ""
-        self._seen_assistant_message = (
-            False  # 标记是否已看到 AI 回复（用于过滤用户输入）
-        )
 
     @property
     def name(self) -> str:
@@ -185,6 +201,55 @@ class OpenCodeAdapter(BaseCLIAdapter):
         else:
             return 128000
 
+    def _ensure_opencode_permissions(self) -> None:
+        """确保 ~/.config/opencode/opencode.json 已预设 external_directory 权限。
+
+        OpenCode 对工作目录以外的路径默认弹出交互式权限确认对话框（external_directory
+        默认值为 "ask"）。Bridge 以无头模式运行，对话框无法响应，导致工具调用永久阻塞。
+
+        在全局配置中预设 permission.external_directory: {"**": "allow"} 后，
+        所有外部目录访问均自动批准，无需人工确认。该写入为幂等操作，不覆盖其他配置项。
+        """
+        config_dir = Path.home() / ".config" / "opencode"
+        config_path = config_dir / "opencode.json"
+
+        try:
+            config_dir.mkdir(parents=True, exist_ok=True)
+
+            # 读取现有配置（容忍文件不存在或格式损坏）
+            existing: Dict[str, Any] = {}
+            if config_path.exists():
+                try:
+                    with open(config_path, "r", encoding="utf-8") as f:
+                        existing = json.load(f)
+                except (json.JSONDecodeError, OSError):
+                    existing = {}
+
+            # 已正确设置则跳过，避免不必要的磁盘写入
+            permission = existing.get("permission", {})
+            if permission.get("external_directory", {}).get("**") == "allow":
+                return
+
+            # 仅合并 external_directory，保留其余所有配置
+            existing.setdefault("permission", {})
+            existing["permission"].setdefault("external_directory", {})
+            existing["permission"]["external_directory"]["**"] = "allow"
+
+            # 原子写入（先写 .tmp 再 rename，防止中途崩溃导致配置损坏）
+            tmp_path = config_path.with_suffix(".tmp")
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(existing, f, indent=2, ensure_ascii=False)
+            tmp_path.replace(config_path)
+
+            if self.logger:
+                self.logger.info(
+                    f"已写入 OpenCode 全局权限配置 {config_path}: "
+                    f"permission.external_directory['**'] = 'allow'"
+                )
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"写入 OpenCode 权限配置失败（工具调用可能仍需手动授权）: {e}")
+
     async def _ensure_server(self) -> bool:
         """确保单一 OpenCode Server 正在运行"""
         if self._server_lock is None:
@@ -193,6 +258,9 @@ class OpenCodeAdapter(BaseCLIAdapter):
             # 检查已有实例是否健康
             if self._server_manager is not None and await self._server_manager._check_health():
                 return True
+
+            # 预设外部目录权限，防止无头模式下 TUI 对话框永久阻塞工具调用（Issue #27）
+            self._ensure_opencode_permissions()
 
             # 启动新实例
             port = self.config.get("server_port", 4096)
@@ -233,8 +301,8 @@ class OpenCodeAdapter(BaseCLIAdapter):
         """构建命令（保留兼容性，实际不使用）"""
         return ["opencode", "run", prompt, "--format", "json", "--dir", working_dir]
 
-    def parse_chunk(self, raw_line: bytes) -> Optional[StreamChunk]:
-        """解析 SSE 事件数据"""
+    def parse_chunk(self, raw_line: bytes, state: StreamState) -> Optional[StreamChunk]:
+        """解析 SSE 事件数据（使用局部状态，避免多轮对话并发冲突）"""
         try:
             data = json.loads(raw_line.decode("utf-8"))
             event_type = data.get("type", "")
@@ -242,12 +310,12 @@ class OpenCodeAdapter(BaseCLIAdapter):
 
             # OpenCode 真正的流式事件：message.part.delta
             if event_type == "message.part.delta":
-                # message.part.delta 结构：properties.field="text", properties.delta="内容"
                 field = properties.get("field", "")
                 delta_text = properties.get("delta", "")
 
                 if field == "text" and delta_text:
-                    self._seen_assistant_message = True
+                    state.seen_assistant_message = True
+                    state.emitted_text_length += len(delta_text)
                     return StreamChunk(type=StreamChunkType.CONTENT, data=delta_text)
 
             # message.part.updated 包含完整块（可能重复）
@@ -255,8 +323,20 @@ class OpenCodeAdapter(BaseCLIAdapter):
                 part = properties.get("part", {})
                 part_type = part.get("type", "")
 
-                # 跳过用户输入（第一个 text part）
-                if part_type == "text" and not self._seen_assistant_message:
+                if part_type == "text":
+                    text = part.get("text", "")
+                    # 通过内容匹配识别用户输入：与当前 prompt 的 hash 比较
+                    if not state.user_text_skipped and state.prompt_hash is not None:
+                        text_hash = hash(text.strip()) if text else None
+                        if text_hash == state.prompt_hash:
+                            state.user_text_skipped = True
+                            return None
+                    # AI 回复处理
+                    if text and len(text) > state.emitted_text_length:
+                        new_content = text[state.emitted_text_length:]
+                        state.emitted_text_length = len(text)
+                        state.seen_assistant_message = True
+                        return StreamChunk(type=StreamChunkType.CONTENT, data=new_content)
                     return None
 
                 # 处理思考过程
@@ -265,10 +345,10 @@ class OpenCodeAdapter(BaseCLIAdapter):
                     if text:
                         return StreamChunk(type=StreamChunkType.REASONING, data=text)
 
-                # 处理完成（step-finish）
+                # 处理步骤完成（step-finish）：仅记录 token 统计，不发出 DONE
                 elif part_type == "step-finish":
                     tokens = part.get("tokens", {})
-                    self._current_stats = TokenStats(
+                    state.current_stats = TokenStats(
                         prompt_tokens=tokens.get("input", 0),
                         completion_tokens=tokens.get("output", 0),
                         total_tokens=tokens.get("total", 0),
@@ -276,7 +356,13 @@ class OpenCodeAdapter(BaseCLIAdapter):
                         context_used=tokens.get("input", 0),
                         model=self.default_model,
                     )
+                    return None
+
+            # session.idle：只有已经看到文字回复时才发出 DONE
+            elif event_type == "session.idle":
+                if state.seen_assistant_message:
                     return StreamChunk(type=StreamChunkType.DONE, data="")
+                return None
 
             # 处理错误
             elif event_type == "error":
@@ -294,29 +380,15 @@ class OpenCodeAdapter(BaseCLIAdapter):
         title: str = "Feishu Bridge Session",
         working_dir: str = "",
     ) -> Optional[OpenCodeSession]:
-        """创建新的 OpenCode 会话。
-
-        directory 通过 query 参数传递（服务端全局中间件读取），
-        决定该请求所属的工作目录实例，session 将在此目录上下文中创建。
-        """
+        """创建新的 OpenCode 会话"""
         try:
             body: Dict[str, Any] = {"title": title}
-
-            # directory 作为 query 参数，由服务端中间件处理：
-            # c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
             params = {"directory": working_dir} if working_dir else {}
-
-            if self.logger:
-                self.logger.debug(f"Creating session: dir={working_dir!r}")
 
             response = await client.post("/session", json=body, params=params)
             if response.status_code == 200:
                 data = response.json()
                 session_id = data.get("id")
-                if self.logger:
-                    self.logger.info(
-                        f"Session created: {session_id} dir={working_dir!r}"
-                    )
                 return OpenCodeSession(
                     id=session_id, title=data.get("title", title), working_dir=working_dir
                 )
@@ -339,11 +411,10 @@ class OpenCodeAdapter(BaseCLIAdapter):
         working_dir: str = "",
         attachments: Optional[List[Dict[str, Any]]] = None,
     ) -> bool:
-        """发送消息到会话。directory 通过 query 参数传递，确保工具调用在正确目录执行"""
+        """发送消息到会话"""
         try:
             parts: List[Dict[str, Any]] = [{"type": "text", "text": prompt}]
 
-            # 添加图片/文件 parts（读取文件转 base64 data URL，确保模型可直接读取）
             if attachments:
                 for att in attachments:
                     try:
@@ -361,7 +432,6 @@ class OpenCodeAdapter(BaseCLIAdapter):
                         if self.logger:
                             self.logger.warning(f"Failed to encode attachment {att['path']}: {e}")
 
-            # 解析模型字符串 (格式: provider/model)
             model_parts = self.default_model.split("/", 1)
             if len(model_parts) == 2:
                 provider_id, model_id = model_parts
@@ -375,27 +445,13 @@ class OpenCodeAdapter(BaseCLIAdapter):
                 "agent": self.default_agent,
             }
 
-            # directory 作为 query 参数，服务端中间件决定此 prompt 的工作目录上下文
             params = {"directory": working_dir} if working_dir else {}
 
-            if self.logger:
-                self.logger.debug(
-                    f"Sending message: parts={len(parts)} dir={working_dir!r}"
-                )
-
-            # 使用 prompt_async 端点：立即返回 204，响应通过 SSE /event 推送
             response = await client.post(
                 f"/session/{session_id}/prompt_async", json=body, params=params
             )
 
-            if response.status_code not in [200, 201, 204]:
-                if self.logger:
-                    self.logger.error(
-                        f"Failed to send message: {response.status_code} - {response.text}"
-                    )
-                return False
-
-            return True
+            return response.status_code in [200, 201, 204]
 
         except Exception as e:
             if self.logger:
@@ -406,27 +462,14 @@ class OpenCodeAdapter(BaseCLIAdapter):
         self,
         client: httpx.AsyncClient,
         session_id: str,
-        working_dir: str = "",
+        working_dir: str,
+        state: StreamState,
     ) -> AsyncIterator[StreamChunk]:
-        """
-        监听 SSE 事件流，对不同类型事件分别处理。
-
-        directory 作为 query 参数传递，确保收到的事件属于正确的目录实例：
-          GET /event?directory=/code/myproject
-
-        - CONTENT (message.part.delta): 增量 delta，缓冲后批量发送
-            * 第一批 ≥10 字符快速发出（建立响应感）
-            * 后续批次累积 ≥30 字符 或 超过 0.4s 发出
-        - REASONING (message.part.updated): 全量文本，去重后直接发送
-            * 只在文本实际变化时才 yield，避免重复刺激 CardKit
-        - DONE / ERROR: 先刷出缓冲区，再发出终止事件
-        """
+        """监听 SSE 事件流（使用局部状态）"""
         try:
             content_buffer = ""
             last_content_flush = asyncio.get_event_loop().time()
             has_sent_first_content = False
-
-            # REASONING 去重：只在文本实际新增内容时才 yield
             last_reasoning_text = ""
 
             params = {"directory": working_dir} if working_dir else {}
@@ -435,64 +478,45 @@ class OpenCodeAdapter(BaseCLIAdapter):
                     if not line.startswith("data: "):
                         continue
 
-                    chunk = self.parse_chunk(line[6:].encode("utf-8"))
+                    chunk = self.parse_chunk(line[6:].encode("utf-8"), state)
                     if not chunk:
                         continue
 
                     if chunk.type == StreamChunkType.CONTENT:
-                        # 累积 delta 内容
                         content_buffer += chunk.data
                         now = asyncio.get_event_loop().time()
                         elapsed = now - last_content_flush
 
                         if not has_sent_first_content and len(content_buffer) >= 10:
-                            # 第一批：≥10 字符快速发出（建立响应感）
-                            yield StreamChunk(
-                                type=StreamChunkType.CONTENT, data=content_buffer
-                            )
+                            yield StreamChunk(type=StreamChunkType.CONTENT, data=content_buffer)
                             content_buffer = ""
                             last_content_flush = now
                             has_sent_first_content = True
-                        elif has_sent_first_content and (
-                            len(content_buffer) >= 30 or elapsed >= 0.4
-                        ):
-                            # 后续批次：≥30 字符 或 超过 0.4s
-                            yield StreamChunk(
-                                type=StreamChunkType.CONTENT, data=content_buffer
-                            )
+                        elif has_sent_first_content and (len(content_buffer) >= 30 or elapsed >= 0.4):
+                            yield StreamChunk(type=StreamChunkType.CONTENT, data=content_buffer)
                             content_buffer = ""
                             last_content_flush = now
 
                     elif chunk.type == StreamChunkType.REASONING:
-                        # REASONING 是全量文本，只在有新增内容时 yield
-                        new_text = chunk.data
-                        if new_text and new_text != last_reasoning_text:
-                            last_reasoning_text = new_text
+                        if chunk.data and chunk.data != last_reasoning_text:
+                            last_reasoning_text = chunk.data
                             yield chunk
 
                     else:
-                        # DONE / ERROR：先刷出 content 缓冲区
                         if content_buffer:
-                            yield StreamChunk(
-                                type=StreamChunkType.CONTENT, data=content_buffer
-                            )
+                            yield StreamChunk(type=StreamChunkType.CONTENT, data=content_buffer)
                             content_buffer = ""
-
                         yield chunk
-
                         if chunk.type in (StreamChunkType.DONE, StreamChunkType.ERROR):
                             return
 
-            # 流结束时发送剩余内容
             if content_buffer:
                 yield StreamChunk(type=StreamChunkType.CONTENT, data=content_buffer)
 
         except Exception as e:
             if self.logger:
                 self.logger.error(f"Event stream error: {e}")
-            yield StreamChunk(
-                type=StreamChunkType.ERROR, data=f"Event stream error: {str(e)}"
-            )
+            yield StreamChunk(type=StreamChunkType.ERROR, data=f"Event stream error: {str(e)}")
 
     async def execute_stream(
         self,
@@ -506,44 +530,35 @@ class OpenCodeAdapter(BaseCLIAdapter):
         # 确保 Server 正在运行
         started = await self._ensure_server()
         if not started or self._client is None:
-            yield StreamChunk(
-                type=StreamChunkType.ERROR, data="Failed to start OpenCode Server"
-            )
+            yield StreamChunk(type=StreamChunkType.ERROR, data="Failed to start OpenCode Server")
             return
 
-        # 更新活跃工作目录（TUI 命令依赖此字段）
         self._active_working_dir = working_dir
 
-        # 获取或创建该工作目录的会话（传 directory 参数保证 CWD 隔离）
         session = await self._get_or_create_session(working_dir)
         if session is None:
-            yield StreamChunk(
-                type=StreamChunkType.ERROR, data="Failed to create session"
-            )
+            yield StreamChunk(type=StreamChunkType.ERROR, data="Failed to create session")
             return
 
-        # 重置状态
-        self._seen_assistant_message = False
-
-        if self.logger:
-            att_info = f", attachments={len(attachments)}" if attachments else ""
-            self.logger.info(
-                f"Sending prompt to session {session.id} (dir={working_dir!r}): {prompt[:50]}...{att_info}"
-            )
-
-        # 发送消息（异步，不等待响应）；实际响应通过 SSE 接收
-        asyncio.create_task(
-            self._send_message(
-                self._client, session.id, prompt, context, working_dir, attachments
-            )
+        # 创建本轮对话的独立状态（避免多轮对话并发冲突）
+        state = StreamState(
+            prompt_hash=hash(prompt.strip())
         )
 
-        # 等待一小段时间让消息开始处理
+        # 发送消息（异步，不等待响应）
+        asyncio.create_task(
+            self._send_message(self._client, session.id, prompt, context, working_dir, attachments)
+        )
+
         await asyncio.sleep(0.5)
 
-        # 监听流式事件（带 directory 参数，确保收到正确目录实例的事件）
-        async for chunk in self._listen_events(self._client, session.id, working_dir):
+        # 监听流式事件（传递局部状态）
+        async for chunk in self._listen_events(self._client, session.id, working_dir, state):
             yield chunk
+
+        # 将本轮的 token 统计保存到实例变量（供 get_stats 使用）
+        if state.current_stats:
+            self._current_stats = state.current_stats
 
     def get_stats(self, context: List[Message], completion_text: str) -> TokenStats:
         """获取 Token 统计"""
@@ -553,7 +568,6 @@ class OpenCodeAdapter(BaseCLIAdapter):
                 100.0, round(context_used / self.context_window * 100, 1)
             )
             return self._current_stats
-
         return super().get_stats(context, completion_text)
 
     async def close(self):
@@ -574,60 +588,33 @@ class OpenCodeAdapter(BaseCLIAdapter):
 
     @property
     def supported_tui_commands(self) -> List[str]:
-        """返回支持的 TUI 命令列表"""
         return ["new", "session", "model", "reset"]
 
     def _get_active_client_session(self) -> Tuple[Optional[httpx.AsyncClient], Optional[OpenCodeSession]]:
-        """获取当前活跃工作目录的客户端和会话（供 TUI 命令使用）"""
         return self._client, self._sessions.get(self._active_working_dir)
 
     async def create_new_session(self) -> Optional[Dict[str, Any]]:
-        """创建新会话（在当前活跃工作目录下）"""
         started = await self._ensure_server()
         if not started or self._client is None:
             return None
 
         try:
             import random
-
             timestamp = time.strftime("%m%d_%H%M%S")
             random_suffix = random.randint(1000, 9999)
             title = f"Feishu Bridge {timestamp}_{random_suffix}"
 
-            client, old_session = self._get_active_client_session()
-            old_session_id = old_session.id if old_session else None
-            if self.logger:
-                self.logger.info(f"准备创建新会话，当前会话: {old_session_id}")
-                existing_sessions = await self.list_sessions(limit=20)
-                self.logger.info(f"当前已有 {len(existing_sessions)} 个会话")
-
-            session = await self._create_session(
-                self._client, title=title, working_dir=self._active_working_dir
-            )
-
-            if self.logger and session:
-                self.logger.info(f"_create_session 返回: {session.id}")
-                new_sessions = await self.list_sessions(limit=20)
-                self.logger.info(f"创建后共有 {len(new_sessions)} 个会话")
-                if session.id == old_session_id:
-                    self.logger.error(
-                        f"错误：返回的会话 ID ({session.id}) 与旧会话相同！"
-                    )
+            session = await self._create_session(self._client, title=title, working_dir=self._active_working_dir)
 
             if session:
                 self._sessions[self._active_working_dir] = session
-                return {
-                    "id": session.id,
-                    "title": session.title,
-                    "created_at": session.created_at,
-                }
+                return {"id": session.id, "title": session.title, "created_at": session.created_at}
         except Exception as e:
             if self.logger:
                 self.logger.error(f"创建会话失败: {e}")
         return None
 
     async def list_sessions(self, limit: int = 10) -> List[Dict[str, Any]]:
-        """列出当前活跃目录服务器上的会话"""
         started = await self._ensure_server()
         if not started or self._client is None:
             return []
@@ -636,28 +623,14 @@ class OpenCodeAdapter(BaseCLIAdapter):
             response = await self._client.get("/session")
             if response.status_code == 200:
                 data = response.json()
-                if isinstance(data, list):
-                    sessions = data
-                elif isinstance(data, dict):
-                    sessions = data.get("items", [])
-                else:
-                    sessions = []
-
-                return [
-                    {
-                        "id": s.get("id"),
-                        "title": s.get("title", "未命名会话"),
-                        "created_at": s.get("createdAt", time.time()),
-                    }
-                    for s in sessions[:limit]
-                ]
+                sessions = data if isinstance(data, list) else data.get("items", [])
+                return [{"id": s.get("id"), "title": s.get("title", "未命名会话"), "created_at": s.get("createdAt", time.time())} for s in sessions[:limit]]
         except Exception as e:
             if self.logger:
                 self.logger.error(f"列出会话失败: {e}")
         return []
 
     async def switch_session(self, session_id: str) -> bool:
-        """切换到指定会话"""
         started = await self._ensure_server()
         if not started or self._client is None:
             return False
@@ -678,19 +651,15 @@ class OpenCodeAdapter(BaseCLIAdapter):
         return False
 
     async def reset_session(self) -> bool:
-        """重置当前会话（清空对话历史，保留工作目录）"""
         if self._client is None:
             return False
-        new_session = await self._create_session(
-            self._client, working_dir=self._active_working_dir
-        )
+        new_session = await self._create_session(self._client, working_dir=self._active_working_dir)
         if new_session:
             self._sessions[self._active_working_dir] = new_session
             return True
         return False
 
     async def list_models(self, provider: Optional[str] = None) -> List[Dict[str, Any]]:
-        """列出可用模型 - 直接从 config.yaml 的 models 列表读取"""
         raw_models: list = self.config.get("models", [])
         models: List[Dict[str, Any]] = []
 
@@ -711,96 +680,43 @@ class OpenCodeAdapter(BaseCLIAdapter):
             if provider and prov_id != provider:
                 continue
 
-            models.append({
-                "provider": prov_id,
-                "model": model_id,
-                "name": name,
-                "full_id": full_id,
-            })
+            models.append({"provider": prov_id, "model": model_id, "name": name, "full_id": full_id})
 
         return models
 
     async def switch_model(self, model_id: str) -> bool:
-        """切换当前会话使用的模型"""
         if "/" not in model_id:
             return False
-
-        # 更新配置中的默认模型（影响新消息）
         self.config["default_model"] = model_id
-
         if self.logger:
             self.logger.info(f"切换到模型: {model_id}")
-
         return True
 
     def get_current_model(self) -> str:
-        """获取当前使用的模型"""
         return self.default_model
 
-    # OpenCode 内置 agent 的中文展示信息
     _BUILTIN_DISPLAY: Dict[str, Dict[str, str]] = {
-        "build": {
-            "display_name": "Build · 构建",
-            "description": "默认模式，全工具权限，可读写文件、执行命令",
-        },
-        "plan": {
-            "display_name": "Plan · 规划",
-            "description": "只读模式，用于分析代码和制定方案，不会修改文件",
-        },
+        "build": {"display_name": "Build · 构建", "description": "默认模式，全工具权限，可读写文件、执行命令"},
+        "plan": {"display_name": "Plan · 规划", "description": "只读模式，用于分析代码和制定方案，不会修改文件"},
     }
 
-    # oh-my-openagent 各 agent 的中文展示信息（key 为小写 agent 名）
     _OHM_DISPLAY: Dict[str, Dict[str, str]] = {
-        "sisyphus": {
-            "display_name": "Sisyphus · 总协调",
-            "description": "主协调者，并行调度其他 agent，驱动任务完成",
-        },
-        "hephaestus": {
-            "display_name": "Hephaestus · 深度工作",
-            "description": "自主深度工作者，端到端探索和执行代码任务",
-        },
-        "prometheus": {
-            "display_name": "Prometheus · 战略规划",
-            "description": "动手前先与你确认任务范围和策略",
-        },
-        "oracle": {
-            "display_name": "Oracle · 架构调试",
-            "description": "架构设计与调试专家",
-        },
-        "librarian": {
-            "display_name": "Librarian · 文档搜索",
-            "description": "文档查找与代码搜索专家",
-        },
-        "explore": {
-            "display_name": "Explore · 快速探索",
-            "description": "快速代码库 grep 与文件浏览",
-        },
-        "multimodal looker": {
-            "display_name": "Multimodal Looker · 视觉分析",
-            "description": "图片与多模态内容分析",
-        },
-        "multimodal_looker": {
-            "display_name": "Multimodal Looker · 视觉分析",
-            "description": "图片与多模态内容分析",
-        },
+        "sisyphus": {"display_name": "Sisyphus · 总协调", "description": "主协调者，并行调度其他 agent，驱动任务完成"},
+        "hephaestus": {"display_name": "Hephaestus · 深度工作", "description": "自主深度工作者，端到端探索和执行代码任务"},
+        "prometheus": {"display_name": "Prometheus · 战略规划", "description": "动手前先与你确认任务范围和策略"},
+        "oracle": {"display_name": "Oracle · 架构调试", "description": "架构设计与调试专家"},
+        "librarian": {"display_name": "Librarian · 文档搜索", "description": "文档查找与代码搜索专家"},
+        "explore": {"display_name": "Explore · 快速探索", "description": "快速代码库 grep 与文件浏览"},
+        "multimodal looker": {"display_name": "Multimodal Looker · 视觉分析", "description": "图片与多模态内容分析"},
+        "multimodal_looker": {"display_name": "Multimodal Looker · 视觉分析", "description": "图片与多模态内容分析"},
     }
 
-    # 用于检测 oh-my-openagent 是否已安装的特征 agent 名（小写）
     _OHM_SIGNATURE = {"sisyphus", "hephaestus", "prometheus"}
 
     def _builtin_agents(self) -> List[Dict[str, Any]]:
-        """返回 OpenCode 内置 agent 列表（附中文展示信息）"""
-        return [
-            {**{"name": k}, **v}
-            for k, v in self._BUILTIN_DISPLAY.items()
-        ]
+        return [{**{"name": k}, **v} for k, v in self._BUILTIN_DISPLAY.items()]
 
     async def list_agents(self) -> List[Dict[str, Any]]:
-        """列出用户可见的 agent。
-
-        - 未安装 oh-my-openagent：仅返回 build / plan（附中文描述）
-        - 已安装 oh-my-openagent：仅返回 oh-my-openagent 的 agent（附中文描述）
-        """
         started = await self._ensure_server()
         if not started or self._client is None:
             return self._builtin_agents()
@@ -809,21 +725,14 @@ class OpenCodeAdapter(BaseCLIAdapter):
             if response.status_code != 200:
                 return self._builtin_agents()
             all_agents = response.json()
-
-            # 检测 oh-my-openagent 是否已安装
             names_lower = {a.get("name", "").lower() for a in all_agents}
             if names_lower & self._OHM_SIGNATURE:
-                # 仅展示 oh-my-openagent 的 agent
                 result = []
                 for a in all_agents:
                     key = a.get("name", "").lower()
                     if key in self._OHM_DISPLAY:
                         display = self._OHM_DISPLAY[key]
-                        result.append({
-                            "name": a["name"],
-                            "display_name": display["display_name"],
-                            "description": display["description"],
-                        })
+                        result.append({"name": a["name"], "display_name": display["display_name"], "description": display["description"]})
                 return result
             else:
                 return self._builtin_agents()
@@ -833,12 +742,10 @@ class OpenCodeAdapter(BaseCLIAdapter):
             return self._builtin_agents()
 
     async def switch_agent(self, agent_id: str) -> bool:
-        """切换当前使用的 agent"""
         self.config["default_agent"] = agent_id
         if self.logger:
             self.logger.info(f"切换到 agent: {agent_id}")
         return True
 
     def get_current_agent(self) -> str:
-        """获取当前使用的 agent"""
         return self.default_agent

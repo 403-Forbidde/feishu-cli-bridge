@@ -1,5 +1,29 @@
 # 更新日志
 
+## [v0.1.5] - 2026-03-22
+
+**开发人**: ERROR403
+
+### 修复
+
+- **OpenCode 外部目录权限对话框导致工具调用永久阻塞** (`src/adapters/opencode.py`) — Issue #27
+  - 根本原因：Bridge 无头运行，OpenCode 访问 session 工作目录以外路径时弹出 TUI 权限对话框，无法响应，工具调用永久停留在 `status: running`，飞书卡片永久卡在"思考中..."
+  - 修复：`OpenCodeServerManager.start()` 启动子进程时注入 `OPENCODE_PERMISSION={"external_directory":"allow"}` 环境变量，进程启动即预授权所有外部目录访问
+  - 保留 `_ensure_opencode_permissions()` 写入全局配置文件 `~/.config/opencode/opencode.json` 作为额外保障（原子写入，幂等）
+
+- **工具调用后无文字回复（流提前终止）第五次修复** (`src/adapters/opencode.py`) — Issue #28
+  - 根本原因（第四次修复后残留）：`_seen_assistant_message`、`_user_text_skipped`、`_emitted_text_length`、`_current_prompt_hash` 为实例变量，多轮并发对话时后一轮 `execute_stream` 重置同一组变量，覆盖前一轮状态，导致 `session.idle` 时状态错误、流挂起或空内容结束
+  - 修复：引入 `StreamState` dataclass 将四个状态变量封装为局部对象，`execute_stream` 每轮创建独立实例并通过参数传递给 `parse_chunk` 和 `_listen_events`，多轮对话完全隔离互不干扰
+
+### 技术细节
+
+- `OPENCODE_PERMISSION` 环境变量优先于配置文件，且在进程启动时即生效，不受项目级 `opencode.json` 覆盖影响
+- `StreamState` 包含：`seen_assistant_message`、`user_text_skipped`、`emitted_text_length`、`prompt_hash`、`current_stats` 共五个字段
+- `parse_chunk(raw_line, state)` 签名新增 `state` 参数（仅 OpenCodeAdapter 内部使用，不影响其他适配器）
+- Token 统计 `current_stats` 在 `execute_stream` 结束时从局部 state 回写到 `self._current_stats`，供 `get_stats()` 使用
+
+---
+
 ## [v0.1.4] - 2026-03-21
 
 **开发人**: ERROR403

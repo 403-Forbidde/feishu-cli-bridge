@@ -836,6 +836,229 @@ save_path = save_dir / Path(filename).name  # 只取基础文件名
 
 ---
 
+### Issue #27: OpenCode 外部目录权限对话框导致工具调用永久阻塞
+
+**状态**: ✅ 已修复
+**时间**: 2026-03-22
+**优先级**: 高
+**发现时间**: 2026-03-22
+
+**问题描述**:
+
+当 OpenCode 的 build/plan agent 需要访问 session 工作目录（`/code/feishu-cli-bridge`）以外的路径时（如 `/code/kimibridge`），会弹出 TUI 交互式权限确认对话框：
+
+```
+△ Permission required
+← Access external directory /code/kimibridge
+
+Patterns
+- /code/kimibridge/*
+
+[Allow once]  [Allow always]  [Reject]
+```
+
+Bridge 以无头（headless）模式运行，没有附加 TTY，无法响应该对话框。工具调用永远停留在 `status: "running"`，SSE 不再推送任何新事件，飞书卡片永久卡在"思考中..."状态。
+
+**诊断过程**:
+
+1. 用户发送"参考/code/kimibridge目录..."，卡片显示 reasoning 内容后停止更新
+2. 通过 `GET /session/{id}/message` 查询发现工具调用 `read /code/kimibridge` elapsed > 1800s，status=running
+3. 用 `lsof` 确认无文件锁，说明工具未在等待 I/O，而是等待权限确认
+4. 在 OpenCode TUI CLI 界面手动点击 "Allow always" 后，几秒内立即返回结果
+5. 确认根本原因是权限对话框
+
+**已尝试的方案（均失败）**:
+
+1. **session 创建时传 `permission` 字段**：
+   ```python
+   body["permission"] = [
+       {"permission": "external_directory", "pattern": "/code/kimibridge/*", "action": "allow"}
+   ]
+   ```
+   字段写入 SQLite `session.permission` 列，但 OpenCode 运行时仍弹出权限对话框，说明该字段不是用来预授权外部目录的。
+
+2. **写入 SQLite `permission` 表**：该表为空，插入正确格式的记录尚未验证（OpenCode 进程可能不重新读取）。
+
+3. **`pyrightconfig.json` 排除 venv 目录**：非根本原因，不能解决权限问题。
+
+**修复方案**:
+
+OpenCode 支持通过 `OPENCODE_PERMISSION` 环境变量在进程启动时注入权限配置，这是无头模式下最可靠的方式（相比配置文件，环境变量在进程启动时即生效，不受项目级配置覆盖影响）。
+
+在 `OpenCodeServerManager.start()` 中，启动 `opencode serve` 子进程时注入该环境变量：
+
+```python
+env = os.environ.copy()
+env["OPENCODE_PERMISSION"] = json.dumps({"external_directory": "allow"})
+self.process = await asyncio.create_subprocess_exec(*cmd, env=env, ...)
+```
+
+> **注**：`_ensure_opencode_permissions()` 写入全局配置文件的方式仍保留（作为额外保障），但单独依赖配置文件不可靠——配置文件可能在进程已启动后才写入，或被项目级 `opencode.json` 覆盖。
+
+**相关文件**:
+- `src/adapters/opencode.py` — `OpenCodeServerManager.start()` 启动子进程时注入 `OPENCODE_PERMISSION` 环境变量
+
+---
+
+### Issue #28: 工具调用后无文字回复（流提前终止）
+
+**状态**: ✅ 已修复（六次修复 2026-03-22）
+**时间**: 2026-03-22
+**优先级**: 高
+**发现时间**: 2026-03-22
+
+**问题描述**:
+
+当模型需要调用工具（如读文件、执行命令）再生成回答时，飞书卡片显示"✅ 已完成"但没有任何文字回复。用户必须再次追问才能得到答案。行为不稳定：简单工具调用（如 `ls`）有时能成功，复杂工具调用（如读文件后分析）几乎必现。
+
+**根本原因（第一次修复后残留）**:
+
+`session.idle` **不是一次性信号**，而是**每个步骤完成后各触发一次**：
+
+```
+Step 1: reasoning → 工具调用 → step-finish → session.idle  ← 错误地在此终止
+Step 2: 模型读取工具结果 → 生成文字回复 → step-finish → session.idle  ← 真正完成
+```
+
+第一次修复（将 `step-finish` 改为 `None`，用 `session.idle` 触发 DONE）解决了 `step-finish` 的问题，但没有意识到 `session.idle` 本身也会在中间步骤触发，导致仍在文字生成前就终止流。
+
+**修复方案（第二次）**:
+
+在 `session.idle` 处增加 `_seen_assistant_message` 判断：只有已经看到文字内容时才发出 DONE；否则这是工具调用步骤的中间 idle，文字回复尚未生成，应继续监听。
+
+```python
+elif event_type == "session.idle":
+    if self._seen_assistant_message:
+        return StreamChunk(type=StreamChunkType.DONE, data="")
+    return None  # 工具调用步骤的假 idle，继续等待文字回复
+```
+
+**根本原因（第二次修复后残留）**:
+
+`_seen_assistant_message` 只在 `message.part.delta` 的 `field == "text"` 事件到达时置为 True。但部分场景（工具调用后模型直接输出完整文字，无流式 delta）下，文字只通过 `message.part.updated` type=text 发出。原代码用 `not self._seen_assistant_message` 来跳过用户输入文字，误将助手的文字也一并跳过，导致内容丢失、最终 `session.idle` 仍看到 False、流挂起或以空内容结束。
+
+**修复方案（第三次）**:
+
+引入 `_user_text_skipped` 和 `_emitted_text_length` 两个状态变量：
+
+- `_user_text_skipped`：第一个 text part（用户输入）到达时置 True，仅跳过这一个。
+- `_emitted_text_length`：记录通过 delta 已发出的文字字节数，`message.part.updated` 中仅发出超出此长度的新增内容，防止与 delta 重复。
+
+```python
+if part_type == "text":
+    if not self._user_text_skipped:
+        self._user_text_skipped = True
+        return None
+    text = part.get("text", "")
+    if text and len(text) > self._emitted_text_length:
+        new_content = text[self._emitted_text_length:]
+        self._emitted_text_length = len(text)
+        self._seen_assistant_message = True
+        return StreamChunk(type=StreamChunkType.CONTENT, data=new_content)
+    return None
+```
+
+三个变量均在 `execute_stream` 开始时重置。
+
+**根本原因（第三次修复后残留 - 多轮对话问题）**:
+
+第三次修复使用"是否是第一个 text part"来识别用户输入，但在**多轮对话**场景下存在问题：
+
+SSE 事件流 `/event` 是**异步全局流**，同一 session 的多轮对话共享同一个底层 SSE 连接。当第二次对话开始时：
+1. `execute_stream` 重置 `_user_text_skipped = False`
+2. 但 SSE 流缓冲区中可能还有**上一轮对话**的残留事件（如上一轮的工具调用结果、step-finish 等）
+3. 这些残留事件提前触发了 `_user_text_skipped = True`
+4. 当第二轮真正的用户输入到达时，由于 `_user_text_skipped` 已经是 `True`，这段输入被错误地**当作 AI 回复输出**
+5. 然后真正的 AI 回复到达时，要么被跳过，要么导致状态混乱，最终 `session.idle` 时 `_seen_assistant_message` 为 False，流挂起或以空内容结束
+
+表现为"第一次执行命令成功，第二次对话调用工具就没有正式回复"。
+
+**修复方案（第四次）**:
+
+不再使用"是否是第一个 text part"的启发式方法，而是**通过内容匹配来识别用户输入**：
+
+1. 在 `execute_stream` 中计算当前用户输入的 hash (`_current_prompt_hash`)
+2. 在 `parse_chunk` 中，将 text part 的内容与保存的用户输入 hash 比较
+3. 只有内容与当前用户输入匹配时才跳过
+
+```python
+# execute_stream 中
+self._current_prompt_hash = hash(prompt.strip())
+
+# parse_chunk 中
+if not self._user_text_skipped and self._current_prompt_hash is not None:
+    text_hash = hash(text.strip()) if text else None
+    if text_hash == self._current_prompt_hash:
+        self._user_text_skipped = True
+        return None  # 跳过用户输入
+# 其余是 AI 回复，正常处理
+```
+
+这样无论 SSE 流中有多少历史事件，都能正确识别并跳过**当前**用户输入，而不会错误处理 AI 回复。
+
+**根本原因（第四次修复后残留 - 实例变量被多轮对话覆盖）**:
+
+第四次修复（添加锁）试图解决并发问题，但问题的根源是**实例变量在多轮对话之间共享**。
+
+`_seen_assistant_message`, `_user_text_skipped`, `_emitted_text_length`, `_current_prompt_hash` 都是实例变量。当多轮对话并发执行时：
+
+1. 第1轮对话开始执行，`execute_stream` 重置实例变量
+2. 第1轮对话开始监听 SSE 事件
+3. 第2轮对话开始执行，`execute_stream` **再次重置同样的实例变量** ← 覆盖了第1轮的状态！
+4. 第1轮收到 AI 回复，设置 `_seen_assistant_message = True`
+5. 第2轮也收到事件（或重置后没有收到），但状态已经混乱
+6. 第1轮收到 `session.idle`，检查 `_seen_assistant_message`，如果此时被第2轮覆盖为 False，就不会发出 DONE
+
+表现为"两轮对话都只有思考没有正式回复"或"第二轮没有正式回复"。
+
+**修复方案（第五次 - 最终修复）**:
+
+将**状态封装为局部变量**，每轮对话创建独立的 `StreamState` 对象，通过参数传递给 `parse_chunk` 和 `_listen_events`：
+
+```python
+@dataclass
+class StreamState:
+    seen_assistant_message: bool = False
+    user_text_skipped: bool = False
+    emitted_text_length: int = 0
+    prompt_hash: Optional[int] = None
+    current_stats: Optional[TokenStats] = None
+
+# execute_stream 中创建局部状态（每轮对话独立）
+state = StreamState(prompt_hash=hash(prompt.strip()))
+
+# 通过参数传递给 _listen_events
+async for chunk in self._listen_events(self._client, session.id, working_dir, state):
+    yield chunk
+
+# parse_chunk 使用局部状态
+def parse_chunk(self, raw_line: bytes, state: StreamState) -> Optional[StreamChunk]:
+    # 使用 state.seen_assistant_message 而非 self._seen_assistant_message
+    ...
+```
+
+这样每轮对话有完全独立的状态，互不干扰。
+
+---
+
+**完整修复过程总结**:
+
+| 修复次数 | 问题 | 方案 | 状态 |
+|---------|------|------|------|
+| 第1次 | `step-finish` 误触发 DONE | 改为 `session.idle` 触发 | ❌ 未完全解决 |
+| 第2次 | `session.idle` 也是中间步骤信号 | 增加 `_seen_assistant_message` 判断 | ❌ 未完全解决 |
+| 第3次 | `message.part.updated` 被误跳过 | 引入 `_user_text_skipped` 和 `_emitted_text_length` | ❌ 未完全解决 |
+| 第4次 | "第一个 text part" 启发式在多轮对话失效 | 使用 prompt hash 内容匹配识别用户输入 | ❌ 未完全解决 |
+| 第5次 | 多轮对话并发覆盖实例变量 | 将状态封装为 `StreamState` 局部变量 | ✅ 已解决 |
+
+**关键教训**: 
+- Python 异步生成器 `async def execute_stream(...) -> AsyncIterator[...]` 看似独立，但如果使用**实例变量**存储状态，多轮对话并发时会相互覆盖
+- 状态应该**随调用栈传递**（局部变量/参数），而非存储在**对象实例**上
+
+**相关文件**: `src/adapters/opencode.py`
+
+---
+
 ### Issue #26: `max_sessions` 默认值三处不一致
 
 **状态**: 📋 待修复
