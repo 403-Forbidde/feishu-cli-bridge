@@ -116,8 +116,13 @@ class FeishuClient:
         builder.register_p2_im_message_reaction_created_v1(self._on_reaction_event)
         builder.register_p2_im_message_reaction_deleted_v1(self._on_reaction_event)
         builder.register_p2_im_message_message_read_v1(self._on_read_event)
+        builder.register_p2_im_chat_access_event_bot_p2p_chat_entered_v1(self._on_p2p_chat_entered)
 
         return builder.build()
+
+    def _on_p2p_chat_entered(self, event) -> None:
+        """处理用户进入 P2P 会话事件（静默忽略）"""
+        pass
 
     def _on_reaction_event(self, event) -> None:
         """处理 reaction 事件（静默忽略）"""

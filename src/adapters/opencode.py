@@ -154,7 +154,7 @@ class OpenCodeAdapter(BaseCLIAdapter):
         # 单一服务器实例
         self._server_manager: Optional[OpenCodeServerManager] = None
         self._client: Optional[httpx.AsyncClient] = None
-        self._server_lock = asyncio.Lock()
+        self._server_lock: Optional[asyncio.Lock] = None  # 懒初始化，避免绑定到错误的事件循环
         # 每个工作目录对应一个 OpenCode 会话（key = working_dir）
         self._sessions: Dict[str, OpenCodeSession] = {}
         # 当前活跃工作目录（TUI 命令使用）
@@ -187,6 +187,8 @@ class OpenCodeAdapter(BaseCLIAdapter):
 
     async def _ensure_server(self) -> bool:
         """确保单一 OpenCode Server 正在运行"""
+        if self._server_lock is None:
+            self._server_lock = asyncio.Lock()
         async with self._server_lock:
             # 检查已有实例是否健康
             if self._server_manager is not None and await self._server_manager._check_health():
