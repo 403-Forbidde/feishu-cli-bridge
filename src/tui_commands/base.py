@@ -117,22 +117,22 @@ class TUIBaseCommand(ABC):
         """
         pass
 
-    def _generate_session_display_id(self, session_id: str) -> str:
-        """生成会话显示 ID（FSB-xxx 格式）
+    def _generate_session_display_id(self, session_id: str, slug: Optional[str] = None) -> str:
+        """生成会话显示 ID
 
         Args:
             session_id: 原始会话 ID
+            slug: OpenCode 提供的可读会话标识（可选）
 
         Returns:
-            简短显示 ID，如 "FSB-a1b2c3"
+            简短显示 ID，优先使用 slug，否则使用短 ID
         """
-        # OpenCode 会话 ID 格式: ses_2fxxxxx... 都以 ses_2f 开头
-        # 取后 8 个字符作为唯一标识，避免所有会话显示相同的 FSB-ses_2f
+        if slug:
+            return slug
+        # 取后 8 个字符作为唯一标识
         if len(session_id) > 8:
-            short_id = session_id[-8:]
-        else:
-            short_id = session_id
-        return f"FSB-{short_id}"
+            return session_id[-8:]
+        return session_id
 
     def _format_session_list(
         self, sessions: List[Dict[str, Any]], current_session_id: Optional[str] = None
@@ -151,7 +151,8 @@ class TUIBaseCommand(ABC):
         for i, session in enumerate(sessions[:10], 1):  # 最多显示 10 个
             session_id = session.get("id", "")
             title = session.get("title", "未命名会话")
-            display_id = self._generate_session_display_id(session_id)
+            slug = session.get("slug", "")
+            display_id = self._generate_session_display_id(session_id, slug)
 
             # 标记当前会话
             marker = " ★" if session_id == current_session_id else ""

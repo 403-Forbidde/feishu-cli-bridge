@@ -178,8 +178,13 @@ class BaseCLIAdapter(ABC):
         """
         return []
 
-    async def create_new_session(self) -> Optional[Dict[str, Any]]:
+    async def create_new_session(
+        self, working_dir: str = ""
+    ) -> Optional[Dict[str, Any]]:
         """创建新会话
+
+        Args:
+            working_dir: 工作目录（用于会话隔离）
 
         Returns:
             新会话信息字典，包含 id, title 等字段
@@ -198,11 +203,12 @@ class BaseCLIAdapter(ABC):
         """
         return []
 
-    async def switch_session(self, session_id: str) -> bool:
+    async def switch_session(self, session_id: str, working_dir: str = "") -> bool:
         """切换到指定会话
 
         Args:
             session_id: 会话 ID
+            working_dir: 工作目录（用于会话隔离）
 
         Returns:
             是否切换成功
@@ -216,6 +222,40 @@ class BaseCLIAdapter(ABC):
             是否重置成功
         """
         return False
+
+    async def rename_session(self, session_id: str, title: str) -> bool:
+        """重命名会话
+
+        Args:
+            session_id: 会话 ID
+            title: 新标题
+
+        Returns:
+            是否重命名成功
+        """
+        return False
+
+    async def delete_session(self, session_id: str) -> bool:
+        """删除会话
+
+        Args:
+            session_id: 会话 ID
+
+        Returns:
+            是否删除成功
+        """
+        return False
+
+    async def get_session_messages(self, session_id: str) -> List[Message]:
+        """获取会话的消息历史
+
+        Args:
+            session_id: 会话 ID
+
+        Returns:
+            消息列表，包含 role, content, timestamp
+        """
+        return []
 
     async def list_models(self, provider: Optional[str] = None) -> List[Dict[str, Any]]:
         """列出可用模型

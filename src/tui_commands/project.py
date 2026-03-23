@@ -16,7 +16,13 @@ logger = logging.getLogger(__name__)
 
 # 支持的命令前缀（完整命令和快捷命令）
 _PROJECT_PREFIXES = (
-    "/project", "/pa", "/pc", "/pl", "/ps", "/prm", "/pi",
+    "/project",
+    "/pa",
+    "/pc",
+    "/pl",
+    "/ps",
+    "/prm",
+    "/pi",
 )
 
 
@@ -67,10 +73,10 @@ def _parse_add_args(args: str) -> Tuple[str, Optional[str], Optional[str]]:
     display_name: Optional[str] = None
 
     def _is_valid_name(s: str) -> bool:
-        return bool(re.match(r'^[a-zA-Z][a-zA-Z0-9_-]*$', s))
+        return bool(re.match(r"^[a-zA-Z][a-zA-Z0-9_-]*$", s))
 
     def _has_chinese(s: str) -> bool:
-        return any('\u4e00' <= c <= '\u9fff' for c in s)
+        return any("\u4e00" <= c <= "\u9fff" for c in s)
 
     if len(parts) >= 2:
         second = parts[1]
@@ -134,24 +140,34 @@ async def execute_project_command(
     for shortcut, sub in cmd_map.items():
         if content == shortcut or content.startswith(shortcut + " "):
             sub_cmd = sub
-            args = content[len(shortcut):].strip()
+            args = content[len(shortcut) :].strip()
             matched_shortcut = True
             break
 
     if not matched_shortcut:
         # /project <sub> <args>
-        rest = content[len("/project"):].strip()
+        rest = content[len("/project") :].strip()
         parts = rest.split(maxsplit=1)
         if not parts:
             return TUIResult.text(_get_help_text())
         sub_cmd_aliases = {
-            "add": "add", "a": "add",
-            "create": "create", "c": "create", "new": "create",
-            "list": "list", "l": "list", "ls": "list",
-            "switch": "switch", "s": "switch", "sw": "switch",
-            "remove": "remove", "rm": "remove",
-            "info": "info", "i": "info",
-            "help": "help", "h": "help",
+            "add": "add",
+            "a": "add",
+            "create": "create",
+            "c": "create",
+            "new": "create",
+            "list": "list",
+            "l": "list",
+            "ls": "list",
+            "switch": "switch",
+            "s": "switch",
+            "sw": "switch",
+            "remove": "remove",
+            "rm": "remove",
+            "info": "info",
+            "i": "info",
+            "help": "help",
+            "h": "help",
         }
         sub_cmd = sub_cmd_aliases.get(parts[0].lower(), "unknown")
         args = parts[1] if len(parts) > 1 else ""
@@ -161,25 +177,35 @@ async def execute_project_command(
             projects = await project_manager.list_projects()
             current = project_manager.current_project_name
             from ..feishu.card_builder import build_project_list_card
+
             card = build_project_list_card(projects, current)
             return TUIResult.card("", metadata={"card_json": card})
 
         elif sub_cmd in ("add", "create"):
             if not args:
-                hint = "/pa <路径> <项目名称>" if sub_cmd == "add" else "/pc <路径> <项目名称>"
+                hint = (
+                    "/pa <路径> <项目名称>"
+                    if sub_cmd == "add"
+                    else "/pc <路径> <项目名称>"
+                )
                 return TUIResult.error(f"请提供路径。用法: `{hint}`")
             path, name, display_name = _parse_add_args(args)
             if not path:
                 return TUIResult.error("路径不能为空")
 
             if sub_cmd == "add":
-                await project_manager.add_project(path, name=name, display_name=display_name)
+                await project_manager.add_project(
+                    path, name=name, display_name=display_name
+                )
             else:
-                await project_manager.create_project(path, name=name, display_name=display_name)
+                await project_manager.create_project(
+                    path, name=name, display_name=display_name
+                )
 
             projects = await project_manager.list_projects()
             current = project_manager.current_project_name
             from ..feishu.card_builder import build_project_list_card
+
             card = build_project_list_card(projects, current)
             return TUIResult.card("", metadata={"card_json": card})
 
@@ -201,12 +227,13 @@ async def execute_project_command(
             name = args.split()[0]
             project = await project_manager.get_project(name)
             if not project:
-                return TUIResult.error(f"项目 '{name}' 不存在。使用 `/pl` 查看所有项目。")
+                return TUIResult.error(
+                    f"项目 '{name}' 不存在。使用 `/pl` 查看所有项目。"
+                )
             removed = await project_manager.remove_project(name)
             if removed:
                 return TUIResult.text(
-                    f"✅ 已移除项目 `{name}`（目录未删除）\n\n"
-                    f"使用 `/pl` 查看剩余项目。"
+                    f"✅ 已移除项目 `{name}`（目录未删除）\n\n使用 `/pl` 查看剩余项目。"
                 )
             return TUIResult.error(f"移除项目 '{name}' 失败")
 
@@ -215,28 +242,23 @@ async def execute_project_command(
                 name = args.split()[0]
                 project = await project_manager.get_project(name)
                 if not project:
-                    return TUIResult.error(f"项目 '{name}' 不存在。使用 `/pl` 查看所有项目。")
+                    return TUIResult.error(
+                        f"项目 '{name}' 不存在。使用 `/pl` 查看所有项目。"
+                    )
             else:
                 project = await project_manager.get_current_project()
                 if not project:
-                    return TUIResult.text("当前没有激活的项目。使用 `/pa <路径>` 添加项目。")
+                    return TUIResult.text(
+                        "当前没有激活的项目。使用 `/pa <路径>` 添加项目。"
+                    )
 
             current = project_manager.current_project_name
             is_current = project.name == current
-            status = "✅ 目录存在" if project.exists() else "❌ 目录不存在"
-            active_marker = " （当前项目）" if is_current else ""
 
-            return TUIResult.text(
-                f"📁 **项目信息**{active_marker}\n\n"
-                f"**名称**: {project.display_name}\n"
-                f"**标识**: `{project.name}`\n"
-                f"**路径**: `{project.path}`\n"
-                f"**状态**: {status}\n"
-                f"**创建**: {_format_time(project.created_at)}\n"
-                f"**活跃**: {_format_time(project.last_active)}\n"
-                + (f"**描述**: {project.description}\n" if project.description else "")
-                + f"**会话数**: {len(project.session_ids)}"
-            )
+            from ..feishu.card_builder import build_project_info_card
+
+            card = build_project_info_card(project, is_current)
+            return TUIResult.card(card)
 
         elif sub_cmd in ("help", "unknown"):
             return TUIResult.text(_get_help_text())

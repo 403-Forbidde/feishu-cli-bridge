@@ -1,666 +1,15 @@
 # 问题追踪
 
-## 已修复
-
-### Issue #1: CardKit 更新失败 `code=200610 body is nil`
-
-**状态**: ✅ 已修复  
-**时间**: 2026-03-20  
-**影响版本**: v0.0.0 → v0.0.1
-
-**问题描述**:  
-流式输出完成后，调用 CardKit `update_card()` 更新最终卡片时失败，返回错误 `code=200610, msg=ErrMsg: body is nil`。
-
-**根本原因**:  
-`card_builder.py` 中的 `complete` 卡片输出的是旧格式 Schema 1.0（`{"config":..., "elements":[...]}}`），而 CardKit API 要求 Schema 2.0 格式（`{"schema":"2.0", "body":{"elements":[...]}}}`）。
-
-**修复方案**:  
-将所有卡片（`thinking`/`streaming`/`complete`）统一改为 Schema 2.0 格式：
-```python
-{
-    "schema": "2.0",
-    "config": {"wide_screen_mode": True, "update_multi": True},
-    "body": {"elements": [...]}
-}
-```
-
-**相关文件**: `src/feishu/card_builder.py`
-
----
-
-### Issue #2: IM Patch 跨 Schema 失败 `code=230099 schemaV2 card can not change schemaV1`
-
-**状态**: ✅ 已修复  
-**时间**: 2026-03-20  
-**影响版本**: v0.0.0 → v0.0.1
-
-**问题描述**:  
-CardKit 失败回退到 IM Patch 模式时，`update_card_message` 返回错误 `code=230099 schemaV2 card can not change schemaV1`。
-
-**根本原因**:  
-CardKit 使用 Schema 2.0 创建卡片，但 IM Patch 回退时发送的是 Schema 1.0 格式的更新内容，飞书不允许跨 Schema 版本 patch。
-
-**修复方案**:  
-与 Issue #1 一同修复，所有卡片统一使用 Schema 2.0 格式。
-
-**相关文件**: `src/feishu/card_builder.py`
-
----
-
-### Issue #3: 流式输出内容截断/乱码
-
-**状态**: ✅ 已修复  
-**时间**: 2026-03-20  
-**影响版本**: v0.0.0 → v0.0.1
-
-**问题描述**:  
-流式输出时，内容显示不完整或乱码（如 "isely based on my actual capabilities"），然后突然全部出现。
-
-**根本原因**:  
-`streaming_controller.py` 的 `on_content_stream` 将 OpenCode 适配器发送的 delta（增量）当作全量文本处理：
-```python
-# 错误代码
-self.text.accumulated_text = text  # text 是 delta，如 "Hello"
-```
-导致每次新 delta 到来时覆盖已有内容。
-
-**修复方案**:  
-改为累积追加模式：
-```python
-# 正确代码
-self.text.accumulated_text += text  # 累积追加
-```
-
-**相关文件**: `src/feishu/streaming_controller.py`
-
----
-
-### Issue #4: 思考阶段空白/无内容显示
-
-**状态**: ✅ 已修复  
-**时间**: 2026-03-20  
-**影响版本**: v0.0.0 → v0.0.1
-
-**问题描述**:  
-AI 思考时卡片只显示空白，没有思考内容，然后突然跳到回答。
-
-**根本原因**:  
-1. `STREAMING_THINKING_CARD` 缺少 `loading_icon` 元素，没有动态加载动画
-2. OpenCode 适配器的 REASONING 事件高频重复触发，造成无效更新
-
-**修复方案**:  
-1. 在 `STREAMING_THINKING_CARD` 中加入 `loading_icon` 元素（飞书 CDN 官方图标）
-2. OpenCode 适配器添加 REASONING 去重逻辑，只在文本实际变化时 yield
-
-**相关文件**: 
-- `src/feishu/streaming_controller.py`
-- `src/adapters/opencode.py`
-
----
-
-### Issue #5: 消息无引用气泡
-
-**状态**: ✅ 已修复  
-**时间**: 2026-03-20  
-**影响版本**: v0.0.0 → v0.0.1
-
-**问题描述**:  
-AI 回复的卡片不显示"回复 XXX: 内容"引用气泡，用户无法看出是回复哪条消息。
-
-**根本原因**:  
-使用 `im.v1.message.create` API 发送消息，该 API 不支持引用回复功能。
-
-**修复方案**:  
-改用 `im.v1.message.reply` API：
-- 新增 `ReplyMessageRequest` 支持
-- `send_card_message()` 和 `send_card_by_card_id()` 在有 `reply_to` 时使用 reply 接口
-- `handler.py` 将 `message.message_id` 作为 `reply_to_message_id` 传入
-
-**相关文件**: 
-- `src/feishu/api.py`
-- `src/feishu/handler.py`
-- `src/feishu/streaming_controller.py`
-
----
-
-### Issue #6: `GetMessageResourceResponse` 无 `.data` 属性
-
-**状态**: ✅ 已修复
-**时间**: 2026-03-21
-**影响版本**: v0.0.4 开发阶段
-
-**问题描述**:
-下载飞书消息图片时报错：`'GetMessageResourceResponse' object has no attribute 'data'`，图片下载失败。
-
-**根本原因**:
-`GetMessageResourceResponse` 与其他飞书 API 响应不同，文件内容**直接挂载**在响应对象上（`.file`、`.file_name`），而不是嵌套在 `.data` 中。错误代码：
-```python
-file_content = response.data.file  # AttributeError
-```
-
-**修复方案**:
-```python
-file_content = response.file  # 直接访问
-```
-同时将成功判断从 `response.success()` 改为 `response.file is None`，因为文件下载响应的 `code` 字段可能为 `None`。
-
-**相关文件**: `src/feishu/api.py`
-
----
-
-### Issue #7: 图片消息发给模型后模型看不到图片内容
-
-**状态**: ✅ 已修复
-**时间**: 2026-03-21
-**影响版本**: v0.0.4 开发阶段
-
-**问题描述**:
-图片下载成功后，模型回复"我没有看到您上传的图片"，或者模型输出"图片路径是 /tmp/feishu_images/..."，说明模型收到的是文件路径文本而非图片内容。
-
-**根本原因**:
-两个子问题：
-
-1. **端点选择错误**：原代码使用 `/session/{id}/message` 端点（同步，返回 200），该端点对 `FilePart` 的处理不支持视觉输入，会将文件路径作为文本传给模型。应使用 `/session/{id}/prompt_async` 端点（异步，返回 204，响应通过 SSE 推送），这是 ISSUES.md 技术调研时验证通过的端点。
-
-2. **文件名重复**：`save_path = save_dir / f"{file_key}_{filename}"` 导致路径包含重复的 file_key，如 `img_xxx_img_xxx.jpg`。
-
-**修复方案**:
-1. 端点改为 `prompt_async`
-2. 附件在客户端转为 base64 data URL 发送，不依赖服务端读取 `file://` 路径
-3. 文件名改为 `save_dir / filename`（不再重复拼接 file_key）
-
-**相关文件**: `src/adapters/opencode.py`, `src/feishu/api.py`
-
----
-
-### Issue #11: asyncio.Event 跨循环错误（Python ≤3.9）
-
-**状态**: ✅ 已修复
-**时间**: 2026-03-21
-**影响版本**: Windows Python 3.9 用户
-
-**问题描述**:
-Windows 上启动时报 `RuntimeError: Task got Future attached to a different loop`，程序无法运行。
-
-**根本原因**:
-`asyncio.Event()` 在模块顶层（`shutdown_event = asyncio.Event()`）创建时，Python 3.9 会将其绑定到当时存在的事件循环（或默认循环）。`asyncio.run()` 再创建新的事件循环，导致两者不一致。Python 3.10+ 已修复此行为。
-
-**修复方案**:
-将 `shutdown_event = asyncio.Event()` 从模块顶层移入 `main()` 函数内部，确保在运行中的事件循环内创建。`signal_handler` 通过闭包捕获 `shutdown_event`，行为不变。
-
-**相关文件**: `src/main.py`
-
----
-
-### Issue #12: start.bat 中文注释乱码
-
-**状态**: ✅ 已修复
-**时间**: 2026-03-21
-**影响版本**: v0.1.4 Windows
-
-**问题描述**:
-运行 `start.bat` 时报多行 `'xxx' is not recognized as an internal or external command`，脚本无法正常执行。
-
-**根本原因**:
-`start.bat` 以 UTF-8 编码保存，包含中文注释。Windows CMD 默认使用 GBK/GB2312 代码页，UTF-8 中文字节序列被误解析为命令执行。
-
-**修复方案**:
-将 `start.bat` 中所有中文注释改为英文，消除编码依赖。
-
-**相关文件**: `start.bat`
-
----
-
-### Issue #13: opencode 子进程启动失败 [WinError 2]
-
-**状态**: ✅ 已修复
-**时间**: 2026-03-21
-**影响版本**: v0.1.4 Windows
-
-**问题描述**:
-飞书发送消息后控制台报 `启动 opencode serve 失败: [WinError 2] 系统找不到指定的文件`，所有对话均失败。
-
-**根本原因**:
-`asyncio.create_subprocess_exec` 在 Windows 上不走 shell 的 `PATH` 查找，直接将第一个参数作为完整可执行路径处理。`"opencode"` 字符串在这种情况下找不到对应文件。
-
-**修复方案**:
-启动前用 `shutil.which("opencode")` 解析完整可执行路径（如 `C:\Users\xxx\AppData\Roaming\npm\opencode.cmd`），再传给 `create_subprocess_exec`。
-
-**相关文件**: `src/adapters/opencode.py`
-
----
-
-### Issue #14: opencode serve --hostname 参数在 v1.2.27 不支持
-
-**状态**: ✅ 已修复
-**时间**: 2026-03-21
-**影响版本**: opencode v1.2.27+
-
-**问题描述**:
-opencode server 启动超时（10s 后），日志显示 `opencode serve 进程意外退出`。
-
-**根本原因**:
-代码中 `opencode serve` 命令携带了 `--hostname 127.0.0.1` 参数，该参数在 opencode v1.2.27 中不存在（可能已更名或移除），导致进程启动后立即以错误码退出。
-
-**修复方案**:
-去除 `--hostname` 参数，仅保留 `--port`。opencode v1.2.27 默认即绑定 `127.0.0.1`。
-
-**相关文件**: `src/adapters/opencode.py`
-
----
-
-### Issue #15: asyncio.WindowsProactorEventLoopPolicy 废弃警告
-
-**状态**: ✅ 已修复
-**时间**: 2026-03-21
-**影响版本**: Python 3.12+ Windows
-
-**问题描述**:
-启动时输出两行 `DeprecationWarning: 'asyncio.WindowsProactorEventLoopPolicy' is deprecated and slated for removal in Python 3.16`。
-
-**根本原因**:
-Python 3.12+ 在 Windows 上已将 `ProactorEventLoop` 设为默认，不再需要手动 `set_event_loop_policy`；强行设置反而触发废弃警告。
-
-**修复方案**:
-加版本判断：仅在 Python < 3.12 时设置 `WindowsProactorEventLoopPolicy`。
-
-**相关文件**: `src/main.py`
-
----
-
-## 已知问题
-
-### LSP 类型检查误报
-
-**状态**: ⚠️ 已知，不影响运行  
-**优先级**: 低
-
-**问题描述**:  
-VS Code / LSP 显示大量类型错误，如：
-- `"v1" is not a known attribute of "None"`
-- `"message_id" is not a known attribute of "None"`
-
-**根本原因**:  
-lark_oapi SDK 的类型定义不完整，导致 LSP 无法正确推断响应类型。
-
-**影响**:  
-仅影响开发体验，不影响实际运行。所有 API 调用在运行时正常工作。
-
-**缓解措施**:  
-运行时验证通过，所有功能测试正常。
-
----
-
-## 待优化
-
-### Issue #9: 项目列表卡片简陋，切换需要交互式按钮
-
-**状态**: ✅ 已修复
-**时间**: 2026-03-21
-**影响版本**: v0.0.5+
-
-**问题描述**:
-
-`/pl` 返回的项目列表是纯文本格式，信息密度低，且切换项目需要手动输入 `/ps <标识>`，交互不友好。
-
-**期望效果**:
-
-1. **`/pl` 返回结构化卡片**，每个项目一行，包含：
-   - 项目名称（加粗）+ 路径（代码格式）+ 最后活跃时间
-   - 当前项目用不同颜色/图标区分
-   - 每行右侧有「切换」按钮
-
-2. **点击「切换」按钮**直接触发项目切换（等同 `/ps <标识>`），无需手动输入命令
-
-3. **切换成功后卡片更新**，当前项目标记更新到新项目
-
-**修复方案**:
-
-1. `card_builder.py` 新增 `build_project_list_card()` — Schema 1.0 格式（`action + button + value` 支持点击回调），每个非当前项目显示「🔄 切换」按钮
-2. `tui_commands/project.py` `/pl` 命令改为返回 `TUIResult.card()` 含 `card_json`
-3. `feishu/handler.py` `_handle_project_command()` 检测 CARD 类型直接发卡片；新增 `handle_card_callback()` 处理 `switch_project` action
-4. `feishu/client.py` 注册 `register_p2_card_action_trigger`，通过 `asyncio.run_coroutine_threadsafe` 调用 handler；切换后用 IM Patch 更新卡片
-5. `main.py` 注册 `handler.handle_card_callback` 到 `feishu_client.on_card_callback()`
-
-**相关文件**:
-- `src/feishu/card_builder.py`
-- `src/feishu/client.py`
-- `src/feishu/handler.py`
-- `src/tui_commands/project.py`
-- `src/main.py`
-
----
-
-**实现方向（原）**:
-
-飞书 Schema 2.0 卡片支持 `action` 元素（`button` 类型），点击时触发回调：
-
-```json
-{
-  "tag": "button",
-  "text": {"tag": "plain_text", "content": "切换"},
-  "type": "primary",
-  "behaviors": [{
-    "type": "callback",
-    "value": {"action": "switch_project", "name": "myapp"}
-  }]
-}
-```
-
-需要：
-1. `card_builder.py` 新增 `build_project_list_card()` 函数，构建含按钮的项目列表卡片
-2. 飞书卡片回调处理：在 `handler.py` 或新增 `card_callback_handler.py` 处理卡片按钮点击事件
-3. 注册飞书卡片回调路由（`im.card.action.trigger_v1` 事件）
-4. 回调收到后调用 `ProjectManager.switch_project(name)` 并回复切换结果
-
-**相关文件**:
-- `src/feishu/card_builder.py` — 新增项目列表卡片构建
-- `src/feishu/handler.py` — 新增卡片回调处理
-- `src/tui_commands/project.py` — `/pl` 命令改为返回卡片类型结果
-
----
-
-### Issue #8: OpenCode 工具调用工作目录不隔离
-
-**状态**: ✅ 已修复
-**时间**: 2026-03-21
-**影响版本**: v0.0.5
-
-**问题描述**:
-
-切换项目（`/ps <名称>`）后，模型工具调用（`bash`/`read_file` 等）的实际执行路径仍为错误目录。
-
-**根本原因**:
-
-OpenCode server 通过**全局中间件**读取每个 HTTP 请求的 `directory` **query 参数**（或 `x-opencode-directory` header）来确定工作目录上下文：
-
-```typescript
-// server.ts 中间件（对所有路由生效）
-const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
-```
-
-`directory` 不是请求体字段，进程级别的 `cwd`/`PWD` 也无效。必须在每个请求上附加 query 参数。
-
-**修复方案**:
-
-三处请求都需携带 `?directory=working_dir` query 参数：
-
-1. `POST /session?directory=/code/myproject` — session 在该目录上下文中创建
-2. `POST /session/{id}/prompt_async?directory=/code/myproject` — prompt 的工具调用在该目录执行
-3. `GET /event?directory=/code/myproject` — 只接收该目录实例的事件
-
-同步简化架构：单一 server 实例 + `_sessions: Dict[working_dir, OpenCodeSession]` 按目录缓存 session。
-
-**相关文件**: `src/adapters/opencode.py`
-
----
-
-### Issue #10: /session 命令在飞书客户端下作用有限
-
-**状态**: 🔍 待讨论
-**时间**: 2026-03-21
-**优先级**: 低
-
-**问题描述**:
-`/session` 命令返回最近 10 个会话的列表，用户回复数字或 `provider/model` 格式切换会话。该交互模式在桌面终端 TUI 下较自然，但在飞书客户端中存在以下局限：
-
-1. **使用场景稀少** — 飞书用户通常只维护一个对话上下文，极少需要手动切换历史会话
-2. **列表不美观** — 当前返回的会话列表为纯文本格式，信息展示粗糙，与其他已卡片化的命令（`/model`、`/pl`）风格不一致
-3. **必要性存疑** — `/new` 已覆盖"开启新会话"的核心需求，`/session` 的增量价值不明确
-
-**当前行为**:
-返回纯文本会话列表，用户回复数字 1-10 切换，交互体验较差。
-
-**待讨论**:
-- 是否直接移除 `/session` 命令，仅保留 `/new`
-- 如保留，是否卡片化改造（与 `/model`、`/pl` 风格对齐）
-
-**暂定决策**:
-不做修改，保留现状，等待进一步使用反馈后再决定去留。
-
----
-
-### 1. 适配器类型注解统一
-
-**描述**:  
-`BaseCLIAdapter.execute_stream` 返回类型声明为 `AsyncIterator[StreamChunk]`，但子类实现返回 `CoroutineType[Any, Any, AsyncIterator[StreamChunk]]`，造成 LSP 警告。
-
-**建议**:  
-统一改为异步生成器函数签名，消除类型警告。
-
----
-
-### 2. 心跳和连接稳定性
-
-**描述**:  
-WebSocket 长连接在弱网环境下可能断开，当前重连逻辑较简单。
-
-**建议**:  
-- 添加指数退避重连
-- 心跳检测
-- 断线恢复后自动续传
-
----
-
-## 功能建议
-
-### 1. 多轮对话历史显示优化
-
-当前历史以纯文本存储，建议添加结构化显示（如折叠、时间戳）。
-
-### 2. 支持图片和文件输入
-
-**状态**: ✅ 已实现 (v0.0.4, 2026-03-21)
-**优先级**: 高
-
-**背景**:
-飞书支持发送图片消息，但当前系统仅处理 `msg_type == "text"` 和 `"post"`，图片消息被丢弃。
-
-**技术调研结果 (2026-03-21)**:
-
-✅ **方案 B（file:// 协议）验证成功**
-
-通过 `kimi-for-coding/k2p5` 模型测试，确认 `file://` URL 可以被 OpenCode 正确处理：
-
-1. **OpenCode API 支持 FilePart**:
-   ```json
-   {
-     "type": "file",
-     "mime": "image/png",
-     "url": "file:///path/to/image.png",
-     "filename": "image.png"
-   }
-   ```
-
-2. **OpenCode 自动处理**:
-   Server 端收到 `file://` URL 后，会自动读取文件并转为 base64 data URI 传给模型。
-
-3. **模型视觉识别有效**:
-   测试本地飞书对话截图，模型成功：
-   - 识别出是飞书/Lark 聊天界面
-   - 详细描述了界面布局和内容
-   - 正确提取了文字信息
-
-**测试记录**:
-```bash
-# 会话创建
-POST /session -> ses_2f1e320e0ffee8T23najp0ST5l
-
-# 发送图片消息
-POST /session/{id}/prompt_async
-Body: {
-  "parts": [
-    {"type": "text", "text": "描述图片内容"},
-    {"type": "file", "mime": "image/png", "url": "file:///tmp/feishu_images/example.png"}
-  ],
-  "model": {"providerID": "kimi-for-coding", "modelID": "k2p5"}
-}
-
-# 结果：模型成功识别并详细描述了截图内容
-```
-
-**实现方案**:
-
-无需启动本地 HTTP 服务器，`file://` 方案完全可行：
-
-1. **`handler.py`** — 扩展 `_parse_event_data()` 处理 `msg_type == "image"`:
-   - 解析图片 `file_key`
-   - 调用飞书 API 下载图片到临时目录 `/tmp/feishu_images/`
-   - 将图片路径存入消息对象
-
-2. **`opencode.py:_send_message()`** — 支持图片 parts:
-   ```python
-   parts = [{"type": "text", "text": prompt}]
-   if image_path:
-       parts.append({
-           "type": "file",
-           "mime": mime_type,
-           "url": f"file://{image_path}",
-           "filename": filename
-       })
-   ```
-
-3. **清理机制**:
-   定期清理 `/tmp/feishu_images/` 目录，或会话结束时删除。
-
-**相关文件**:
-- `src/feishu/handler.py` — 处理图片消息下载
-- `src/adapters/opencode.py` — 发送图片 part
-- `src/feishu/api.py` — 飞书文件下载 API
-
-**参考**:
-- OpenCode Part 类型定义: `FilePartInput = {type: "file", mime: string, url: string}`
-- 飞书图片消息格式: `{"message_type": "image", "content": {"image_key": "..."}}`
-
-### 3. 会话持久化到云端
-
-当前会话存储在本地 `.sessions/` 目录，建议支持云存储或数据库。
-
----
-
-### 4. 项目管理功能
-
-**状态**: ✅ 已实现 (v0.0.5, 2026-03-21)
-**优先级**: 高
-
-#### 需求描述
-
-通过飞书命令管理"项目"（即工作目录），选择项目后 CLI 工具的 `working_dir` 自动切换到对应路径，实现多项目隔离开发。
-
-#### 命令设计
-
-| 命令 | 说明 |
-|------|------|
-| `/pa <路径> [名称]` | 添加已有目录为项目（`/project add` 简写） |
-| `/pc <路径> [名称]` | 创建新目录并添加为项目（`/project create` 简写） |
-| `/pl` | 列出所有项目，返回交互式卡片 |
-| `/ps <名称>` | 切换到指定项目 |
-| `/prm <名称>` | 从列表移除项目（不删除目录） |
-| `/pi [名称]` | 查看项目信息 |
-
-路径支持 `~` 展开；名称未指定时自动从目录名生成（英文标识符，重名自动加数字后缀）。
-
-#### 数据模型
-
-```python
-@dataclass
-class Project:
-    name: str           # URL安全英文标识（命令使用）
-    display_name: str   # 展示名，可中文
-    path: Path          # 项目绝对路径
-    created_at: datetime
-    last_active: datetime
-    description: str = ""
-    session_ids: List[str] = []
-```
-
-存储位置：`~/.config/feishu-cli-bridge/projects.json`，原子写入（先写 `.tmp` 再 rename）。
-
-```json
-{
-  "version": "1.0",
-  "projects": {
-    "my-app": {
-      "name": "my-app",
-      "display_name": "我的项目",
-      "path": "/code/my-app",
-      "created_at": "...",
-      "last_active": "...",
-      "session_ids": []
-    }
-  },
-  "current_project": "my-app"
-}
-```
-
-#### 实现方案
-
-**新增文件：**
-
-| 文件 | 职责 |
-|------|------|
-| `src/project/manager.py` | `ProjectManager`：增删改查、持久化、asyncio.Lock 并发保护 |
-| `src/project/models.py` | `Project`、`ProjectsConfig` dataclass |
-| `src/tui_commands/project.py` | `/p*` 命令解析与响应逻辑 |
-
-**修改文件：**
-
-| 文件 | 改动 |
-|------|------|
-| `src/feishu/handler.py` | 在 `handle_message()` 中优先检测 `/p*` 命令并分发；每次普通对话时从 `ProjectManager.get_current_project()` 取 `path` 作为 `working_dir` |
-| `src/tui_commands/__init__.py` | 注册项目命令路由 |
-| `src/main.py` | 初始化 `ProjectManager` 并注入 `MessageHandler` |
-| `config.yaml` | 添加 `project.storage_path` 配置项 |
-
-**切换项目时的执行流程：**
-
-```
-/ps <名称>
-  → ProjectManager.switch_project(name)     # 更新 current_project，写 projects.json
-  → 当前会话的 working_dir 覆盖为 project.path
-  → SessionManager 持久化新 working_dir
-  → ProjectManager.add_session_to_project() # 关联 session_id
-  → 飞书回复切换成功卡片（显示项目名、路径、关联会话数）
-```
-
-**普通对话时：**
-
-```python
-# handler.py handle_message() 中
-current_project = await project_manager.get_current_project()
-working_dir = current_project.path if current_project else default_working_dir
-# 传给 adapter.execute_stream(prompt, context, working_dir=working_dir)
-```
-
-#### 路径验证规则
-
-添加项目时：
-- 目录必须存在（`/pa`）或可创建（`/pc`）
-- 必须是目录，不能是文件
-- 未被其他项目占用（同路径去重）
-- 当前用户有 rwx 权限
-
-#### 飞书卡片交互
-
-`/pl` 返回项目列表卡片，每个项目显示：
-- 名称 + 展示名
-- 路径
-- 最后活跃时间
-- "切换"按钮（卡片回调 → 等同 `/ps <name>`）
-
----
-
-### Issue #16: 双重消息解析路径（死代码 + 一致性问题）
+## 活跃问题（待修复）
 
 **状态**: 📋 待修复
 **优先级**: 高
-**发现时间**: 2026-03-21
 
 **问题描述**:
-`FeishuClient._parse_message`（`client.py:307`）解析完消息后，结果被立即丢弃。代码随即调用 `_event_to_dict` 将事件转回字典，再由 `handler.py:275` 重新解析一遍。两套解析逻辑对附件处理能力不对等（`client.py` 版不处理 `image/file` 类型），且一次事件被解析两次。
+`FeishuClient._parse_message` 解析完消息后结果被丢弃，随后调用 `_event_to_dict` 将事件转回字典，再由 `handler.py` 重新解析一遍。两套逻辑对附件处理能力不对等。
 
 **修复方案**:
-删除 `client.py` 中的 `_parse_message` 方法（死代码），统一由 `handler.py` 的 `_parse_event_data` 负责消息解析。
+删除 `client.py` 中的 `_parse_message` 方法，统一由 `handler.py` 的 `_parse_event_data` 负责解析。
 
 **相关文件**: `src/feishu/client.py`, `src/feishu/handler.py`
 
@@ -670,18 +19,12 @@ working_dir = current_project.path if current_project else default_working_dir
 
 **状态**: 📋 待修复
 **优先级**: 高
-**发现时间**: 2026-03-21
 
 **问题描述**:
-`api.py:609` 在 IM Patch 回退路径中调用 `send_card_message` 时未传 `reply_to` 参数：
-```python
-message_id = await self.send_card_message(chat_id, initial_card)
-# 应为：send_card_message(chat_id, initial_card, reply_to=reply_to_message_id)
-```
-导致 IM Patch 模式下回复不显示原生引用气泡，与 CardKit 路径行为不一致。
+`api.py:609` 在 IM Patch 回退路径中调用 `send_card_message` 时未传 `reply_to` 参数，导致回复不显示原生引用气泡。
 
 **修复方案**:
-在调用处补传 `reply_to=reply_to_message_id`。
+补传 `reply_to=reply_to_message_id`。
 
 **相关文件**: `src/feishu/api.py`
 
@@ -691,13 +34,12 @@ message_id = await self.send_card_message(chat_id, initial_card)
 
 **状态**: 📋 待修复
 **优先级**: 高
-**发现时间**: 2026-03-21
 
 **问题描述**:
-`session/manager.py:109` 的 `_save_session` 是同步文件写入，在异步上下文（`handle_message`）中被直接调用，每条消息触发 2-3 次，持续阻塞 asyncio 事件循环。
+`session/manager.py:109` 的同步文件写入在异步上下文中被直接调用，每条消息触发 2-3 次，阻塞 asyncio 事件循环。
 
 **修复方案**:
-改用 `await asyncio.to_thread(self._save_session, session)` 将磁盘 IO 移到线程池。
+改用 `await asyncio.to_thread(self._save_session, session)`。
 
 **相关文件**: `src/session/manager.py`
 
@@ -707,13 +49,12 @@ message_id = await self.send_card_message(chat_id, initial_card)
 
 **状态**: 📋 待修复
 **优先级**: 高
-**发现时间**: 2026-03-21
 
 **问题描述**:
-`client.py:183` 在每次卡片回调时执行 `lark.Client.builder().app_id(...).build()`，不复用已有的 SDK 客户端，导致连接池无法复用，累积资源浪费和潜在连接泄漏。
+`client.py:183` 在每次卡片回调时重建 `lark.Client`，不复用已有客户端，导致连接池无法复用。
 
 **修复方案**:
-直接使用 `FeishuAPI` 中已初始化的 `self.client` 实例，或在 `FeishuClient` 构造时创建共享实例。
+直接使用 `FeishuAPI` 中已初始化的 `self.client` 实例。
 
 **相关文件**: `src/feishu/client.py`
 
@@ -723,22 +64,12 @@ message_id = await self.send_card_message(chat_id, initial_card)
 
 **状态**: 📋 待修复
 **优先级**: 高
-**发现时间**: 2026-03-21
 
 **问题描述**:
-`handler.py:167-177` 存在两段相同的 `is_tui_command` 检测逻辑，第二段（第 174 行）因第一段已 `return` 而永远不会执行，是死代码：
-```python
-if self.tui_router.is_tui_command(content):   # 第 167 行，执行后 return
-    ...
-    return
-if not content:
-    return
-if self.tui_router.is_tui_command(content):   # 第 174 行，永远不会执行
-    ...
-```
+`handler.py:167-177` 存在两段相同的 `is_tui_command` 检测逻辑，第二段永远不会执行。
 
 **修复方案**:
-删除第二段重复检测，将 `if not content: return` 移到第一段之前。
+删除第二段重复检测。
 
 **相关文件**: `src/feishu/handler.py`
 
@@ -748,58 +79,14 @@ if self.tui_router.is_tui_command(content):   # 第 174 行，永远不会执行
 
 **状态**: 📋 待修复
 **优先级**: 中
-**发现时间**: 2026-03-21
 
 **问题描述**:
-`api.py:432` 直接使用飞书 SDK 返回的 `response.file_name` 构造保存路径：
-```python
-save_path = save_dir / filename  # filename 来自飞书响应，可能含 ../
-```
-若 `filename` 包含 `../` 路径组件，文件将被写入 `feishu_images/` 目录之外。
+`api.py:432` 直接使用飞书 SDK 返回的 `response.file_name` 构造保存路径，若含 `../` 可能写入目录之外。
 
 **修复方案**:
-```python
-save_path = save_dir / Path(filename).name  # 只取基础文件名
-```
+`save_path = save_dir / Path(filename).name`
 
 **相关文件**: `src/feishu/api.py`
-
----
-
-### Issue #22: OpenCode `_sessions` 字典无并发锁保护
-
-**状态**: ✅ 已修复
-**时间**: 2026-03-22
-**优先级**: 中
-**发现时间**: 2026-03-21
-
-**问题描述**:
-`opencode.py:159` 的 `self._sessions` 在并发消息场景下，`_get_or_create_session` 和 `create_new_session` 同时执行时可能产生竞态——两个协程对同一 `working_dir` 均触发 `_create_session`，产生重复 API 调用和 session 泄漏。
-
-**修复方案**:
-添加 `self._sessions_lock: Optional[asyncio.Lock] = None`（懒初始化，防止跨循环绑定），在 `_get_or_create_session` 中用 `async with self._sessions_lock` 包裹整个读-创建-写操作。
-
-**相关文件**: `src/adapters/opencode.py`
-
----
-
-### Issue #23: `asyncio.get_event_loop()` 弃用用法
-
-**状态**: ✅ 已修复
-**时间**: 2026-03-22
-**优先级**: 中
-**发现时间**: 2026-03-21
-
-**问题描述**:
-以下位置在异步函数中使用了已弃用的 `asyncio.get_event_loop()`，在 Python 3.10+ 触发 `DeprecationWarning`：
-- `opencode.py`：`asyncio.get_event_loop().time()` × 2
-- `flush_controller.py`：`loop = asyncio.get_event_loop()` × 4
-
-**修复方案**:
-- `opencode.py`：替换为 `time.monotonic()`（仅需时间戳，无需 loop 对象）
-- `flush_controller.py`：替换为 `asyncio.get_running_loop()`（需要 loop 对象调用 `call_later` / `create_future`，均在 async 上下文中）
-
-**相关文件**: `src/adapters/opencode.py`, `src/feishu/flush_controller.py`
 
 ---
 
@@ -807,10 +94,9 @@ save_path = save_dir / Path(filename).name  # 只取基础文件名
 
 **状态**: 📋 待修复
 **优先级**: 中
-**发现时间**: 2026-03-21
 
 **问题描述**:
-`card_builder.py:977-1002` 的 `_beautify_list_items` 函数设置了 `prev_was_list` 局部变量但从未使用，函数无任何可观测副作用，是完全空操作。`optimize_markdown_style` 每次调用它都白白遍历一遍文本行。
+`card_builder.py:977-1002` 的 `_beautify_list_items` 函数无任何可观测副作用，是完全空操作。
 
 **修复方案**:
 删除此函数及所有调用点。
@@ -823,317 +109,112 @@ save_path = save_dir / Path(filename).name  # 只取基础文件名
 
 **状态**: 📋 待修复
 **优先级**: 低
-**发现时间**: 2026-03-21
 
 **问题描述**:
-`formatter.py` 中以下代码已被 `card_builder.py` 的同名实现取代，但未删除，造成维护混乱：
-- `optimize_markdown_style`（第 55 行）— 已被 `card_builder.py:1010` 取代，且逻辑不同（H1→H3 vs H1→H4），`format_with_metadata` 仍调用旧版
-- `_simplify_model_name`（第 104 行）— 已被 `card_builder.py:1159` 取代，截断逻辑不一致
-- `format_with_metadata`（第 8 行）— 无任何调用方
-- `parse_mention`（第 155 行）— 无任何调用方
+`formatter.py` 中以下代码已被 `card_builder.py` 取代：
+- `optimize_markdown_style`
+- `_simplify_model_name`
+- `format_with_metadata`（无调用方）
+- `parse_mention`（无调用方）
 
 **修复方案**:
-删除 `formatter.py` 中的全部死代码；若文件为空则删除整个文件，并更新 import。
+删除死代码；若文件为空则删除整个文件。
 
 **相关文件**: `src/feishu/formatter.py`, `src/feishu/card_builder.py`
 
 ---
 
-### Issue #27: OpenCode 外部目录权限对话框导致工具调用永久阻塞
+## 近期已修复（保留参考）
+
+### Issue #32: 会话管理改名交互失败
+
+**状态**: ✅ 已修复
+**时间**: 2026-03-23
+**影响版本**: v0.1.7+
+
+**问题描述**:
+点击改名按钮后，系统发送提示卡片让用户回复新名称。但用户回复后，消息被当作普通用户输入处理，AI 直接回复该内容，而非执行重命名操作。
+
+**根本原因**:
+当用户直接发送消息（而不是点击「回复」按钮）时，`parent_id` 为空。此时系统使用内容启发式匹配（纯数字 1-10 或 `provider/model` 格式）来判断是否是交互式回复。但用户输入的新名称不符合这些格式，因此被当作普通消息处理。
+
+**修复方案**:
+在 `handler.py` 中增加对 `rename_session` 交互类型的特殊处理：当检测到用户有待处理的改名交互时，接受任何非命令内容作为回复。
+
+**相关文件**: `src/feishu/handler.py`, `src/tui_commands/__init__.py`
+
+---
+
+### Issue #25 (原): 改名交互改进
+
+**状态**: ⚠️ 方案失败，见 Issue #32
+**时间**: 2026-03-23
+
+原方案使用 Schema 2.0 `input` + `action` 组件实现卡片内改名，但飞书 Schema 2.0 不支持 `action` 标签。需重新设计。
+
+---
+
+### Issue #27: OpenCode 外部目录权限对话框导致阻塞
 
 **状态**: ✅ 已修复
 **时间**: 2026-03-22
-**优先级**: 高
-**发现时间**: 2026-03-22
 
 **问题描述**:
-
-当 OpenCode 的 build/plan agent 需要访问 session 工作目录（`/code/feishu-cli-bridge`）以外的路径时（如 `/code/kimibridge`），会弹出 TUI 交互式权限确认对话框：
-
-```
-△ Permission required
-← Access external directory /code/kimibridge
-
-Patterns
-- /code/kimibridge/*
-
-[Allow once]  [Allow always]  [Reject]
-```
-
-Bridge 以无头（headless）模式运行，没有附加 TTY，无法响应该对话框。工具调用永远停留在 `status: "running"`，SSE 不再推送任何新事件，飞书卡片永久卡在"思考中..."状态。
-
-**诊断过程**:
-
-1. 用户发送"参考/code/kimibridge目录..."，卡片显示 reasoning 内容后停止更新
-2. 通过 `GET /session/{id}/message` 查询发现工具调用 `read /code/kimibridge` elapsed > 1800s，status=running
-3. 用 `lsof` 确认无文件锁，说明工具未在等待 I/O，而是等待权限确认
-4. 在 OpenCode TUI CLI 界面手动点击 "Allow always" 后，几秒内立即返回结果
-5. 确认根本原因是权限对话框
-
-**已尝试的方案（均失败）**:
-
-1. **session 创建时传 `permission` 字段**：
-   ```python
-   body["permission"] = [
-       {"permission": "external_directory", "pattern": "/code/kimibridge/*", "action": "allow"}
-   ]
-   ```
-   字段写入 SQLite `session.permission` 列，但 OpenCode 运行时仍弹出权限对话框，说明该字段不是用来预授权外部目录的。
-
-2. **写入 SQLite `permission` 表**：该表为空，插入正确格式的记录尚未验证（OpenCode 进程可能不重新读取）。
-
-3. **`pyrightconfig.json` 排除 venv 目录**：非根本原因，不能解决权限问题。
+OpenCode 访问工作目录外路径时弹出 TUI 权限对话框，Bridge 以无头模式运行无法响应，工具调用永久阻塞。
 
 **修复方案**:
-
-OpenCode 支持通过 `OPENCODE_PERMISSION` 环境变量在进程启动时注入权限配置，这是无头模式下最可靠的方式（相比配置文件，环境变量在进程启动时即生效，不受项目级配置覆盖影响）。
-
-在 `OpenCodeServerManager.start()` 中，启动 `opencode serve` 子进程时注入该环境变量：
-
+启动 `opencode serve` 时注入 `OPENCODE_PERMISSION` 环境变量：
 ```python
-env = os.environ.copy()
 env["OPENCODE_PERMISSION"] = json.dumps({"external_directory": "allow"})
-self.process = await asyncio.create_subprocess_exec(*cmd, env=env, ...)
 ```
-
-> **注**：`_ensure_opencode_permissions()` 写入全局配置文件的方式仍保留（作为额外保障），但单独依赖配置文件不可靠——配置文件可能在进程已启动后才写入，或被项目级 `opencode.json` 覆盖。
-
-**相关文件**:
-- `src/adapters/opencode.py` — `OpenCodeServerManager.start()` 启动子进程时注入 `OPENCODE_PERMISSION` 环境变量
-
----
-
-### Issue #28: 工具调用后无文字回复（流提前终止）
-
-**状态**: ✅ 已修复（六次修复 2026-03-22）
-**时间**: 2026-03-22
-**优先级**: 高
-**发现时间**: 2026-03-22
-
-**问题描述**:
-
-当模型需要调用工具（如读文件、执行命令）再生成回答时，飞书卡片显示"✅ 已完成"但没有任何文字回复。用户必须再次追问才能得到答案。行为不稳定：简单工具调用（如 `ls`）有时能成功，复杂工具调用（如读文件后分析）几乎必现。
-
-**根本原因（第一次修复后残留）**:
-
-`session.idle` **不是一次性信号**，而是**每个步骤完成后各触发一次**：
-
-```
-Step 1: reasoning → 工具调用 → step-finish → session.idle  ← 错误地在此终止
-Step 2: 模型读取工具结果 → 生成文字回复 → step-finish → session.idle  ← 真正完成
-```
-
-第一次修复（将 `step-finish` 改为 `None`，用 `session.idle` 触发 DONE）解决了 `step-finish` 的问题，但没有意识到 `session.idle` 本身也会在中间步骤触发，导致仍在文字生成前就终止流。
-
-**修复方案（第二次）**:
-
-在 `session.idle` 处增加 `_seen_assistant_message` 判断：只有已经看到文字内容时才发出 DONE；否则这是工具调用步骤的中间 idle，文字回复尚未生成，应继续监听。
-
-```python
-elif event_type == "session.idle":
-    if self._seen_assistant_message:
-        return StreamChunk(type=StreamChunkType.DONE, data="")
-    return None  # 工具调用步骤的假 idle，继续等待文字回复
-```
-
-**根本原因（第二次修复后残留）**:
-
-`_seen_assistant_message` 只在 `message.part.delta` 的 `field == "text"` 事件到达时置为 True。但部分场景（工具调用后模型直接输出完整文字，无流式 delta）下，文字只通过 `message.part.updated` type=text 发出。原代码用 `not self._seen_assistant_message` 来跳过用户输入文字，误将助手的文字也一并跳过，导致内容丢失、最终 `session.idle` 仍看到 False、流挂起或以空内容结束。
-
-**修复方案（第三次）**:
-
-引入 `_user_text_skipped` 和 `_emitted_text_length` 两个状态变量：
-
-- `_user_text_skipped`：第一个 text part（用户输入）到达时置 True，仅跳过这一个。
-- `_emitted_text_length`：记录通过 delta 已发出的文字字节数，`message.part.updated` 中仅发出超出此长度的新增内容，防止与 delta 重复。
-
-```python
-if part_type == "text":
-    if not self._user_text_skipped:
-        self._user_text_skipped = True
-        return None
-    text = part.get("text", "")
-    if text and len(text) > self._emitted_text_length:
-        new_content = text[self._emitted_text_length:]
-        self._emitted_text_length = len(text)
-        self._seen_assistant_message = True
-        return StreamChunk(type=StreamChunkType.CONTENT, data=new_content)
-    return None
-```
-
-三个变量均在 `execute_stream` 开始时重置。
-
-**根本原因（第三次修复后残留 - 多轮对话问题）**:
-
-第三次修复使用"是否是第一个 text part"来识别用户输入，但在**多轮对话**场景下存在问题：
-
-SSE 事件流 `/event` 是**异步全局流**，同一 session 的多轮对话共享同一个底层 SSE 连接。当第二次对话开始时：
-1. `execute_stream` 重置 `_user_text_skipped = False`
-2. 但 SSE 流缓冲区中可能还有**上一轮对话**的残留事件（如上一轮的工具调用结果、step-finish 等）
-3. 这些残留事件提前触发了 `_user_text_skipped = True`
-4. 当第二轮真正的用户输入到达时，由于 `_user_text_skipped` 已经是 `True`，这段输入被错误地**当作 AI 回复输出**
-5. 然后真正的 AI 回复到达时，要么被跳过，要么导致状态混乱，最终 `session.idle` 时 `_seen_assistant_message` 为 False，流挂起或以空内容结束
-
-表现为"第一次执行命令成功，第二次对话调用工具就没有正式回复"。
-
-**修复方案（第四次）**:
-
-不再使用"是否是第一个 text part"的启发式方法，而是**通过内容匹配来识别用户输入**：
-
-1. 在 `execute_stream` 中计算当前用户输入的 hash (`_current_prompt_hash`)
-2. 在 `parse_chunk` 中，将 text part 的内容与保存的用户输入 hash 比较
-3. 只有内容与当前用户输入匹配时才跳过
-
-```python
-# execute_stream 中
-self._current_prompt_hash = hash(prompt.strip())
-
-# parse_chunk 中
-if not self._user_text_skipped and self._current_prompt_hash is not None:
-    text_hash = hash(text.strip()) if text else None
-    if text_hash == self._current_prompt_hash:
-        self._user_text_skipped = True
-        return None  # 跳过用户输入
-# 其余是 AI 回复，正常处理
-```
-
-这样无论 SSE 流中有多少历史事件，都能正确识别并跳过**当前**用户输入，而不会错误处理 AI 回复。
-
-**根本原因（第四次修复后残留 - 实例变量被多轮对话覆盖）**:
-
-第四次修复（添加锁）试图解决并发问题，但问题的根源是**实例变量在多轮对话之间共享**。
-
-`_seen_assistant_message`, `_user_text_skipped`, `_emitted_text_length`, `_current_prompt_hash` 都是实例变量。当多轮对话并发执行时：
-
-1. 第1轮对话开始执行，`execute_stream` 重置实例变量
-2. 第1轮对话开始监听 SSE 事件
-3. 第2轮对话开始执行，`execute_stream` **再次重置同样的实例变量** ← 覆盖了第1轮的状态！
-4. 第1轮收到 AI 回复，设置 `_seen_assistant_message = True`
-5. 第2轮也收到事件（或重置后没有收到），但状态已经混乱
-6. 第1轮收到 `session.idle`，检查 `_seen_assistant_message`，如果此时被第2轮覆盖为 False，就不会发出 DONE
-
-表现为"两轮对话都只有思考没有正式回复"或"第二轮没有正式回复"。
-
-**修复方案（第五次 - 最终修复）**:
-
-将**状态封装为局部变量**，每轮对话创建独立的 `StreamState` 对象，通过参数传递给 `parse_chunk` 和 `_listen_events`：
-
-```python
-@dataclass
-class StreamState:
-    seen_assistant_message: bool = False
-    user_text_skipped: bool = False
-    emitted_text_length: int = 0
-    prompt_hash: Optional[int] = None
-    current_stats: Optional[TokenStats] = None
-
-# execute_stream 中创建局部状态（每轮对话独立）
-state = StreamState(prompt_hash=hash(prompt.strip()))
-
-# 通过参数传递给 _listen_events
-async for chunk in self._listen_events(self._client, session.id, working_dir, state):
-    yield chunk
-
-# parse_chunk 使用局部状态
-def parse_chunk(self, raw_line: bytes, state: StreamState) -> Optional[StreamChunk]:
-    # 使用 state.seen_assistant_message 而非 self._seen_assistant_message
-    ...
-```
-
-这样每轮对话有完全独立的状态，互不干扰。
-
----
-
-**完整修复过程总结**:
-
-| 修复次数 | 问题 | 方案 | 状态 |
-|---------|------|------|------|
-| 第1次 | `step-finish` 误触发 DONE | 改为 `session.idle` 触发 | ❌ 未完全解决 |
-| 第2次 | `session.idle` 也是中间步骤信号 | 增加 `_seen_assistant_message` 判断 | ❌ 未完全解决 |
-| 第3次 | `message.part.updated` 被误跳过 | 引入 `_user_text_skipped` 和 `_emitted_text_length` | ❌ 未完全解决 |
-| 第4次 | "第一个 text part" 启发式在多轮对话失效 | 使用 prompt hash 内容匹配识别用户输入 | ❌ 未完全解决 |
-| 第5次 | 多轮对话并发覆盖实例变量 | 将状态封装为 `StreamState` 局部变量 | ✅ 已解决 |
-
-**关键教训**: 
-- Python 异步生成器 `async def execute_stream(...) -> AsyncIterator[...]` 看似独立，但如果使用**实例变量**存储状态，多轮对话并发时会相互覆盖
-- 状态应该**随调用栈传递**（局部变量/参数），而非存储在**对象实例**上
 
 **相关文件**: `src/adapters/opencode.py`
 
 ---
 
-### Issue #26: `max_sessions` 默认值三处不一致
+### Issue #28: 工具调用后无文字回复（流提前终止）
 
-**状态**: 📋 待修复
-**优先级**: 低
-**发现时间**: 2026-03-21
+**状态**: ✅ 已修复（六次修复）
+**时间**: 2026-03-22
 
 **问题描述**:
-`max_sessions` 的默认值在三处不一致：
-- `config.py:21`（dataclass 字段默认值）：`10`
-- `config.py:145`（env 变量解析）：`int(os.getenv("MAX_SESSIONS", "15"))`
-- `config.py:207`（YAML 解析）：`session_data.get("max_sessions", 15)`
+模型调用工具后，飞书卡片显示"✅ 已完成"但无文字回复。
 
-**修复方案**:
-统一为同一个值（建议 15），或抽取为模块级常量 `DEFAULT_MAX_SESSIONS = 15`。
+**根本原因**:
+`session.idle` 在每个步骤完成后都会触发（非一次性信号），导致在工具调用步骤就提前终止流，未等待文字回复生成。
 
-**相关文件**: `src/config.py`
+**最终修复方案**:
+1. 将状态封装为局部变量 `StreamState`，每轮对话独立
+2. 通过内容 hash 匹配识别用户输入（而非顺序启发式）
+3. `session.idle` 时检查 `seen_assistant_message`，仅在有文字内容时才发出 DONE
+
+**相关文件**: `src/adapters/opencode.py`
 
 ---
 
-### 5. Codex 适配器完整化（对齐 OpenCode 功能）
+## 已知问题
 
-**状态**: 📋 待规划
-**优先级**: 中
-**调研时间**: 2026-03-21
+### LSP 类型检查误报
 
-#### 背景
+**状态**: ⚠️ 已知，不影响运行
+**优先级**: 低
 
-当前 `src/adapters/codex.py` 是基于旧版推测写成的占位实现，存在以下问题：
+VS Code / LSP 显示大量类型错误（如 `"v1" is not a known attribute of "None"`），系 lark_oapi SDK 类型定义不完整所致。仅影响开发体验，不影响实际运行。
 
-1. **JSON 事件解析错误** — `parse_chunk` 查找的字段（`response`、`delta`、`command`、`done`）不匹配真实 Codex `--json` 输出格式。实际格式（v0.44+）为 `{"type": "agent_message", ...}`、`{"type": "turn.completed", ...}` 等
-2. **`--history` 参数不存在** — 代码尝试传 `--history <tmpfile>` 参数，但该 flag 从未实现（GitHub issue #118，已关闭为"不计划"）；上下文持久化靠 session resume 机制
-3. **图片支持缺失** — `attachments` 参数被完全忽略，Codex 实际支持 `--image path[,path...]`
-4. **无 TUI 命令支持** — 缺少 `/new`、`/session`、`/model`、`/reset` 命令
+---
 
-#### OpenCode vs Codex 功能对比
+## 技术决策记录
 
-| 功能 | OpenCode 实现方式 | Codex 实现方式 | 当前状态 |
-|------|-----------------|---------------|---------|
-| 流式输出 | HTTP/SSE `GET /event` | `--json` stdout JSONL | ❌ 解析格式错误 |
-| 会话创建 | `POST /session` | 直接运行（新进程） | ❌ 缺失 |
-| 会话续接 | session ID + HTTP | `codex exec resume <ID>` | ❌ 缺失 |
-| 会话重置 `/reset` | 新建 session | 不传 `resume`，新起进程 | ❌ 缺失 |
-| 会话列表 `/session` | `GET /session` | 读 `~/.codex/sessions/` 目录 | ❌ 缺失 |
-| 模型切换 `/model` | 更新 config | `--model` flag | ❌ 缺失 |
-| 图片输入 | FilePart base64 data URL | `--image path[,path...]` | ❌ 缺失 |
-| Agent 切换 | `GET /agent` + config | 无（Codex 无 agent 系统） | N/A |
+### Issue #10: /session 命令在飞书客户端下作用有限
 
-#### 需要修改的内容
+**状态**: 🔍 待讨论
+**优先级**: 低
 
-1. **重写 `parse_chunk`** — 按真实 Codex event schema 解析：
-   - `type: "agent_message"` → `StreamChunkType.CONTENT`
-   - `type: "turn.completed"` → `StreamChunkType.DONE`
-   - `type: "turn.failed"` / `type: "error"` → `StreamChunkType.ERROR`
+**问题描述**:
+`/session` 命令返回纯文本会话列表，用户回复数字切换。在飞书客户端中存在局限：
+1. 使用场景稀少 — 飞书用户通常只维护一个对话上下文
+2. 列表不美观 — 纯文本格式，与卡片化命令风格不一致
+3. `/new` 已覆盖"开启新会话"的核心需求
 
-2. **Session ID 追踪** — 从 `--json` 输出中提取 session ID，持久化到 `.sessions/` 供 resume 使用
-
-3. **`execute_stream` 支持 resume** — 有 session ID 时用 `codex exec resume <ID>`，否则新起会话
-
-4. **图片支持** — 将 `attachments` 中的本地路径转为 `--image path1,path2` 参数（支持 PNG/JPEG）
-
-5. **TUI 命令** — 实现以下方法（对齐 OpenCode 接口）：
-   - `create_new_session()` — 清除当前 session ID，下次调用自动新建
-   - `list_sessions()` — 扫描 `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` 目录
-   - `switch_session(session_id)` — 设置当前 session ID 为指定值
-   - `reset_session()` — 等同 `create_new_session()`
-   - `list_models()` — 从 `config.yaml models` 列表读取（与 OpenCode 相同方式）
-   - `switch_model(model_id)` — 更新 `config["default_model"]`（与 OpenCode 相同）
-
-#### 技术参考
-
-- [Codex 非交互模式文档](https://developers.openai.com/codex/noninteractive)
-- [Codex CLI 命令参考](https://developers.openai.com/codex/cli/reference)
-- [GitHub Issue #4776: JSON 输出格式漂移](https://github.com/openai/codex/issues/4776)（已修复，event 字段名为 `type` 非 `item_type`）
-- [GitHub Issue #118: streaming/history 标志](https://github.com/openai/codex/issues/118)（`--history` 不会实现，用 resume）
-
+**暂定决策**:
+不做修改，保留现状，等待进一步使用反馈后再决定去留。

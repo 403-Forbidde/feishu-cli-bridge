@@ -1,8 +1,10 @@
 """飞书消息处理器"""
 
+import asyncio
 import json
 import logging
 import mimetypes
+import time
 from typing import Optional, List, Dict
 from pathlib import Path
 
@@ -12,7 +14,6 @@ from .formatter import parse_mention
 from .dedup import MessageDeduplicator
 from ..adapters import create_adapter, BaseCLIAdapter, StreamChunkType
 from ..adapters.base import Message, TokenStats
-from ..session import SessionManager
 from ..config import Config
 from ..tui_commands import create_router, TUIResultType
 from ..tui_commands.base import CommandContext
@@ -25,14 +26,15 @@ logger = logging.getLogger(__name__)
 class MessageHandler:
     """飞书消息处理器"""
 
-    def __init__(self, config: Config, feishu_api: FeishuAPI, project_manager: Optional[ProjectManager] = None):
+    def __init__(
+        self,
+        config: Config,
+        feishu_api: FeishuAPI,
+        project_manager: Optional[ProjectManager] = None,
+    ):
         self.config = config
         self.api = feishu_api
         self.project_manager = project_manager
-        self.session_mgr = SessionManager(
-            storage_dir=config.session.storage_dir,
-            max_sessions=config.session.max_sessions,
-        )
         self.bot_user_id: Optional[str] = None
         self.adapters: dict = {}
         self.dedup = MessageDeduplicator()  # 消息去重
@@ -88,6 +90,7 @@ class MessageHandler:
             if project and project.exists():
                 return str(project.path)
         import os
+
         return os.getcwd()
 
     async def handle_message(self, event_data: dict):
@@ -139,24 +142,37 @@ class MessageHandler:
                 await self._handle_interactive_reply(message)
                 return
 
-        # 方式2：如果没有 parent_id 但内容是简单数字（1-10）或模型ID格式，尝试匹配最近的交互式消息
-        content_stripped = content.strip()
-        is_digit = content_stripped.isdigit() and 1 <= int(content_stripped) <= 10
-        is_model_id = "/" in content_stripped and not content_stripped.startswith("/")
-
-        if is_digit or is_model_id:
-            logger.debug(
-                f"🔍 检测到可能的交互式回复: {content_stripped}，尝试匹配最近交互式消息"
-            )
-            is_interactive = self.tui_router.is_interactive_reply(
+        # 方式2：如果没有 parent_id，尝试匹配最近的交互式消息
+        # 对于某些交互类型（如 rename_session），接受任何非命令内容
+        if not message.parent_id:
+            # 先检查是否有等待中的 rename_session 交互
+            target = self.tui_router.get_interactive_target(
                 user_id=message.sender_id,
                 chat_id=message.chat_id,
-                reply_to_message_id=None,
             )
-            logger.debug(f"🔍 通过最近消息匹配: {is_interactive}")
-            if is_interactive:
+            if target and target.interactive_id == "rename_session":
+                logger.debug(f"🔍 匹配到 rename_session 交互，接受内容: {content[:50]}")
                 await self._handle_interactive_reply(message)
                 return
+
+            # 对于其他交互类型，使用内容启发式匹配
+            content_stripped = content.strip()
+            is_digit = content_stripped.isdigit() and 1 <= int(content_stripped) <= 10
+            is_model_id = "/" in content_stripped and not content_stripped.startswith("/")
+
+            if is_digit or is_model_id:
+                logger.debug(
+                    f"🔍 检测到可能的交互式回复: {content_stripped}，尝试匹配最近交互式消息"
+                )
+                is_interactive = self.tui_router.is_interactive_reply(
+                    user_id=message.sender_id,
+                    chat_id=message.chat_id,
+                    reply_to_message_id=None,
+                )
+                logger.debug(f"🔍 通过最近消息匹配: {is_interactive}")
+                if is_interactive:
+                    await self._handle_interactive_reply(message)
+                    return
 
         # 优先检测项目管理命令（/pa /pc /pl /ps /prm /pi /project）
         if is_project_command(content):
@@ -198,19 +214,6 @@ class MessageHandler:
         # 获取工作目录
         working_dir = await self._get_working_dir()
 
-        # 获取或创建会话
-        session = self.session_mgr.get_or_create(
-            user_id=message.sender_id, cli_type=cli_type, working_dir=working_dir
-        )
-
-        # 关联会话到当前项目并更新活跃时间
-        if self.project_manager and session:
-            current_project = await self.project_manager.get_current_project()
-            if current_project:
-                await self.project_manager.add_session_to_project(
-                    current_project.name, session.session_id
-                )
-
         # 获取适配器
         adapter = self.adapters.get(cli_type)
         if not adapter:
@@ -223,18 +226,20 @@ class MessageHandler:
         typing_reaction_id = await self.api.add_typing_reaction(message.message_id)
 
         try:
-            # 添加用户消息到会话
-            self.session_mgr.add_message(session.session_id, "user", content)
+            # 获取当前会话 ID（_get_or_create_session 会自动从服务器恢复或创建）
+            session_id = adapter.get_session_id(working_dir) if hasattr(adapter, "get_session_id") else None
 
-            # 获取对话历史
-            history = self.session_mgr.get_messages(
-                session.session_id, limit=self.config.session.max_history * 2
-            )
+            # 从 OpenCode 获取消息历史作为上下文
+            history: List[Message] = []
+            if session_id and hasattr(adapter, "get_session_messages"):
+                history = await adapter.get_session_messages(session_id)
+                if len(history) > self.config.session.max_history * 2:
+                    history = history[-self.config.session.max_history * 2 :]
 
             # 执行 CLI 命令
             stream = adapter.execute_stream(
                 prompt=content,
-                context=history[:-1],  # 排除刚添加的用户消息
+                context=history,  # 使用从 OpenCode 获取的历史
                 working_dir=working_dir,
                 attachments=message.attachments,
             )
@@ -253,15 +258,36 @@ class MessageHandler:
                 reply_to_message_id=message.message_id,
             )
 
-            # 添加助手回复到会话
-            if full_response:
-                self.session_mgr.add_message(
-                    session.session_id, "assistant", full_response
-                )
+            # 流完成后，从适配器获取当前实际使用的 session_id（可能是新建的）
+            current_session_id = (
+                adapter.get_session_id(working_dir)
+                if hasattr(adapter, "get_session_id")
+                else session_id
+            ) or session_id
 
-            # 更新统计信息
-            stats = adapter.get_stats(history, full_response or "")
-            self.session_mgr.update_stats(session.session_id, stats)
+            # 检测是否需要自动生成会话标题（标题还是临时生成名时替换）
+            should_generate_title = False
+            if current_session_id and hasattr(adapter, "list_sessions"):
+                sessions = await adapter.list_sessions(limit=20)
+                for s in sessions:
+                    if s.get("id") == current_session_id:
+                        title = s.get("title", "")
+                        if title.startswith("Feishu Bridge "):
+                            should_generate_title = True
+                        break
+
+            if should_generate_title and full_response:
+                # 异步生成标题（不阻塞主流程）
+                asyncio.create_task(
+                    self._auto_generate_session_title(
+                        current_session_id,
+                        content,
+                        full_response,
+                        working_dir,
+                        adapter,
+                        message.chat_id,
+                    )
+                )
 
         except Exception as e:
             logger.exception("Error processing message")
@@ -326,12 +352,14 @@ class MessageHandler:
                 image_key = content_obj.get("image_key", "")
                 if image_key:
                     text = "[图片]"
-                    pending_attachments = [{
-                        "file_key": image_key,
-                        "resource_type": "image",
-                        "filename": f"{image_key}.jpg",
-                        "mime_type": "image/jpeg",
-                    }]
+                    pending_attachments = [
+                        {
+                            "file_key": image_key,
+                            "resource_type": "image",
+                            "filename": f"{image_key}.jpg",
+                            "mime_type": "image/jpeg",
+                        }
+                    ]
             elif msg_type == "file":
                 file_key = content_obj.get("file_key", "")
                 file_name = content_obj.get("file_name", "attachment")
@@ -339,12 +367,14 @@ class MessageHandler:
                     mime_type, _ = mimetypes.guess_type(file_name)
                     mime_type = mime_type or "application/octet-stream"
                     text = f"[文件: {file_name}]"
-                    pending_attachments = [{
-                        "file_key": file_key,
-                        "resource_type": "file",
-                        "filename": file_name,
-                        "mime_type": mime_type,
-                    }]
+                    pending_attachments = [
+                        {
+                            "file_key": file_key,
+                            "resource_type": "file",
+                            "filename": file_name,
+                            "mime_type": mime_type,
+                        }
+                    ]
 
             # 获取回复的消息 ID
             parent_id = message_data.get("parent_id") or message_data.get("root_id")
@@ -396,12 +426,14 @@ class MessageHandler:
                     if isinstance(sub_item, dict) and sub_item.get("tag") == "img":
                         image_key = sub_item.get("image_key", "")
                         if image_key:
-                            attachments.append({
-                                "file_key": image_key,
-                                "resource_type": "image",
-                                "filename": f"{image_key}.jpg",
-                                "mime_type": "image/jpeg",
-                            })
+                            attachments.append(
+                                {
+                                    "file_key": image_key,
+                                    "resource_type": "image",
+                                    "filename": f"{image_key}.jpg",
+                                    "mime_type": "image/jpeg",
+                                }
+                            )
         return attachments
 
     async def _download_attachments(
@@ -417,34 +449,44 @@ class MessageHandler:
                 filename=att["filename"],
             )
             if path:
-                result.append({
-                    "path": path,
-                    "mime_type": att["mime_type"],
-                    "filename": att["filename"],
-                })
+                result.append(
+                    {
+                        "path": path,
+                        "mime_type": att["mime_type"],
+                        "filename": att["filename"],
+                    }
+                )
             else:
                 logger.warning(f"Failed to download attachment: {att['file_key']}")
         return result
 
     async def _handle_reset(self, message: FeishuMessage):
-        """处理重置命令"""
+        """处理重置命令 - 在 OpenCode 中重置当前会话"""
         working_dir = await self._get_working_dir()
 
-        # 尝试重置所有可能的 CLI 类型会话
-        cleared = []
-        for cli_type in self.adapters.keys():
-            session_id = self.session_mgr._generate_session_id(
-                message.sender_id, cli_type, working_dir
-            )
-            if self.session_mgr.clear_session(session_id):
-                cleared.append(cli_type)
+        # 获取当前适配器
+        cli_type = self._detect_cli_type("")
+        if not cli_type:
+            await self.api.send_text(message.chat_id, "⚠️ 没有可用的 CLI 工具")
+            return
 
-        if cleared:
-            await self.api.send_text(
-                message.chat_id, f"✅ 已清空上下文: {', '.join(cleared)}"
-            )
+        adapter = self.adapters.get(cli_type)
+        if not adapter:
+            await self.api.send_text(message.chat_id, f"⚠️ CLI 工具 {cli_type} 未启用")
+            return
+
+        # 调用适配器重置会话
+        if hasattr(adapter, "reset_session"):
+            success = await adapter.reset_session()
+            if success:
+                await self.api.send_text(
+                    message.chat_id,
+                    f"✅ 已重置当前会话\n\n🗑️ 对话历史已清空\n💡 可以开始新的对话了",
+                )
+            else:
+                await self.api.send_text(message.chat_id, "❌ 重置会话失败")
         else:
-            await self.api.send_text(message.chat_id, "ℹ️ 没有找到活动的会话")
+            await self.api.send_text(message.chat_id, "⚠️ 当前适配器不支持重置会话")
 
     async def _handle_help(self, message: FeishuMessage):
         """处理帮助命令"""
@@ -497,12 +539,17 @@ class MessageHandler:
                 elif result.type == TUIResultType.ERROR:
                     await self.api.send_text(message.chat_id, f"❌ {result.content}")
                 elif result.type in (TUIResultType.CARD, TUIResultType.INTERACTIVE):
-                    from .card_builder import build_card_content
+                    # 如果 metadata 中包含 card_json，直接使用
+                    if result.metadata and "card_json" in result.metadata:
+                        card_data = result.metadata["card_json"]
+                        await self.api.send_card_message(message.chat_id, card_data)
+                    else:
+                        from .card_builder import build_card_content
 
-                    card_data = build_card_content(
-                        "complete", {"text": result.content, "metadata": {}}
-                    )
-                    await self.api.send_card_message(message.chat_id, card_data)
+                        card_data = build_card_content(
+                            "complete", {"text": result.content, "metadata": {}}
+                        )
+                        await self.api.send_card_message(message.chat_id, card_data)
 
         except Exception as e:
             logger.exception("Error processing interactive reply")
@@ -548,20 +595,32 @@ class MessageHandler:
 
             if action_type == "switch_project":
                 if not self.project_manager:
-                    return {"toast": {"type": "error", "content": "项目管理功能未启用",
-                                      "i18n": {"zh_cn": "项目管理功能未启用"}}}
+                    return {
+                        "toast": {
+                            "type": "error",
+                            "content": "项目管理功能未启用",
+                            "i18n": {"zh_cn": "项目管理功能未启用"},
+                        }
+                    }
                 project_name = button_value.get("project_name")
                 if not project_name:
-                    return {"toast": {"type": "error", "content": "未指定项目",
-                                      "i18n": {"zh_cn": "未指定项目"}}}
+                    return {
+                        "toast": {
+                            "type": "error",
+                            "content": "未指定项目",
+                            "i18n": {"zh_cn": "未指定项目"},
+                        }
+                    }
 
                 from ..project.models import ProjectError
+
                 try:
                     project = await self.project_manager.switch_project(project_name)
                     logger.info(f"卡片回调切换项目成功: {project_name}")
 
                     # 构建更新后的项目列表卡片
                     from .card_builder import build_project_list_card
+
                     projects = await self.project_manager.list_projects()
                     updated_card = build_project_list_card(projects, project.name)
 
@@ -577,18 +636,36 @@ class MessageHandler:
                         },
                     }
                 except ProjectError as e:
-                    return {"toast": {"type": "error", "content": e.message,
-                                      "i18n": {"zh_cn": e.message}}}
+                    return {
+                        "toast": {
+                            "type": "error",
+                            "content": e.message,
+                            "i18n": {"zh_cn": e.message},
+                        }
+                    }
 
-            elif action_type in ("delete_project_confirm", "delete_project_cancel",
-                                "delete_project_confirmed"):
+            elif action_type in (
+                "delete_project_confirm",
+                "delete_project_cancel",
+                "delete_project_confirmed",
+            ):
                 if not self.project_manager:
-                    return {"toast": {"type": "error", "content": "项目管理功能未启用",
-                                      "i18n": {"zh_cn": "项目管理功能未启用"}}}
+                    return {
+                        "toast": {
+                            "type": "error",
+                            "content": "项目管理功能未启用",
+                            "i18n": {"zh_cn": "项目管理功能未启用"},
+                        }
+                    }
                 project_name = button_value.get("project_name")
                 if not project_name:
-                    return {"toast": {"type": "error", "content": "未指定项目",
-                                      "i18n": {"zh_cn": "未指定项目"}}}
+                    return {
+                        "toast": {
+                            "type": "error",
+                            "content": "未指定项目",
+                            "i18n": {"zh_cn": "未指定项目"},
+                        }
+                    }
 
                 from ..project.models import ProjectError
                 from .card_builder import build_project_list_card
@@ -643,23 +720,41 @@ class MessageHandler:
                                 "content": f"✅ 已删除项目: {display_name}",
                                 "i18n": {"zh_cn": f"✅ 已删除项目: {display_name}"},
                             },
-                            "update_card": {"message_id": message_id, "card": updated_card},
+                            "update_card": {
+                                "message_id": message_id,
+                                "card": updated_card,
+                            },
                         }
                     except ProjectError as e:
-                        return {"toast": {"type": "error", "content": e.message,
-                                          "i18n": {"zh_cn": e.message}}}
+                        return {
+                            "toast": {
+                                "type": "error",
+                                "content": e.message,
+                                "i18n": {"zh_cn": e.message},
+                            }
+                        }
 
             elif action_type == "switch_model":
                 model_id = button_value.get("model_id")
                 cli_type = button_value.get("cli_type", "opencode")
                 if not model_id:
-                    return {"toast": {"type": "error", "content": "未指定模型",
-                                      "i18n": {"zh_cn": "未指定模型"}}}
+                    return {
+                        "toast": {
+                            "type": "error",
+                            "content": "未指定模型",
+                            "i18n": {"zh_cn": "未指定模型"},
+                        }
+                    }
 
                 adapter = self.adapters.get(cli_type)
                 if not adapter or not hasattr(adapter, "switch_model"):
-                    return {"toast": {"type": "error", "content": "适配器不支持模型切换",
-                                      "i18n": {"zh_cn": "适配器不支持模型切换"}}}
+                    return {
+                        "toast": {
+                            "type": "error",
+                            "content": "适配器不支持模型切换",
+                            "i18n": {"zh_cn": "适配器不支持模型切换"},
+                        }
+                    }
 
                 await adapter.switch_model(model_id)
                 logger.info(f"卡片回调切换模型成功: {model_id}")
@@ -667,8 +762,18 @@ class MessageHandler:
                 # 重绘卡片，高亮新选中的模型
                 models = await adapter.list_models()
                 from .card_builder import build_model_select_card
-                updated_card = build_model_select_card(models, model_id, cli_type=cli_type)
-                model_name = next((m.get("name", model_id) for m in models if m.get("full_id") == model_id), model_id)
+
+                updated_card = build_model_select_card(
+                    models, model_id, cli_type=cli_type
+                )
+                model_name = next(
+                    (
+                        m.get("name", model_id)
+                        for m in models
+                        if m.get("full_id") == model_id
+                    ),
+                    model_id,
+                )
                 return {
                     "toast": {
                         "type": "success",
@@ -685,13 +790,23 @@ class MessageHandler:
                 agent_id = button_value.get("agent_id")
                 cli_type = button_value.get("cli_type", "opencode")
                 if not agent_id:
-                    return {"toast": {"type": "error", "content": "未指定 agent",
-                                      "i18n": {"zh_cn": "未指定 agent"}}}
+                    return {
+                        "toast": {
+                            "type": "error",
+                            "content": "未指定 agent",
+                            "i18n": {"zh_cn": "未指定 agent"},
+                        }
+                    }
 
                 adapter = self.adapters.get(cli_type)
                 if not adapter or not hasattr(adapter, "switch_agent"):
-                    return {"toast": {"type": "error", "content": "适配器不支持模式切换",
-                                      "i18n": {"zh_cn": "适配器不支持模式切换"}}}
+                    return {
+                        "toast": {
+                            "type": "error",
+                            "content": "适配器不支持模式切换",
+                            "i18n": {"zh_cn": "适配器不支持模式切换"},
+                        }
+                    }
 
                 await adapter.switch_agent(agent_id)
                 logger.info(f"卡片回调切换 agent 成功: {agent_id}")
@@ -699,7 +814,10 @@ class MessageHandler:
                 # 重绘卡片，高亮新选中的 agent
                 agents = await adapter.list_agents()
                 from .card_builder import build_mode_select_card
-                updated_card = build_mode_select_card(agents, agent_id, cli_type=cli_type)
+
+                updated_card = build_mode_select_card(
+                    agents, agent_id, cli_type=cli_type
+                )
                 return {
                     "toast": {
                         "type": "success",
@@ -712,15 +830,521 @@ class MessageHandler:
                     },
                 }
 
+            elif action_type == "test_card_action":
+                # Schema 2.0 测试卡片交互
+                sub_action = button_value.get("sub_action")
+                message_id = event_data.get("context", {}).get("open_message_id")
+
+                logger.info(
+                    f"测试卡片回调: sub_action={sub_action}, message_id={message_id}"
+                )
+
+                from .card_builder import (
+                    build_test_card_v2_details,
+                    build_test_card_v2_data,
+                    build_test_card_v2_closed,
+                )
+
+                if sub_action == "show_details":
+                    updated_card = build_test_card_v2_details()
+                    return {
+                        "toast": {
+                            "type": "success",
+                            "content": "✅ 已切换到详情视图",
+                            "i18n": {"zh_cn": "✅ 已切换到详情视图"},
+                        },
+                        "update_card": {
+                            "message_id": message_id,
+                            "card": updated_card,
+                        },
+                    }
+
+                elif sub_action == "show_data":
+                    updated_card = build_test_card_v2_data()
+                    return {
+                        "toast": {
+                            "type": "success",
+                            "content": "✅ 已切换到数据视图",
+                            "i18n": {"zh_cn": "✅ 已切换到数据视图"},
+                        },
+                        "update_card": {
+                            "message_id": message_id,
+                            "card": updated_card,
+                        },
+                    }
+
+                elif sub_action == "close_test":
+                    updated_card = build_test_card_v2_closed()
+                    return {
+                        "toast": {
+                            "type": "success",
+                            "content": "✅ 测试已完成",
+                            "i18n": {"zh_cn": "✅ 测试已完成"},
+                        },
+                        "update_card": {
+                            "message_id": message_id,
+                            "card": updated_card,
+                        },
+                    }
+
+                else:
+                    return {
+                        "toast": {
+                            "type": "error",
+                            "content": "未知操作",
+                            "i18n": {"zh_cn": "未知操作"},
+                        }
+                    }
+
+            elif action_type == "create_new_session":
+                # 创建新会话
+                cli_type = button_value.get("cli_type", "opencode")
+                adapter = self.adapters.get(cli_type)
+                if not adapter or not hasattr(adapter, "create_new_session"):
+                    return {
+                        "toast": {
+                            "type": "error",
+                            "content": "适配器不支持创建新会话",
+                            "i18n": {"zh_cn": "适配器不支持创建新会话"},
+                        }
+                    }
+
+                try:
+                    # 优先使用按钮中传递的 working_dir，其次从当前项目获取
+                    working_dir = button_value.get("working_dir", "")
+                    if not working_dir and self.project_manager:
+                        current_project = (
+                            await self.project_manager.get_current_project()
+                        )
+                        working_dir = current_project.path if current_project else ""
+
+                    new_session = await adapter.create_new_session(
+                        working_dir=working_dir
+                    )
+                    new_session_id = new_session.get("id", "") if new_session else ""
+                    logger.info(f"卡片回调创建新会话成功: {new_session_id}")
+
+                    # 刷新会话列表卡片（按当前项目目录过滤）
+                    session_data_list = []
+                    if hasattr(adapter, "list_sessions"):
+                        all_sessions = await adapter.list_sessions(limit=20)
+                        for session in [s for s in all_sessions if s.get("directory") == str(working_dir)]:
+                            sid = session.get("id", "")
+                            slug = session.get("slug", "")
+                            display_id = slug if slug else sid[-8:] if len(sid) >= 8 else sid
+                            session_data_list.append({
+                                "session_id": sid,
+                                "display_id": display_id,
+                                "title": session.get("title", "未命名会话"),
+                                "created_at": session.get("created_at", 0),
+                                "updated_at": session.get("updated_at", 0),
+                                "is_current": sid == new_session_id,
+                            })
+
+                    from .card_builder import build_session_list_card
+
+                    updated_card = build_session_list_card(
+                        sessions=session_data_list,
+                        current_session_id=new_session_id,
+                        cli_type=cli_type,
+                        working_dir=working_dir,
+                    )
+
+                    return {
+                        "toast": {
+                            "type": "success",
+                            "content": "✅ 已创建新会话",
+                            "i18n": {"zh_cn": "✅ 已创建新会话"},
+                        },
+                        "update_card": {
+                            "message_id": message_id,
+                            "card": updated_card,
+                        },
+                    }
+                except Exception as e:
+                    logger.exception("创建新会话失败")
+                    return {
+                        "toast": {
+                            "type": "error",
+                            "content": f"创建失败: {str(e)}",
+                            "i18n": {"zh_cn": f"创建失败: {str(e)}"},
+                        }
+                    }
+
+            elif action_type == "switch_session":
+                # 切换会话 - 使用简化的映射架构（符合实施计划 Phase 1）
+                session_id = button_value.get("session_id")
+                cli_type = button_value.get("cli_type", "opencode")
+                working_dir = button_value.get("working_dir", "")
+
+                if not session_id:
+                    return {
+                        "toast": {
+                            "type": "error",
+                            "content": "未指定会话ID",
+                            "i18n": {"zh_cn": "未指定会话ID"},
+                        }
+                    }
+
+                adapter = self.adapters.get(cli_type)
+                if not adapter or not hasattr(adapter, "switch_session"):
+                    return {
+                        "toast": {
+                            "type": "error",
+                            "content": "适配器不支持切换会话",
+                            "i18n": {"zh_cn": "适配器不支持切换会话"},
+                        }
+                    }
+
+                try:
+                    # 使用按钮中传递的 working_dir，或从当前项目获取
+                    if not working_dir:
+                        current_project = (
+                            await self.project_manager.get_current_project()
+                        )
+                        working_dir = current_project.path if current_project else ""
+
+                    # 直接使用 session_id（就是 OpenCode 真实 ID）进行切换
+                    success = await adapter.switch_session(session_id, working_dir)
+                    if success:
+                        logger.info(f"卡片回调切换会话成功: {session_id}")
+
+                        # 刷新会话列表卡片（按当前项目目录过滤）
+                        session_data_list = []
+                        if hasattr(adapter, "list_sessions"):
+                            all_sessions = await adapter.list_sessions(limit=20)
+                            for session in [s for s in all_sessions if s.get("directory") == str(working_dir)]:
+                                sid = session.get("id", "")
+                                slug = session.get("slug", "")
+                                display_id = slug if slug else sid[-8:] if len(sid) >= 8 else sid
+                                session_data_list.append({
+                                    "session_id": sid,
+                                    "display_id": display_id,
+                                    "title": session.get("title", "未命名会话"),
+                                    "created_at": session.get("created_at", 0),
+                                    "updated_at": session.get("updated_at", 0),
+                                    "is_current": sid == session_id,
+                                })
+
+                        from .card_builder import build_session_list_card
+
+                        updated_card = build_session_list_card(
+                            sessions=session_data_list,
+                            current_session_id=session_id,
+                            cli_type=cli_type,
+                            working_dir=working_dir,
+                        )
+
+                        return {
+                            "toast": {
+                                "type": "success",
+                                "content": "✅ 已切换会话",
+                                "i18n": {"zh_cn": "✅ 已切换会话"},
+                            },
+                            "update_card": {
+                                "message_id": message_id,
+                                "card": updated_card,
+                            },
+                        }
+                    else:
+                        return {
+                            "toast": {
+                                "type": "error",
+                                "content": "切换会话失败",
+                                "i18n": {"zh_cn": "切换会话失败"},
+                            }
+                        }
+                except Exception as e:
+                    logger.exception("切换会话失败")
+                    return {
+                        "toast": {
+                            "type": "error",
+                            "content": f"切换失败: {str(e)}",
+                            "i18n": {"zh_cn": f"切换失败: {str(e)}"},
+                        }
+                    }
+
+            elif action_type == "list_sessions":
+                # 刷新会话列表（按当前项目目录过滤）
+                cli_type = button_value.get("cli_type", "opencode")
+
+                try:
+                    adapter = self.adapters.get(cli_type)
+                    working_dir = ""
+                    if self.project_manager:
+                        current_project = await self.project_manager.get_current_project()
+                        working_dir = str(current_project.path) if current_project else ""
+                    current_session_id = (
+                        adapter.get_session_id(working_dir)
+                        if adapter and hasattr(adapter, "get_session_id")
+                        else ""
+                    ) or ""
+
+                    session_data_list = []
+                    if adapter and hasattr(adapter, "list_sessions"):
+                        all_sessions = await adapter.list_sessions(limit=20)
+                        for session in [s for s in all_sessions if s.get("directory") == working_dir]:
+                            sid = session.get("id", "")
+                            slug = session.get("slug", "")
+                            display_id = slug if slug else sid[-8:] if len(sid) >= 8 else sid
+                            session_data_list.append({
+                                "session_id": sid,
+                                "display_id": display_id,
+                                "title": session.get("title", "未命名会话"),
+                                "created_at": session.get("created_at", 0),
+                                "updated_at": session.get("updated_at", 0),
+                                "is_current": sid == current_session_id,
+                            })
+
+                    from .card_builder import build_session_list_card
+
+                    updated_card = build_session_list_card(
+                        sessions=session_data_list,
+                        current_session_id=current_session_id,
+                        cli_type=cli_type,
+                        working_dir=working_dir,
+                    )
+
+                    return {
+                        "toast": {
+                            "type": "success",
+                            "content": "✅ 已刷新会话列表",
+                            "i18n": {"zh_cn": "✅ 已刷新会话列表"},
+                        },
+                        "update_card": {
+                            "message_id": message_id,
+                            "card": updated_card,
+                        },
+                    }
+                except Exception as e:
+                    logger.exception("刷新会话列表失败")
+                    return {
+                        "toast": {
+                            "type": "error",
+                            "content": f"刷新失败: {str(e)}",
+                            "i18n": {"zh_cn": f"刷新失败: {str(e)}"},
+                        }
+                    }
+
+            elif action_type == "rename_session_prompt":
+                # 改名：发送提示消息，让用户回复新名称
+                session_id = button_value.get("session_id", "")
+                session_title = button_value.get("session_title", "")
+                cli_type = button_value.get("cli_type", "opencode")
+                working_dir = button_value.get("working_dir", "")
+
+                # 从 event_data 提取 chat_id 和 user_id
+                chat_id = event_data.get("context", {}).get("open_chat_id", "")
+                user_id = event_data.get("open_id", "")
+
+                if not session_id:
+                    return {"toast": {"type": "error", "content": "未指定会话ID", "i18n": {"zh_cn": "未指定会话ID"}}}
+
+                if not chat_id:
+                    return {"toast": {"type": "error", "content": "无法获取聊天ID", "i18n": {"zh_cn": "无法获取聊天ID"}}}
+
+                # 发送提示消息，并注册为交互式消息
+                display_id = session_id[-8:] if len(session_id) >= 8 else session_id
+                prompt_text = (
+                    f"📝 **重命名会话**\n\n"
+                    f"会话ID：`{display_id}`\n"
+                    f"当前名称：{session_title or '未命名会话'}\n\n"
+                    f"请直接回复新的会话名称（不超过50字）："
+                )
+
+                # 使用 TUI router 发送交互式消息
+                from ..tui_commands import TUIResultType
+                from .card_builder import build_card_content
+
+                card_data = build_card_content(
+                    "complete",
+                    {"text": prompt_text, "metadata": {}},
+                )
+                msg_id = await self.api.send_card_message(chat_id, card_data)
+
+                if msg_id:
+                    self.tui_router.register_interactive(
+                        message_id=msg_id,
+                        interactive_id="rename_session",
+                        user_id=user_id,
+                        chat_id=chat_id,
+                        cli_type=cli_type,
+                        metadata={
+                            "session_id": session_id,
+                            "working_dir": working_dir,
+                            "cli_type": cli_type,
+                        },
+                    )
+
+                return {
+                    "toast": {"type": "info", "content": "请回复新名称", "i18n": {"zh_cn": "请回复新名称"}}
+                }
+
+            elif action_type == "delete_session_confirm":
+                # 删除第一步：更新卡片为确认态
+                session_id = button_value.get("session_id", "")
+                session_title = button_value.get("session_title", "")
+                cli_type = button_value.get("cli_type", "opencode")
+
+                if not session_id:
+                    return {"toast": {"type": "error", "content": "未指定会话ID", "i18n": {"zh_cn": "未指定会话ID"}}}
+
+                adapter = self.adapters.get(cli_type)
+                # 优先使用按钮中传递的 working_dir，其次从当前项目获取
+                working_dir = button_value.get("working_dir", "")
+                if not working_dir and self.project_manager:
+                    current_project = await self.project_manager.get_current_project()
+                    working_dir = str(current_project.path) if current_project else ""
+                current_session_id = ""
+                if self.project_manager:
+                    current_project = await self.project_manager.get_current_project()
+                    working_dir = str(current_project.path) if current_project else ""
+                if adapter and hasattr(adapter, "get_session_id"):
+                    current_session_id = adapter.get_session_id(working_dir) or ""
+
+                session_data_list = []
+                if adapter and hasattr(adapter, "list_sessions"):
+                    all_sessions = await adapter.list_sessions(limit=20)
+                    for session in [s for s in all_sessions if s.get("directory") == working_dir]:
+                        sid = session.get("id", "")
+                        slug = session.get("slug", "")
+                        display_id = slug if slug else sid[-8:] if len(sid) >= 8 else sid
+                        session_data_list.append({
+                            "session_id": sid,
+                            "display_id": display_id,
+                            "title": session.get("title", "未命名会话"),
+                            "created_at": session.get("created_at", 0),
+                            "updated_at": session.get("updated_at", 0),
+                            "is_current": sid == current_session_id,
+                        })
+
+                from .card_builder import build_session_list_card
+                updated_card = build_session_list_card(
+                    sessions=session_data_list,
+                    current_session_id=current_session_id,
+                    cli_type=cli_type,
+                    deleting_session_id=session_id,
+                    working_dir=working_dir,
+                )
+                return {
+                    "toast": {"type": "warning", "content": f"⚠️ 确认删除会话？", "i18n": {"zh_cn": "⚠️ 确认删除会话？"}},
+                    "update_card": {"message_id": message_id, "card": updated_card},
+                }
+
+            elif action_type == "delete_session_cancel":
+                # 取消删除：恢复正常列表卡片
+                cli_type = button_value.get("cli_type", "opencode")
+                adapter = self.adapters.get(cli_type)
+                working_dir = ""
+                current_session_id = ""
+                if self.project_manager:
+                    current_project = await self.project_manager.get_current_project()
+                    working_dir = str(current_project.path) if current_project else ""
+                if adapter and hasattr(adapter, "get_session_id"):
+                    current_session_id = adapter.get_session_id(working_dir) or ""
+
+                session_data_list = []
+                if adapter and hasattr(adapter, "list_sessions"):
+                    all_sessions = await adapter.list_sessions(limit=20)
+                    for session in [s for s in all_sessions if s.get("directory") == working_dir]:
+                        sid = session.get("id", "")
+                        slug = session.get("slug", "")
+                        display_id = slug if slug else sid[-8:] if len(sid) >= 8 else sid
+                        session_data_list.append({
+                            "session_id": sid,
+                            "display_id": display_id,
+                            "title": session.get("title", "未命名会话"),
+                            "created_at": session.get("created_at", 0),
+                            "updated_at": session.get("updated_at", 0),
+                            "is_current": sid == current_session_id,
+                        })
+
+                from .card_builder import build_session_list_card
+                updated_card = build_session_list_card(
+                    sessions=session_data_list,
+                    current_session_id=current_session_id,
+                    cli_type=cli_type,
+                    working_dir=working_dir,
+                )
+                return {
+                    "toast": {"type": "info", "content": "已取消删除", "i18n": {"zh_cn": "已取消删除"}},
+                    "update_card": {"message_id": message_id, "card": updated_card},
+                }
+
+            elif action_type == "delete_session_confirmed":
+                # 确认删除
+                session_id = button_value.get("session_id", "")
+                cli_type = button_value.get("cli_type", "opencode")
+
+                if not session_id:
+                    return {"toast": {"type": "error", "content": "未指定会话ID", "i18n": {"zh_cn": "未指定会话ID"}}}
+
+                adapter = self.adapters.get(cli_type)
+                if not adapter or not hasattr(adapter, "delete_session"):
+                    return {"toast": {"type": "error", "content": "适配器不支持删除会话", "i18n": {"zh_cn": "适配器不支持删除会话"}}}
+
+                working_dir = ""
+                if self.project_manager:
+                    current_project = await self.project_manager.get_current_project()
+                    working_dir = str(current_project.path) if current_project else ""
+
+                success = await adapter.delete_session(session_id)
+                if not success:
+                    return {"toast": {"type": "error", "content": "删除会话失败", "i18n": {"zh_cn": "删除会话失败"}}}
+
+                current_session_id = (
+                    adapter.get_session_id(working_dir)
+                    if hasattr(adapter, "get_session_id")
+                    else ""
+                ) or ""
+
+                session_data_list = []
+                if hasattr(adapter, "list_sessions"):
+                    all_sessions = await adapter.list_sessions(limit=20)
+                    for session in [s for s in all_sessions if s.get("directory") == working_dir]:
+                        sid = session.get("id", "")
+                        slug = session.get("slug", "")
+                        display_id = slug if slug else sid[-8:] if len(sid) >= 8 else sid
+                        session_data_list.append({
+                            "session_id": sid,
+                            "display_id": display_id,
+                            "title": session.get("title", "未命名会话"),
+                            "created_at": session.get("created_at", 0),
+                            "updated_at": session.get("updated_at", 0),
+                            "is_current": sid == current_session_id,
+                        })
+
+                from .card_builder import build_session_list_card
+                updated_card = build_session_list_card(
+                    sessions=session_data_list,
+                    current_session_id=current_session_id,
+                    cli_type=cli_type,
+                    working_dir=working_dir,
+                )
+                return {
+                    "toast": {"type": "success", "content": "✅ 已删除会话", "i18n": {"zh_cn": "✅ 已删除会话"}},
+                    "update_card": {"message_id": message_id, "card": updated_card},
+                }
+
             else:
                 logger.warning(f"未知卡片回调 action: {action_type}")
-                return {"toast": {"type": "error", "content": "未知操作",
-                                  "i18n": {"zh_cn": "未知操作"}}}
+                return {
+                    "toast": {
+                        "type": "error",
+                        "content": "未知操作",
+                        "i18n": {"zh_cn": "未知操作"},
+                    }
+                }
 
         except Exception as e:
             logger.exception("处理卡片回调异常")
-            return {"toast": {"type": "error", "content": f"处理失败: {e}",
-                              "i18n": {"zh_cn": f"处理失败: {e}"}}}
+            return {
+                "toast": {
+                    "type": "error",
+                    "content": f"处理失败: {e}",
+                    "i18n": {"zh_cn": f"处理失败: {e}"},
+                }
+            }
 
     async def _handle_tui_command(self, content: str, message: FeishuMessage):
         """处理 TUI 命令
@@ -756,16 +1380,19 @@ class MessageHandler:
             )
             return
 
-        # 获取工作目录和会话
+        # 获取工作目录和会话 ID（从适配器内存缓存获取，无则为 None）
         working_dir = await self._get_working_dir()
-        session = self.session_mgr.get_or_create(
-            user_id=message.sender_id, cli_type=cli_type, working_dir=working_dir
+        session_id = (
+            adapter.get_session_id(working_dir)
+            if hasattr(adapter, "get_session_id")
+            else None
         )
 
         # 获取当前项目信息
         current_project = (
             await self.project_manager.get_current_project()
-            if self.project_manager else None
+            if self.project_manager
+            else None
         )
 
         # 创建命令上下文
@@ -774,10 +1401,12 @@ class MessageHandler:
             chat_id=message.chat_id,
             cli_type=cli_type,
             working_dir=working_dir,
-            session_id=session.session_id if session else None,
+            session_id=session_id,
             current_model=adapter.get_current_model(),
             project_name=current_project.name if current_project else None,
-            project_display_name=current_project.display_name if current_project else None,
+            project_display_name=current_project.display_name
+            if current_project
+            else None,
         )
 
         try:
@@ -802,6 +1431,7 @@ class MessageHandler:
                     await self.api.send_card_message(message.chat_id, card_json)
                 else:
                     from .card_builder import build_card_content
+
                     card_data = build_card_content(
                         "complete", {"text": result.content, "metadata": {}}
                     )
@@ -834,3 +1464,53 @@ class MessageHandler:
         except Exception as e:
             logger.exception("Error processing TUI command")
             await self.api.send_text(message.chat_id, f"❌ 命令执行失败: {str(e)}")
+
+    async def _auto_generate_session_title(
+        self,
+        session_id: str,
+        user_msg: str,
+        assistant_msg: str,
+        working_dir: str,
+        adapter: BaseCLIAdapter,
+        chat_id: str,
+    ):
+        """自动生成会话标题（异步后台执行）
+
+        使用 OpenCode API PATCH /session/{id} 来设置标题。
+
+        Args:
+            session_id: 会话ID
+            user_msg: 用户消息
+            assistant_msg: AI回复内容
+            working_dir: 工作目录
+            adapter: CLI适配器
+            chat_id: 飞书聊天ID（用于发送toast）
+        """
+        try:
+            # 检查适配器是否支持重命名
+            if not hasattr(adapter, "rename_session"):
+                logger.debug(f"Adapter {adapter.name} does not support rename_session")
+                return
+
+            # 生成标题（基于首条用户消息和助手回复）
+            # 简单规则：取用户消息前 30 字作为标题
+            title = user_msg[:30] + "..." if len(user_msg) > 30 else user_msg
+            if not title:
+                title = f"会话_{time.strftime('%m%d_%H%M')}"
+
+            # 调用 OpenCode API 重命名会话
+            success = await adapter.rename_session(session_id, title)
+            if success:
+                logger.info(f"Session {session_id[:8]}... auto-titled: '{title}'")
+                # 可选：发送通知给用户
+                # try:
+                #     await self.api.send_text(
+                # #         chat_id, f"✅ 会话已自动命名：**{title}**"
+                # #     )
+                # except Exception as e:
+                #     logger.warning(f"Failed to send title notification: {e}")
+            else:
+                logger.warning(f"Failed to rename session {session_id[:8]}...")
+
+        except Exception as e:
+            logger.error(f"Error in auto-generating session title: {e}")

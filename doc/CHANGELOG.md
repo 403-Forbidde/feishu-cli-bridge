@@ -1,5 +1,89 @@
 # 更新日志
 
+## [v0.1.8] - 2026-03-23
+
+**开发人**: ERROR403
+
+### 修复
+
+- **会话改名交互失败** (`src/feishu/handler.py`, `src/tui_commands/__init__.py`) — Issue #32
+  - 问题：用户点击「改名」按钮后回复新名称时，系统错误地将内容当作普通消息处理给 AI，而非执行重命名
+  - 根本原因：当用户直接发送消息（而非点击「回复」按钮）时，`parent_id` 为空，系统使用内容启发式匹配（纯数字 1-10 或 `provider/model` 格式）判断是否为交互式回复，但用户输入的新名称不符合这些格式
+  - 修复：新增 `get_interactive_target()` 方法，对 `rename_session` 交互类型特殊处理——接受任何非命令内容作为有效回复，不再受限于特定格式
+
+- **交互式回复卡片空白** (`src/feishu/handler.py`)
+  - 问题：`_handle_interactive_reply` 在处理卡片类型结果时，使用 `build_card_content()` 对卡片进行重复包装，导致卡片结构损坏，飞书显示为空白消息
+  - 修复：检测 `result.metadata["card_json"]`，若存在则直接使用原始卡片数据发送，避免二次包装
+
+### 技术细节
+
+- `TUICommandRouter.get_interactive_target()` 新增：获取用户当前的交互式消息目标，支持不依赖 `parent_id` 的交互式回复检测
+- `_handle_interactive_reply()` 逻辑优化：区分 `CARD` / `INTERACTIVE` 结果类型，正确处理预构建的 `card_json`
+
+---
+
+## [v0.1.7] - 2026-03-23
+
+**开发人**: ERROR403
+
+### 新增
+
+- **会话管理完全委托 OpenCode 服务器** (`src/adapters/opencode.py`, `src/tui_commands/opencode.py`)
+  - 从 v0.1.7 开始，会话管理完全委托给 OpenCode 服务器，本地不再保留任何会话映射文件
+  - 会话列表通过 `GET /session` 从服务器获取，按 `directory` 字段过滤当前项目
+  - 支持从服务器恢复会话：启动时自动查找当前目录关联的活跃会话
+
+- **项目管理卡片 Schema 2.0 全面升级** (`src/feishu/card_builder.py`, `src/tui_commands/project.py`)
+  - 项目列表卡片从 Schema 1.0 迁移至 Schema 2.0，与 `/mode`、`/model` 等卡片风格统一
+  - 采用 `column_set` 原生两列布局：左侧图标/标签自动收窄，右侧内容自适应展开
+  - 状态图标升级：当前项目 🟢、普通项目 🟡、目录丢失 🔴，视觉层次更清晰
+  - 每个项目展示：项目名称、标识、路径、最后活跃时间，布局紧凑信息完整
+  - 操作按钮优化：当前项目显示「✓ 正在使用」状态标识，其他项目显示「▶ 切换」按钮
+  - 删除确认卡片升级：二次确认状态使用 Schema 2.0 渲染，确认/取消按钮布局更合理
+
+- **项目信息卡片 (`/pi`) 卡片化** (`src/tui_commands/project.py`, `src/feishu/card_builder.py`)
+  - 原：返回纯文本 `TUIResult.text()`，信息密集难以阅读
+  - 现：返回 Schema 2.0 卡片，字段分栏展示：📋 项目信息、📂 工作目录、🆔 标识、🕐 最后活跃、🔗 关联会话数
+  - 项目描述支持：有描述时显示备注卡片，无描述时自动隐藏
+
+- **新增项目卡片 (`/pa`, `/pc`) 卡片化** (`src/tui_commands/project.py`)
+  - 原：返回纯文本确认消息
+  - 现：操作成功后返回完整的项目列表卡片（`TUIResult.card()`），新添加的项目已激活，效果与 `/pl` 完全一致
+  - 用户无需再次执行 `/pl` 即可查看完整项目状态
+
+### 改进
+
+- **卡片 Header 风格统一** (`src/feishu/card_builder.py`)
+  - 所有项目相关卡片使用蓝色 (`blue`) header 模板
+  - Header 图标统一为 💼，与项目功能语义匹配
+  - Header 标题根据场景动态变化：「项目列表」、「项目详情」、「添加项目」等
+
+- **底部说明信息优化**
+  - 命令说明使用全色对比度展示，更易识别
+  - 删除行为注释使用灰色 notation 字号，与主内容区分
+  - 明确说明删除仅移除列表记录，不删除磁盘目录
+
+### 技术细节
+
+- `build_project_list_card()` 完全重写，从 Schema 1.0 `config` 格式改为 Schema 2.0 `body.elements` 格式
+- `build_project_info_card()` 新增，支持单项目详情展示
+- `TUIResult.card()` 新增 `card_type` metadata 字段，支持 `"project_list"`、`"project_info"` 等类型标识
+- 项目卡片回调逻辑保持不变，兼容新的 Schema 2.0 卡片结构
+
+- **Session 自动命名与卡片化** (`src/session/manager.py`, `src/adapters/opencode.py`, `src/feishu/handler.py`, `src/tui_commands/opencode.py`)
+  - Session 数据模型新增 `title` 和 `title_generated` 字段，支持存储 AI 生成的会话标题
+  - 首次对话完成后自动触发 AI 标题生成：基于用户首条消息和 AI 回复内容，生成 8-15 字中文主题
+  - 降级策略：AI 生成失败时使用用户首条消息前 20 字作为标题
+  - 异步执行：标题生成在后台进行，不阻塞用户查看 AI 回复，生成完成后发送飞书消息通知
+  - `/session` 命令升级为卡片形式（Schema 2.0）：
+    - 两行显示格式：第一行为 Session ID（FSB-xxx），第二行为标题
+    - 当前会话高亮显示（🟢），其他会话显示切换按钮
+    - 显示最后活跃时间，支持点击切换
+  - `/session rename <ID/序号> <新名称>`：支持手动重命名会话
+  - 新增卡片构建函数：`build_session_list_card()` 会话列表卡片，`build_session_info_card()` 会话详情卡片
+
+---
+
 ## [v0.1.6] - 2026-03-22
 
 **开发人**: ERROR403

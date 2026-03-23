@@ -23,11 +23,13 @@ class OpenCodeSession:
     title: str
     created_at: float = field(default_factory=time.time)
     working_dir: str = ""  # 此会话绑定的工作目录
+    slug: str = ""  # OpenCode 提供的可读会话标识
 
 
 @dataclass
 class StreamState:
     """流式处理状态（每轮对话独立）"""
+
     seen_assistant_message: bool = False
     user_text_skipped: bool = False
     emitted_text_length: int = 0
@@ -62,7 +64,9 @@ class OpenCodeServerManager:
             opencode_bin = shutil.which("opencode")
             if not opencode_bin:
                 if self._logger:
-                    self._logger.error("找不到 opencode 可执行文件，请确认已安装并加入 PATH")
+                    self._logger.error(
+                        "找不到 opencode 可执行文件，请确认已安装并加入 PATH"
+                    )
                 return False
 
             cmd = [opencode_bin, "serve", "--port", str(self.port)]
@@ -173,7 +177,9 @@ class OpenCodeAdapter(BaseCLIAdapter):
         # 单一服务器实例
         self._server_manager: Optional[OpenCodeServerManager] = None
         self._client: Optional[httpx.AsyncClient] = None
-        self._server_lock: Optional[asyncio.Lock] = None  # 懒初始化，避免绑定到错误的事件循环
+        self._server_lock: Optional[asyncio.Lock] = (
+            None  # 懒初始化，避免绑定到错误的事件循环
+        )
         # 每个工作目录对应一个 OpenCode 会话（key = working_dir）
         self._sessions: Dict[str, OpenCodeSession] = {}
         self._sessions_lock: Optional[asyncio.Lock] = None  # 懒初始化，防止跨循环绑定
@@ -249,7 +255,9 @@ class OpenCodeAdapter(BaseCLIAdapter):
                 )
         except Exception as e:
             if self.logger:
-                self.logger.warning(f"写入 OpenCode 权限配置失败（工具调用可能仍需手动授权）: {e}")
+                self.logger.warning(
+                    f"写入 OpenCode 权限配置失败（工具调用可能仍需手动授权）: {e}"
+                )
 
     async def _ensure_server(self) -> bool:
         """确保单一 OpenCode Server 正在运行"""
@@ -257,7 +265,10 @@ class OpenCodeAdapter(BaseCLIAdapter):
             self._server_lock = asyncio.Lock()
         async with self._server_lock:
             # 检查已有实例是否健康
-            if self._server_manager is not None and await self._server_manager._check_health():
+            if (
+                self._server_manager is not None
+                and await self._server_manager._check_health()
+            ):
                 return True
 
             # 预设外部目录权限，防止无头模式下 TUI 对话框永久阻塞工具调用（Issue #27）
@@ -266,7 +277,9 @@ class OpenCodeAdapter(BaseCLIAdapter):
             # 启动新实例
             port = self.config.get("server_port", 4096)
             hostname = self.config.get("server_hostname", "127.0.0.1")
-            self._server_manager = OpenCodeServerManager(port, hostname, logger=self.logger)
+            self._server_manager = OpenCodeServerManager(
+                port, hostname, logger=self.logger
+            )
 
             timeout = httpx.Timeout(300.0, connect=10.0)
             if self._client:
@@ -285,8 +298,14 @@ class OpenCodeAdapter(BaseCLIAdapter):
                 self.logger.info(f"OpenCode server started: port={port}")
             return started
 
-    async def _get_or_create_session(self, working_dir: str) -> Optional[OpenCodeSession]:
-        """获取或创建指定工作目录的 OpenCode 会话（加锁防并发重复创建）"""
+    async def _get_or_create_session(
+        self, working_dir: str
+    ) -> Optional[OpenCodeSession]:
+        """获取或创建指定工作目录的 OpenCode 会话（加锁防并发重复创建）
+
+        内存 miss 时先查服务器已有会话（支持 bridge 重启后恢复上下文），
+        找不到才创建新会话。
+        """
         if self._sessions_lock is None:
             self._sessions_lock = asyncio.Lock()
         async with self._sessions_lock:
@@ -295,6 +314,38 @@ class OpenCodeAdapter(BaseCLIAdapter):
 
             if self._client is None:
                 return None
+
+            # 重启恢复：从服务器查找该目录最近使用的会话
+            try:
+                response = await self._client.get("/session")
+                if response.status_code == 200:
+                    all_sessions = response.json()
+                    if isinstance(all_sessions, list):
+                        matching = [
+                            s for s in all_sessions
+                            if s.get("directory") == working_dir
+                        ]
+                        if matching:
+                            latest = max(
+                                matching,
+                                key=lambda s: s.get("time", {}).get("updated", 0),
+                            )
+                            session = OpenCodeSession(
+                                id=latest["id"],
+                                title=latest.get("title", ""),
+                                working_dir=working_dir,
+                                slug=latest.get("slug", ""),
+                            )
+                            self._sessions[working_dir] = session
+                            if self.logger:
+                                self.logger.info(
+                                    f"已从服务器恢复会话 {latest['id'][:8]}... "
+                                    f"for {working_dir}"
+                                )
+                            return session
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"查询服务器会话失败，将创建新会话: {e}")
 
             session = await self._create_session(self._client, working_dir=working_dir)
             if session:
@@ -309,7 +360,9 @@ class OpenCodeAdapter(BaseCLIAdapter):
         """基类接口 stub — OpenCode 内部通过 _parse_event(raw_line, state) 调用"""
         return None
 
-    def _parse_event(self, raw_line: bytes, state: StreamState) -> Optional[StreamChunk]:
+    def _parse_event(
+        self, raw_line: bytes, state: StreamState
+    ) -> Optional[StreamChunk]:
         """解析 SSE 事件数据（使用局部状态，避免多轮对话并发冲突）"""
         try:
             data = json.loads(raw_line.decode("utf-8"))
@@ -341,10 +394,12 @@ class OpenCodeAdapter(BaseCLIAdapter):
                             return None
                     # AI 回复处理
                     if text and len(text) > state.emitted_text_length:
-                        new_content = text[state.emitted_text_length:]
+                        new_content = text[state.emitted_text_length :]
                         state.emitted_text_length = len(text)
                         state.seen_assistant_message = True
-                        return StreamChunk(type=StreamChunkType.CONTENT, data=new_content)
+                        return StreamChunk(
+                            type=StreamChunkType.CONTENT, data=new_content
+                        )
                     return None
 
                 # 处理思考过程
@@ -398,7 +453,10 @@ class OpenCodeAdapter(BaseCLIAdapter):
                 data = response.json()
                 session_id = data.get("id")
                 return OpenCodeSession(
-                    id=session_id, title=data.get("title", title), working_dir=working_dir
+                    id=session_id,
+                    title=data.get("title", title),
+                    working_dir=working_dir,
+                    slug=data.get("slug", ""),
                 )
             else:
                 if self.logger:
@@ -430,15 +488,19 @@ class OpenCodeAdapter(BaseCLIAdapter):
                             raw = f.read()
                         b64 = base64.b64encode(raw).decode()
                         data_url = f"data:{att['mime_type']};base64,{b64}"
-                        parts.append({
-                            "type": "file",
-                            "mime": att["mime_type"],
-                            "url": data_url,
-                            "filename": att["filename"],
-                        })
+                        parts.append(
+                            {
+                                "type": "file",
+                                "mime": att["mime_type"],
+                                "url": data_url,
+                                "filename": att["filename"],
+                            }
+                        )
                     except Exception as e:
                         if self.logger:
-                            self.logger.warning(f"Failed to encode attachment {att['path']}: {e}")
+                            self.logger.warning(
+                                f"Failed to encode attachment {att['path']}: {e}"
+                            )
 
             model_parts = self.default_model.split("/", 1)
             if len(model_parts) == 2:
@@ -496,12 +558,18 @@ class OpenCodeAdapter(BaseCLIAdapter):
                         elapsed = now - last_content_flush
 
                         if not has_sent_first_content and len(content_buffer) >= 10:
-                            yield StreamChunk(type=StreamChunkType.CONTENT, data=content_buffer)
+                            yield StreamChunk(
+                                type=StreamChunkType.CONTENT, data=content_buffer
+                            )
                             content_buffer = ""
                             last_content_flush = now
                             has_sent_first_content = True
-                        elif has_sent_first_content and (len(content_buffer) >= 30 or elapsed >= 0.4):
-                            yield StreamChunk(type=StreamChunkType.CONTENT, data=content_buffer)
+                        elif has_sent_first_content and (
+                            len(content_buffer) >= 30 or elapsed >= 0.4
+                        ):
+                            yield StreamChunk(
+                                type=StreamChunkType.CONTENT, data=content_buffer
+                            )
                             content_buffer = ""
                             last_content_flush = now
 
@@ -512,7 +580,9 @@ class OpenCodeAdapter(BaseCLIAdapter):
 
                     else:
                         if content_buffer:
-                            yield StreamChunk(type=StreamChunkType.CONTENT, data=content_buffer)
+                            yield StreamChunk(
+                                type=StreamChunkType.CONTENT, data=content_buffer
+                            )
                             content_buffer = ""
                         yield chunk
                         if chunk.type in (StreamChunkType.DONE, StreamChunkType.ERROR):
@@ -524,7 +594,9 @@ class OpenCodeAdapter(BaseCLIAdapter):
         except Exception as e:
             if self.logger:
                 self.logger.error(f"Event stream error: {e}")
-            yield StreamChunk(type=StreamChunkType.ERROR, data=f"Event stream error: {str(e)}")
+            yield StreamChunk(
+                type=StreamChunkType.ERROR, data=f"Event stream error: {str(e)}"
+            )
 
     async def execute_stream(
         self,
@@ -538,31 +610,37 @@ class OpenCodeAdapter(BaseCLIAdapter):
         # 确保 Server 正在运行
         started = await self._ensure_server()
         if not started or self._client is None:
-            yield StreamChunk(type=StreamChunkType.ERROR, data="Failed to start OpenCode Server")
+            yield StreamChunk(
+                type=StreamChunkType.ERROR, data="Failed to start OpenCode Server"
+            )
             return
 
         self._active_working_dir = working_dir
 
         session = await self._get_or_create_session(working_dir)
         if session is None:
-            yield StreamChunk(type=StreamChunkType.ERROR, data="Failed to create session")
+            yield StreamChunk(
+                type=StreamChunkType.ERROR, data="Failed to create session"
+            )
             return
 
         # 创建本轮对话的独立状态（避免多轮对话并发冲突）
-        state = StreamState(
-            prompt_hash=hash(prompt.strip())
-        )
+        state = StreamState(prompt_hash=hash(prompt.strip()))
 
         # 发送消息（prompt_async 返回 204 后立即监听 SSE 事件流）
         sent = await self._send_message(
             self._client, session.id, prompt, context, working_dir, attachments
         )
         if not sent:
-            yield StreamChunk(type=StreamChunkType.ERROR, data="Failed to send message to OpenCode")
+            yield StreamChunk(
+                type=StreamChunkType.ERROR, data="Failed to send message to OpenCode"
+            )
             return
 
         # 监听流式事件（传递局部状态）
-        async for chunk in self._listen_events(self._client, session.id, working_dir, state):
+        async for chunk in self._listen_events(
+            self._client, session.id, working_dir, state
+        ):
             yield chunk
 
         # 将本轮的 token 统计保存到实例变量（供 get_stats 使用）
@@ -599,25 +677,65 @@ class OpenCodeAdapter(BaseCLIAdapter):
     def supported_tui_commands(self) -> List[str]:
         return ["new", "session", "model", "reset"]
 
-    def _get_active_client_session(self) -> Tuple[Optional[httpx.AsyncClient], Optional[OpenCodeSession]]:
+    def _get_active_client_session(
+        self,
+    ) -> Tuple[Optional[httpx.AsyncClient], Optional[OpenCodeSession]]:
         return self._client, self._sessions.get(self._active_working_dir)
 
-    async def create_new_session(self) -> Optional[Dict[str, Any]]:
+    def get_session_id(self, working_dir: str) -> Optional[str]:
+        """获取指定工作目录的 OpenCode session ID
+
+        Args:
+            working_dir: 工作目录路径
+
+        Returns:
+            OpenCode session ID，如果不存在返回 None
+        """
+        session = self._sessions.get(working_dir)
+        return session.id if session else None
+
+    async def create_new_session(
+        self, working_dir: str = ""
+    ) -> Optional[Dict[str, Any]]:
+        """创建新会话
+
+        Args:
+            working_dir: 工作目录，用于会话隔离。如果为空，使用当前活跃工作目录
+
+        Returns:
+            新会话信息字典，包含 id, title 等字段
+            或 None（如果不支持）
+        """
         started = await self._ensure_server()
         if not started or self._client is None:
             return None
 
         try:
             import random
+
+            # 使用传入的 working_dir，若为空则回退到实例变量
+            target_dir = working_dir if working_dir else self._active_working_dir
+            if not target_dir:
+                if self.logger:
+                    self.logger.error("创建会话失败: 未指定工作目录")
+                return None
+
             timestamp = time.strftime("%m%d_%H%M%S")
             random_suffix = random.randint(1000, 9999)
             title = f"Feishu Bridge {timestamp}_{random_suffix}"
 
-            session = await self._create_session(self._client, title=title, working_dir=self._active_working_dir)
+            session = await self._create_session(
+                self._client, title=title, working_dir=target_dir
+            )
 
             if session:
-                self._sessions[self._active_working_dir] = session
-                return {"id": session.id, "title": session.title, "created_at": session.created_at}
+                self._sessions[target_dir] = session
+                return {
+                    "id": session.id,
+                    "title": session.title,
+                    "created_at": session.created_at,
+                    "slug": session.slug,
+                }
         except Exception as e:
             if self.logger:
                 self.logger.error(f"创建会话失败: {e}")
@@ -633,26 +751,62 @@ class OpenCodeAdapter(BaseCLIAdapter):
             if response.status_code == 200:
                 data = response.json()
                 sessions = data if isinstance(data, list) else data.get("items", [])
-                return [{"id": s.get("id"), "title": s.get("title", "未命名会话"), "created_at": s.get("createdAt", time.time())} for s in sessions[:limit]]
+                return [
+                    {
+                        "id": s.get("id"),
+                        "slug": s.get("slug", ""),
+                        "title": s.get("title", "未命名会话"),
+                        "created_at": s.get("time", {}).get("created", 0) / 1000,
+                        "updated_at": s.get("time", {}).get("updated", 0) / 1000,
+                        "directory": s.get("directory", ""),
+                    }
+                    for s in sessions[:limit]
+                ]
         except Exception as e:
             if self.logger:
                 self.logger.error(f"列出会话失败: {e}")
         return []
 
-    async def switch_session(self, session_id: str) -> bool:
+    async def switch_session(self, session_id: str, working_dir: str = "") -> bool:
         started = await self._ensure_server()
         if not started or self._client is None:
+            return False
+
+        # 使用传入的 working_dir，若为空则回退到实例变量
+        target_dir = working_dir if working_dir else self._active_working_dir
+        if not target_dir:
+            if self.logger:
+                self.logger.error("切换会话失败: 未指定工作目录")
             return False
 
         try:
             response = await self._client.get(f"/session/{session_id}")
             if response.status_code == 200:
                 data = response.json()
-                self._sessions[self._active_working_dir] = OpenCodeSession(
+
+                # 清理：移除其他 working_dir 指向同一 session 的映射
+                # 确保一个 session 只绑定到一个 working_dir
+                dirs_to_remove = [
+                    wd for wd, sess in self._sessions.items()
+                    if sess.id == session_id and wd != target_dir
+                ]
+                for wd in dirs_to_remove:
+                    del self._sessions[wd]
+                    if self.logger:
+                        self.logger.info(f"切换会话: 移除 {session_id[:8]}... 与 {wd} 的旧绑定")
+
+                self._sessions[target_dir] = OpenCodeSession(
                     id=data.get("id"),
                     title=data.get("title", "已恢复会话"),
-                    working_dir=self._active_working_dir,
+                    working_dir=target_dir,
+                    slug=data.get("slug", ""),
                 )
+                # 更新当前活跃工作目录为切换后的会话目录
+                self._active_working_dir = target_dir
+                if self.logger:
+                    self.logger.info(
+                        f"切换会话成功: {session_id} 绑定到工作目录 {target_dir}，已更新活跃工作目录"
+                    )
                 return True
         except Exception as e:
             if self.logger:
@@ -662,11 +816,128 @@ class OpenCodeAdapter(BaseCLIAdapter):
     async def reset_session(self) -> bool:
         if self._client is None:
             return False
-        new_session = await self._create_session(self._client, working_dir=self._active_working_dir)
+        new_session = await self._create_session(
+            self._client, working_dir=self._active_working_dir
+        )
         if new_session:
             self._sessions[self._active_working_dir] = new_session
             return True
         return False
+
+    async def rename_session(self, session_id: str, title: str) -> bool:
+        """重命名会话 - PATCH /session/{id}
+
+        Args:
+            session_id: OpenCode session ID
+            title: 新标题
+
+        Returns:
+            是否重命名成功
+        """
+        started = await self._ensure_server()
+        if not started or self._client is None:
+            return False
+
+        try:
+            response = await self._client.patch(
+                f"/session/{session_id}", json={"title": title}
+            )
+            if response.status_code == 200:
+                if self.logger:
+                    self.logger.info(f"Renamed session {session_id[:8]}... to: {title}")
+                return True
+            else:
+                if self.logger:
+                    self.logger.error(f"Rename session failed: {response.status_code}")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"Rename session error: {e}")
+        return False
+
+    async def delete_session(self, session_id: str) -> bool:
+        """删除会话 - DELETE /session/{id}
+
+        Args:
+            session_id: OpenCode session ID
+
+        Returns:
+            是否删除成功
+        """
+        started = await self._ensure_server()
+        if not started or self._client is None:
+            return False
+
+        try:
+            response = await self._client.delete(f"/session/{session_id}")
+            if response.status_code == 200:
+                # 清理本地 _sessions 中的引用
+                for dir_path, session in list(self._sessions.items()):
+                    if session.id == session_id:
+                        del self._sessions[dir_path]
+                        if self.logger:
+                            self.logger.info(
+                                f"Removed session {session_id[:8]}... from {dir_path}"
+                            )
+                        break
+                return True
+            else:
+                if self.logger:
+                    self.logger.error(f"Delete session failed: {response.status_code}")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"Delete session error: {e}")
+        return False
+
+    async def get_session_messages(self, session_id: str) -> List[Message]:
+        """获取会话的消息历史 - GET /session/{id}/message
+
+        Args:
+            session_id: OpenCode session ID
+
+        Returns:
+            消息列表，包含 role, content, timestamp
+        """
+        started = await self._ensure_server()
+        if not started or self._client is None:
+            return []
+
+        try:
+            response = await self._client.get(f"/session/{session_id}/message")
+            if response.status_code == 200:
+                data = response.json()
+                messages = []
+                # OpenCode 返回格式: [{ info: {...}, parts: [...] }, ...]
+                for item in data:
+                    info = item.get("info", {})
+                    parts = item.get("parts", [])
+
+                    role = info.get("role", "user")
+                    # 合并所有 parts 的 content
+                    content_parts = []
+                    for part in parts:
+                        if isinstance(part, dict):
+                            part_content = part.get("content", "")
+                            if part_content:
+                                content_parts.append(part_content)
+
+                    content = "\n".join(content_parts) if content_parts else ""
+                    timestamp = info.get("createdAt", time.time())
+
+                    if content:  # 只添加有内容的消息
+                        messages.append(
+                            Message(role=role, content=content, timestamp=timestamp)
+                        )
+
+                return messages
+            else:
+                if self.logger:
+                    self.logger.error(
+                        f"Get session messages failed: {response.status_code}"
+                    )
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"Get session messages error: {e}")
+        return []
 
     async def list_models(self, provider: Optional[str] = None) -> List[Dict[str, Any]]:
         raw_models: list = self.config.get("models", [])
@@ -689,7 +960,14 @@ class OpenCodeAdapter(BaseCLIAdapter):
             if provider and prov_id != provider:
                 continue
 
-            models.append({"provider": prov_id, "model": model_id, "name": name, "full_id": full_id})
+            models.append(
+                {
+                    "provider": prov_id,
+                    "model": model_id,
+                    "name": name,
+                    "full_id": full_id,
+                }
+            )
 
         return models
 
@@ -705,19 +983,49 @@ class OpenCodeAdapter(BaseCLIAdapter):
         return self.default_model
 
     _BUILTIN_DISPLAY: Dict[str, Dict[str, str]] = {
-        "build": {"display_name": "Build · 构建", "description": "默认模式，全工具权限，可读写文件、执行命令"},
-        "plan": {"display_name": "Plan · 规划", "description": "只读模式，用于分析代码和制定方案，不会修改文件"},
+        "build": {
+            "display_name": "Build · 构建",
+            "description": "默认模式，全工具权限，可读写文件、执行命令",
+        },
+        "plan": {
+            "display_name": "Plan · 规划",
+            "description": "只读模式，用于分析代码和制定方案，不会修改文件",
+        },
     }
 
     _OHM_DISPLAY: Dict[str, Dict[str, str]] = {
-        "sisyphus": {"display_name": "Sisyphus · 总协调", "description": "主协调者，并行调度其他 agent，驱动任务完成"},
-        "hephaestus": {"display_name": "Hephaestus · 深度工作", "description": "自主深度工作者，端到端探索和执行代码任务"},
-        "prometheus": {"display_name": "Prometheus · 战略规划", "description": "动手前先与你确认任务范围和策略"},
-        "oracle": {"display_name": "Oracle · 架构调试", "description": "架构设计与调试专家"},
-        "librarian": {"display_name": "Librarian · 文档搜索", "description": "文档查找与代码搜索专家"},
-        "explore": {"display_name": "Explore · 快速探索", "description": "快速代码库 grep 与文件浏览"},
-        "multimodal looker": {"display_name": "Multimodal Looker · 视觉分析", "description": "图片与多模态内容分析"},
-        "multimodal_looker": {"display_name": "Multimodal Looker · 视觉分析", "description": "图片与多模态内容分析"},
+        "sisyphus": {
+            "display_name": "Sisyphus · 总协调",
+            "description": "主协调者，并行调度其他 agent，驱动任务完成",
+        },
+        "hephaestus": {
+            "display_name": "Hephaestus · 深度工作",
+            "description": "自主深度工作者，端到端探索和执行代码任务",
+        },
+        "prometheus": {
+            "display_name": "Prometheus · 战略规划",
+            "description": "动手前先与你确认任务范围和策略",
+        },
+        "oracle": {
+            "display_name": "Oracle · 架构调试",
+            "description": "架构设计与调试专家",
+        },
+        "librarian": {
+            "display_name": "Librarian · 文档搜索",
+            "description": "文档查找与代码搜索专家",
+        },
+        "explore": {
+            "display_name": "Explore · 快速探索",
+            "description": "快速代码库 grep 与文件浏览",
+        },
+        "multimodal looker": {
+            "display_name": "Multimodal Looker · 视觉分析",
+            "description": "图片与多模态内容分析",
+        },
+        "multimodal_looker": {
+            "display_name": "Multimodal Looker · 视觉分析",
+            "description": "图片与多模态内容分析",
+        },
     }
 
     _OHM_SIGNATURE = {"sisyphus", "hephaestus", "prometheus"}
@@ -741,7 +1049,13 @@ class OpenCodeAdapter(BaseCLIAdapter):
                     key = a.get("name", "").lower()
                     if key in self._OHM_DISPLAY:
                         display = self._OHM_DISPLAY[key]
-                        result.append({"name": a["name"], "display_name": display["display_name"], "description": display["description"]})
+                        result.append(
+                            {
+                                "name": a["name"],
+                                "display_name": display["display_name"],
+                                "description": display["description"],
+                            }
+                        )
                 return result
             else:
                 return self._builtin_agents()
@@ -758,3 +1072,23 @@ class OpenCodeAdapter(BaseCLIAdapter):
 
     def get_current_agent(self) -> str:
         return self.default_agent
+
+    def generate_fallback_title(self, user_msg: str) -> str:
+        """根据用户首条消息生成会话标题（本地截断，无需 API 调用）
+
+        Args:
+            user_msg: 用户第一条消息
+
+        Returns:
+            str: 会话标题
+        """
+        if not user_msg:
+            return f"新会话_{time.strftime('%m%d_%H%M')}"
+
+        import re
+
+        clean_msg = re.sub(r'[，。！？.,!?;:：；"\'\s]', "", user_msg)
+
+        if len(clean_msg) > 20:
+            return clean_msg[:20] + "..."
+        return clean_msg if clean_msg else f"新会话_{time.strftime('%m%d_%H%M')}"

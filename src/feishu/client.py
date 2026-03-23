@@ -262,6 +262,12 @@ class FeishuClient:
                     "content": event.event.message.content
                     if event.event.message
                     else "{}",
+                    "parent_id": event.event.message.parent_id
+                    if event.event.message
+                    else None,
+                    "root_id": event.event.message.root_id
+                    if event.event.message
+                    else None,
                 },
             },
         }
@@ -364,6 +370,7 @@ class FeishuClient:
                 msg_type=msg_type,
                 thread_id=message.thread_id,
                 mention_users=mentions,
+                parent_id=message.parent_id or message.root_id,
             )
 
         except Exception as e:

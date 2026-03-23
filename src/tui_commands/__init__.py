@@ -7,8 +7,9 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 from .base import TUIBaseCommand, TUIResult, CommandContext, TUIResultType
-from .interactive import InteractiveMessageManager, InteractiveReplyHandler
+from .interactive import InteractiveMessageManager, InteractiveReplyHandler, InteractiveMessage
 from .opencode import OpenCodeTUICommands
+from .testcard import TestCardCommand
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,16 @@ class TUICommandRouter:
     """
 
     # 所有支持的 TUI 命令
-    SUPPORTED_COMMANDS = ["new", "session", "model", "mode", "reset", "clear", "help"]
+    SUPPORTED_COMMANDS = [
+        "new",
+        "session",
+        "model",
+        "mode",
+        "reset",
+        "clear",
+        "help",
+        "testcard2",
+    ]
 
     def __init__(self):
         self._command_handlers: Dict[str, TUIBaseCommand] = {}
@@ -112,6 +122,11 @@ class TUICommandRouter:
 
         command, args = self.parse_command(content)
 
+        # 处理 testcard2 命令（独立命令，不需要适配器）
+        if command == "testcard2":
+            handler = TestCardCommand(logger)
+            return await handler.execute(command, args, context)
+
         # 查找对应的命令处理器
         handler = self._command_handlers.get(cli_type)
         if not handler:
@@ -196,6 +211,22 @@ class TUICommandRouter:
             chat_id=chat_id,
             reply_to_message_id=reply_to_message_id,
         )
+
+    def get_interactive_target(
+        self,
+        user_id: str,
+        chat_id: str,
+    ) -> Optional[Any]:
+        """获取用户当前的交互式消息目标
+
+        Args:
+            user_id: 用户 ID
+            chat_id: 聊天 ID
+
+        Returns:
+            InteractiveMessage 或 None
+        """
+        return self._interactive_manager.find_reply_target(user_id, chat_id, None)
 
     def is_interactive_reply(
         self,

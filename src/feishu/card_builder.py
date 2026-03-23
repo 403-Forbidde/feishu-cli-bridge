@@ -84,6 +84,7 @@ def build_new_session_card(
     cli_type: str = "",
     project_name: Optional[str] = None,
     project_display_name: Optional[str] = None,
+    slug: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     构建「新建会话成功」卡片（Schema 1.0，与项目列表卡片风格一致）
@@ -96,19 +97,21 @@ def build_new_session_card(
         cli_type:             CLI 工具类型（如 opencode / codex）
         project_name:         当前项目标识（可选）
         project_display_name: 当前项目显示名（可选）
+        slug:                 OpenCode 会话 slug（可选）
 
     Returns:
         飞书卡片 JSON（Schema 1.0，含 config/header/elements）
     """
     import os
 
-    # 显示用的短 ID：取后 8 位
-    short_id = session_id[-8:] if len(session_id) > 8 else session_id
-    display_id = f"FSB-{short_id}"
+    # 显示用的短 ID：优先使用 slug，否则取后 8 位
+    display_id = slug if slug else (session_id[-8:] if len(session_id) > 8 else session_id)
 
     # 工作目录美化：home 目录替换为 ~
     home = os.path.expanduser("~")
-    display_dir = working_dir.replace(home, "~") if working_dir.startswith(home) else working_dir
+    display_dir = (
+        working_dir.replace(home, "~") if working_dir.startswith(home) else working_dir
+    )
 
     cli_label = {"opencode": "OpenCode", "codex": "Codex"}.get(
         cli_type.lower(), cli_type or "AI"
@@ -124,22 +127,26 @@ def build_new_session_card(
                     "tag": "column",
                     "width": "auto",
                     "vertical_align": "top",
-                    "elements": [{
-                        "tag": "markdown",
-                        "content": f"<font color='grey'>{key}</font>",
-                        "text_size": "normal",
-                    }],
+                    "elements": [
+                        {
+                            "tag": "markdown",
+                            "content": f"<font color='grey'>{key}</font>",
+                            "text_size": "normal",
+                        }
+                    ],
                 },
                 {
                     "tag": "column",
                     "width": "weighted",
                     "weight": 4,
                     "vertical_align": "top",
-                    "elements": [{
-                        "tag": "markdown",
-                        "content": value,
-                        "text_size": "normal",
-                    }],
+                    "elements": [
+                        {
+                            "tag": "markdown",
+                            "content": value,
+                            "text_size": "normal",
+                        }
+                    ],
                 },
             ],
         }
@@ -148,7 +155,9 @@ def build_new_session_card(
 
     if project_display_name or project_name:
         label = project_display_name or project_name
-        name_suffix = f"  `{project_name}`" if project_name and project_display_name else ""
+        name_suffix = (
+            f"  `{project_name}`" if project_name and project_display_name else ""
+        )
         rows.append(_kv("💼 项目", f"{label}{name_suffix}"))
 
     rows.append(_kv("📂 目录", f"`{display_dir}`"))
@@ -188,9 +197,9 @@ def build_project_list_card(
     confirming_project: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    构建带「切换」「删除」按钮的项目列表卡片（Schema 1.0 格式）
+    构建带「切换」「删除」按钮的项目列表卡片（Schema 2.0 格式）
 
-    Schema 1.0 的 action + button 支持 value 回调；
+    当前项目用绿色高亮标识，非当前项目显示详情 + 切换按钮。
     点击按钮后飞书推送 im.card.action.trigger_v1 事件，handler 处理。
 
     Args:
@@ -199,168 +208,268 @@ def build_project_list_card(
         confirming_project:   处于二次确认删除状态的项目名
 
     Returns:
-        飞书卡片 JSON（Schema 1.0，含 config/header/elements）
+        飞书卡片 JSON（Schema 2.0，含 config/header/body/elements）
     """
     elements: List[Dict[str, Any]] = []
 
     if not projects:
-        elements.append({
-            "tag": "div",
-            "text": {
-                "tag": "lark_md",
-                "content": "📭 暂无项目\n\n使用 `/pa <路径>` 添加项目，或 `/pc <路径>` 创建新项目。",
-            },
-        })
+        elements.append(
+            {
+                "tag": "markdown",
+                "content": "📭 **暂无项目**\n\n使用 `/pa <路径>` 添加项目，或 `/pc <路径>` 创建新项目。",
+            }
+        )
     else:
-        for i, p in enumerate(projects, 1):
+        # ── 当前激活区块（绿色高亮）────────────────────────────────────────
+        current_project = next(
+            (p for p in projects if p.name == current_project_name), None
+        )
+        if current_project:
+            p = current_project
+            path = str(p.path)
+            exists = p.exists()
+            last_active = (
+                p.last_active.strftime("%m-%d %H:%M")
+                if isinstance(p.last_active, datetime)
+                else str(p.last_active)[:16]
+            )
+            exists_hint = "✅ 目录存在" if exists else "⚠️ 目录不存在"
+
+            elements.append(
+                {
+                    "tag": "markdown",
+                    "content": "<font color='grey'>当前激活</font>",
+                }
+            )
+            elements.append(
+                {
+                    "tag": "markdown",
+                    "content": (
+                        f"<font color='green'>🟢 **{p.display_name}**</font>\n"
+                        f"标识: `{p.name}` · 活跃: {last_active}\n"
+                        f"路径: `{path}`\n"
+                        f"<font color='grey'>{exists_hint}</font>"
+                    ),
+                }
+            )
+            elements.append({"tag": "hr"})
+
+        # ── 非激活项目：详情 + 操作按钮 ─────────────────────────────────────
+        inactive_projects = [p for p in projects if p.name != current_project_name]
+        for i, p in enumerate(inactive_projects, 1):
             name = p.name
             display_name = p.display_name
             path = str(p.path)
-            is_current = name == current_project_name
             exists = p.exists()
             is_confirming = name == confirming_project
 
-            last_active = p.last_active.strftime("%m-%d %H:%M") if isinstance(p.last_active, datetime) else str(p.last_active)[:16]
+            last_active = (
+                p.last_active.strftime("%m-%d %H:%M")
+                if isinstance(p.last_active, datetime)
+                else str(p.last_active)[:16]
+            )
 
-            if is_current:
-                # 当前激活项目：顶部醒目标识 + 信息行（🟢）+ 无操作按钮
-                elements.append({
-                    "tag": "div",
-                    "text": {
-                        "tag": "lark_md",
-                        "content": "<font color='green'>**▶ 当前激活项目**</font>",
-                    },
-                })
-                elements.append({
-                    "tag": "div",
-                    "text": {
-                        "tag": "lark_md",
-                        "content": (
-                            f"🟢 **{i}. {display_name}**\n"
-                            f"标识: `{name}` · 活跃: {last_active}\n"
-                            f"路径: `{path}`"
-                        ),
-                    },
-                })
+            inactive_icon = "🟡" if exists else "🔴"
+            not_exists_hint = (
+                "\n<font color='red'>⚠️ 目录不存在</font>" if not exists else ""
+            )
+            elements.append(
+                {
+                    "tag": "markdown",
+                    "content": (
+                        f"{inactive_icon} **{display_name}**{not_exists_hint}\n"
+                        f"标识: `{name}` · 活跃: {last_active}\n"
+                        f"路径: `{path}`"
+                    ),
+                }
+            )
+
+            # 操作按钮
+            if is_confirming:
+                elements.append(
+                    {
+                        "tag": "button",
+                        "text": {"tag": "plain_text", "content": "⚠️ 确认删除"},
+                        "type": "danger",
+                        "value": {
+                            "action": "delete_project_confirmed",
+                            "project_name": name,
+                        },
+                    }
+                )
+                elements.append(
+                    {
+                        "tag": "button",
+                        "text": {"tag": "plain_text", "content": "取消"},
+                        "type": "default",
+                        "value": {
+                            "action": "delete_project_cancel",
+                            "project_name": name,
+                        },
+                    }
+                )
+            elif not exists:
+                # 目录不存在：仅删除
+                elements.append(
+                    {
+                        "tag": "button",
+                        "text": {"tag": "plain_text", "content": "🗑️ 删除"},
+                        "type": "danger",
+                        "value": {
+                            "action": "delete_project_confirm",
+                            "project_name": name,
+                        },
+                    }
+                )
             else:
-                # 非激活项目：⚪ 存在 / 🔴 目录不存在
-                inactive_icon = "🟡" if exists else "🔴"
-                not_exists_hint = " · <font color='red'>⚠️ 目录不存在</font>" if not exists else ""
-                elements.append({
-                    "tag": "div",
-                    "text": {
-                        "tag": "lark_md",
-                        "content": (
-                            f"{inactive_icon} **{i}. {display_name}**{not_exists_hint}\n"
-                            f"标识: `{name}` · 活跃: {last_active}\n"
-                            f"路径: `{path}`"
-                        ),
-                    },
-                })
+                # 正常项目：切换 + 删除
+                elements.append(
+                    {
+                        "tag": "button",
+                        "text": {"tag": "plain_text", "content": "▶ 切换至此"},
+                        "type": "primary",
+                        "value": {
+                            "action": "switch_project",
+                            "project_name": name,
+                        },
+                    }
+                )
+                elements.append(
+                    {
+                        "tag": "button",
+                        "text": {"tag": "plain_text", "content": "🗑️ 删除"},
+                        "type": "danger",
+                        "value": {
+                            "action": "delete_project_confirm",
+                            "project_name": name,
+                        },
+                    }
+                )
 
-                # 操作按钮行
-                if is_confirming:
-                    elements.append({
-                        "tag": "action",
-                        "actions": [
-                            {
-                                "tag": "button",
-                                "text": {"tag": "plain_text", "content": "⚠️ 确认删除"},
-                                "type": "danger",
-                                "value": {
-                                    "action": "delete_project_confirmed",
-                                    "project_name": name,
-                                },
-                            },
-                            {
-                                "tag": "button",
-                                "text": {"tag": "plain_text", "content": "取消"},
-                                "type": "default",
-                                "value": {
-                                    "action": "delete_project_cancel",
-                                    "project_name": name,
-                                },
-                            },
-                        ],
-                    })
-                elif not exists:
-                    # 目录不存在：仅删除
-                    elements.append({
-                        "tag": "action",
-                        "actions": [{
-                            "tag": "button",
-                            "text": {"tag": "plain_text", "content": "🗑️ 删除"},
-                            "type": "danger",
-                            "value": {
-                                "action": "delete_project_confirm",
-                                "project_name": name,
-                            },
-                        }],
-                    })
-                else:
-                    # 正常项目：切换 + 删除
-                    elements.append({
-                        "tag": "action",
-                        "actions": [
-                            {
-                                "tag": "button",
-                                "text": {"tag": "plain_text", "content": f"🔄 切换到 {display_name}"},
-                                "type": "primary",
-                                "value": {
-                                    "action": "switch_project",
-                                    "project_name": name,
-                                },
-                            },
-                            {
-                                "tag": "button",
-                                "text": {"tag": "plain_text", "content": "🗑️ 删除"},
-                                "type": "danger",
-                                "value": {
-                                    "action": "delete_project_confirm",
-                                    "project_name": name,
-                                },
-                            },
-                        ],
-                    })
-
-            if i < len(projects):
+            if i < len(inactive_projects):
                 elements.append({"tag": "hr"})
 
-    # 底部说明
+    # ── 底部说明 ───────────────────────────────────────────────────────
     elements.append({"tag": "hr"})
-    elements.append({
-        "tag": "div",
-        "text": {
-            "tag": "lark_md",
-            "content": "📌 **命令说明**",
-        },
-    })
-    elements.append({
-        "tag": "div",
-        "text": {
-            "tag": "lark_md",
-            "content": (
-                "`/pa <路径> <项目名称>` — 添加已有目录为项目\n"
-                "`/pc <路径> <项目名称>` — 创建新目录并添加项目"
-            ),
-        },
-    })
-    elements.append({
-        "tag": "div",
-        "text": {
-            "tag": "lark_md",
-            "content": "<font color='grey'>点击「🗑️ 删除」仅从列表移除，不会删除磁盘上的目录</font>",
-        },
-    })
+    elements.append(
+        {
+            "tag": "markdown",
+            "content": "📌 **命令说明**\n\n`/pa <路径>` — 添加已有目录为项目\n`/pc <路径>` — 创建新目录并添加项目",
+        }
+    )
+    elements.append(
+        {
+            "tag": "markdown",
+            "content": "<font color='grey'>💡 点击「🗑️ 删除」仅从列表移除，不会删除磁盘上的目录</font>",
+        }
+    )
 
     title_text = f"📁 项目列表（共 {len(projects)} 个）" if projects else "📁 项目列表"
     return {
-        "config": {"wide_screen_mode": True},
+        "schema": "2.0",
+        "config": {"wide_screen_mode": True, "update_multi": True},
         "header": {
             "title": {"tag": "plain_text", "content": title_text},
             "template": "blue",
         },
-        "elements": elements,
+        "body": {"elements": elements},
+    }
+
+
+def build_project_info_card(
+    project: Any,
+    is_current: bool = False,
+) -> Dict[str, Any]:
+    """
+    构建项目信息详情卡片（Schema 2.0 格式）
+
+    Args:
+        project: Project 对象
+        is_current: 是否为当前激活项目
+
+    Returns:
+        飞书卡片 JSON（Schema 2.0）
+    """
+    elements: List[Dict[str, Any]] = []
+
+    # 当前项目标记
+    active_marker = "🟢 **当前项目**\n\n" if is_current else ""
+    status_icon = "✅" if project.exists() else "⚠️"
+    status_text = "目录存在" if project.exists() else "目录不存在"
+
+    # 项目基本信息
+    elements.append(
+        {
+            "tag": "markdown",
+            "content": (
+                f"{active_marker}"
+                f"**{project.display_name}**\n"
+                f"<font color='grey'>标识: `{project.name}`</font>"
+            ),
+        }
+    )
+    elements.append({"tag": "hr"})
+
+    # 详细信息
+    created_at = (
+        project.created_at.strftime("%Y-%m-%d %H:%M")
+        if isinstance(project.created_at, datetime)
+        else str(project.created_at)[:16]
+    )
+    last_active = (
+        project.last_active.strftime("%Y-%m-%d %H:%M")
+        if isinstance(project.last_active, datetime)
+        else str(project.last_active)[:16]
+    )
+
+    info_lines = [
+        f"**路径**: `{project.path}`",
+        f"**状态**: {status_icon} {status_text}",
+        f"**创建时间**: {created_at}",
+        f"**最后活跃**: {last_active}",
+        f"**关联会话**: {len(project.session_ids)} 个",
+    ]
+    if project.description:
+        info_lines.append(f"**描述**: {project.description}")
+
+    elements.append(
+        {
+            "tag": "markdown",
+            "content": "\n".join(info_lines),
+        }
+    )
+
+    # 操作按钮
+    elements.append({"tag": "hr"})
+    if not is_current and project.exists():
+        elements.append(
+            {
+                "tag": "button",
+                "text": {"tag": "plain_text", "content": "▶ 切换到此项目"},
+                "type": "primary",
+                "value": {
+                    "action": "switch_project",
+                    "project_name": project.name,
+                },
+            }
+        )
+    elements.append(
+        {
+            "tag": "button",
+            "text": {"tag": "plain_text", "content": "📋 查看项目列表"},
+            "type": "default",
+            "value": {"action": "show_project_list"},
+        }
+    )
+
+    return {
+        "schema": "2.0",
+        "config": {"wide_screen_mode": True, "update_multi": True},
+        "header": {
+            "title": {"tag": "plain_text", "content": "📁 项目信息"},
+            "template": "blue",
+        },
+        "body": {"elements": elements},
     }
 
 
@@ -370,7 +479,7 @@ def build_mode_select_card(
     cli_type: str = "opencode",
 ) -> Dict[str, Any]:
     """
-    构建 agent 模式切换卡片（Schema 1.0 格式）
+    构建 agent 模式切换卡片（Schema 2.0 格式）
 
     当前 agent 用绿色 primary 按钮标识，其余为 default 按钮。
     点击后推送 im.card.action.trigger_v1，handler 处理 switch_mode 动作。
@@ -390,23 +499,20 @@ def build_mode_select_card(
     current_desc = current_info.get("description", "") if current_info else ""
 
     # ── 当前激活区块（绿色高亮，无切换按钮）─────────────────────────────
-    elements.append({
-        "tag": "div",
-        "text": {
-            "tag": "lark_md",
+    elements.append(
+        {
+            "tag": "markdown",
             "content": "<font color='grey'>当前激活</font>",
-        },
-    })
-    elements.append({
-        "tag": "div",
-        "text": {
-            "tag": "lark_md",
+        }
+    )
+    elements.append(
+        {
+            "tag": "markdown",
             "content": (
-                f"<font color='green'>🟢 **{current_label}**</font>\n"
-                f"{current_desc}"
+                f"<font color='green'>🟢 **{current_label}**</font>\n{current_desc}"
             ),
-        },
-    })
+        }
+    )
     elements.append({"tag": "hr"})
 
     # ── 其余 agent：名称 + 描述 + 醒目蓝色切换按钮 ───────────────────────
@@ -417,36 +523,33 @@ def build_mode_select_card(
         if name == current_agent:
             continue
 
-        elements.append({
-            "tag": "div",
-            "text": {
-                "tag": "lark_md",
+        elements.append(
+            {
+                "tag": "markdown",
                 "content": f"**{label}**\n<font color='grey'>{desc}</font>",
-            },
-        })
-        elements.append({
-            "tag": "action",
-            "actions": [
-                {
-                    "tag": "button",
-                    "text": {"tag": "plain_text", "content": "▶ 切换至此"},
-                    "type": "primary",
-                    "value": {
-                        "action": "switch_mode",
-                        "agent_id": name,
-                        "cli_type": cli_type,
-                    },
-                }
-            ],
-        })
+            }
+        )
+        elements.append(
+            {
+                "tag": "button",
+                "text": {"tag": "plain_text", "content": "▶ 切换至此"},
+                "type": "primary",
+                "value": {
+                    "action": "switch_mode",
+                    "agent_id": name,
+                    "cli_type": cli_type,
+                },
+            }
+        )
 
     return {
-        "config": {"wide_screen_mode": True},
+        "schema": "2.0",
+        "config": {"wide_screen_mode": True, "update_multi": True},
         "header": {
             "title": {"tag": "plain_text", "content": "🔄 切换 Agent 模式"},
             "template": "blue",
         },
-        "elements": elements,
+        "body": {"elements": elements},
     }
 
 
@@ -469,23 +572,26 @@ def build_model_select_card(
     elements: List[Dict[str, Any]] = []
 
     current_info = next((m for m in models if m.get("full_id") == current_model), None)
-    current_name = current_info.get("name", current_model) if current_info else current_model
+    current_name = (
+        current_info.get("name", current_model) if current_info else current_model
+    )
 
     # ── 当前激活模型（绿色高亮，无切换按钮）──────────────────────────────
-    elements.append({
-        "tag": "div",
-        "text": {"tag": "lark_md", "content": "<font color='grey'>当前激活</font>"},
-    })
-    elements.append({
-        "tag": "div",
-        "text": {
-            "tag": "lark_md",
+    elements.append(
+        {
+            "tag": "markdown",
+            "content": "<font color='grey'>当前激活</font>",
+        }
+    )
+    elements.append(
+        {
+            "tag": "markdown",
             "content": (
                 f"<font color='green'>🟢 **{current_name}**</font>\n"
                 f"<font color='grey'>`{current_model}`</font>"
             ),
-        },
-    })
+        }
+    )
     elements.append({"tag": "hr"})
 
     # ── 其余模型：名称 + ID + 切换按钮 ──────────────────────────────────
@@ -495,16 +601,14 @@ def build_model_select_card(
             continue
 
         name = model.get("name", full_id)
-        elements.append({
-            "tag": "div",
-            "text": {
-                "tag": "lark_md",
+        elements.append(
+            {
+                "tag": "markdown",
                 "content": f"**{name}**\n<font color='grey'>`{full_id}`</font>",
-            },
-        })
-        elements.append({
-            "tag": "action",
-            "actions": [{
+            }
+        )
+        elements.append(
+            {
                 "tag": "button",
                 "text": {"tag": "plain_text", "content": "▶ 切换至此"},
                 "type": "primary",
@@ -513,26 +617,397 @@ def build_model_select_card(
                     "model_id": full_id,
                     "cli_type": cli_type,
                 },
-            }],
-        })
+            }
+        )
 
     # ── 底部：模型列表管理说明 ────────────────────────────────────────────
     elements.append({"tag": "hr"})
-    elements.append({
-        "tag": "div",
-        "text": {
-            "tag": "lark_md",
+    elements.append(
+        {
+            "tag": "markdown",
             "content": "💡 <font color='grey'>在 `config.yaml` 中管理模型列表，格式参考 `config.example.yaml`</font>",
-        },
-    })
+        }
+    )
 
     return {
+        "schema": "2.0",
         "config": {"wide_screen_mode": True},
         "header": {
             "title": {"tag": "plain_text", "content": "🤖 切换模型"},
             "template": "turquoise",
         },
         "elements": elements,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Schema 2.0 测试卡片（交互式）
+# ---------------------------------------------------------------------------
+
+
+def build_test_card_v2_initial() -> Dict[str, Any]:
+    """
+    构建 Schema 2.0 测试卡片 - 初始状态
+
+    展示 Schema 2.0 的现代化布局和交互按钮。
+    """
+    from datetime import datetime
+
+    current_time = datetime.now().strftime("%H:%M:%S")
+
+    return {
+        "schema": "2.0",
+        "config": {"wide_screen_mode": True},
+        "header": {
+            "title": {"tag": "plain_text", "content": "🧪 Schema 2.0 交互测试"},
+            "template": "blue",
+        },
+        "body": {
+            "elements": [
+                {
+                    "tag": "markdown",
+                    "content": "<font color='grey'>💡 点击下方按钮测试卡片更新功能</font>",
+                },
+                {"tag": "hr"},
+                {
+                    "tag": "column_set",
+                    "flex_mode": "none",
+                    "columns": [
+                        {
+                            "tag": "column",
+                            "width": "auto",
+                            "elements": [
+                                {
+                                    "tag": "markdown",
+                                    "content": "<font color='grey'>当前状态</font>",
+                                }
+                            ],
+                        },
+                        {
+                            "tag": "column",
+                            "width": "weighted",
+                            "weight": 3,
+                            "elements": [
+                                {
+                                    "tag": "markdown",
+                                    "content": "🟢 **初始状态**",
+                                }
+                            ],
+                        },
+                    ],
+                },
+                {
+                    "tag": "column_set",
+                    "flex_mode": "none",
+                    "columns": [
+                        {
+                            "tag": "column",
+                            "width": "auto",
+                            "elements": [
+                                {
+                                    "tag": "markdown",
+                                    "content": "<font color='grey'>创建时间</font>",
+                                }
+                            ],
+                        },
+                        {
+                            "tag": "column",
+                            "width": "weighted",
+                            "weight": 3,
+                            "elements": [
+                                {
+                                    "tag": "markdown",
+                                    "content": f"`{current_time}`",
+                                }
+                            ],
+                        },
+                    ],
+                },
+                {"tag": "hr"},
+                {
+                    "tag": "button",
+                    "text": {"tag": "plain_text", "content": "📊 显示详情"},
+                    "type": "primary",
+                    "value": {
+                        "action": "test_card_action",
+                        "sub_action": "show_details",
+                    },
+                },
+                {
+                    "tag": "button",
+                    "text": {"tag": "plain_text", "content": "📈 数据展示"},
+                    "type": "default",
+                    "value": {
+                        "action": "test_card_action",
+                        "sub_action": "show_data",
+                    },
+                },
+                {
+                    "tag": "button",
+                    "text": {"tag": "plain_text", "content": "❌ 结束测试"},
+                    "type": "danger",
+                    "value": {
+                        "action": "test_card_action",
+                        "sub_action": "close_test",
+                    },
+                },
+            ]
+        },
+    }
+
+
+def build_test_card_v2_details() -> Dict[str, Any]:
+    """
+    构建 Schema 2.0 测试卡片 - 详情状态
+
+    展示可折叠面板（Schema 2.0 独有特性）。
+    """
+    return {
+        "schema": "2.0",
+        "config": {"wide_screen_mode": True},
+        "header": {
+            "title": {"tag": "plain_text", "content": "🧪 Schema 2.0 交互测试"},
+            "template": "green",
+        },
+        "body": {
+            "elements": [
+                {
+                    "tag": "markdown",
+                    "content": "<font color='green'>✅ 已切换到详情视图</font>",
+                },
+                {"tag": "hr"},
+                {
+                    "tag": "column_set",
+                    "flex_mode": "none",
+                    "columns": [
+                        {
+                            "tag": "column",
+                            "width": "auto",
+                            "elements": [
+                                {
+                                    "tag": "markdown",
+                                    "content": "<font color='grey'>当前状态</font>",
+                                }
+                            ],
+                        },
+                        {
+                            "tag": "column",
+                            "width": "weighted",
+                            "weight": 3,
+                            "elements": [
+                                {
+                                    "tag": "markdown",
+                                    "content": "🔵 **详情展示**",
+                                }
+                            ],
+                        },
+                    ],
+                },
+                {
+                    "tag": "collapsible_panel",
+                    "expanded": True,
+                    "header": {
+                        "title": {
+                            "tag": "markdown",
+                            "content": "📋 Schema 2.0 特性说明",
+                        },
+                        "icon": {
+                            "tag": "standard_icon",
+                            "token": "down-small-ccm_outlined",
+                            "size": "16px 16px",
+                        },
+                        "icon_position": "follow_text",
+                        "icon_expanded_angle": -180,
+                    },
+                    "border": {"color": "blue", "corner_radius": "6px"},
+                    "padding": "12px",
+                    "elements": [
+                        {
+                            "tag": "markdown",
+                            "content": (
+                                "**Schema 2.0 优势：**\n"
+                                "• 🎨 **现代化布局** - column_set 两列排版\n"
+                                "• 📦 **可折叠面板** - collapsible_panel 交互\n"
+                                "• 🎯 **彩色标签** - header template 主题色\n"
+                                "• ⚡ **流畅更新** - CardKit API 实时刷新"
+                            ),
+                        }
+                    ],
+                },
+                {"tag": "hr"},
+                {
+                    "tag": "button",
+                    "text": {"tag": "plain_text", "content": "📈 数据展示"},
+                    "type": "default",
+                    "value": {
+                        "action": "test_card_action",
+                        "sub_action": "show_data",
+                    },
+                },
+                {
+                    "tag": "button",
+                    "text": {"tag": "plain_text", "content": "❌ 结束测试"},
+                    "type": "danger",
+                    "value": {
+                        "action": "test_card_action",
+                        "sub_action": "close_test",
+                    },
+                },
+            ]
+        },
+    }
+
+
+def build_test_card_v2_data() -> Dict[str, Any]:
+    """
+    构建 Schema 2.0 测试卡片 - 数据展示状态
+
+    展示两列数据布局。
+    """
+    return {
+        "schema": "2.0",
+        "config": {"wide_screen_mode": True},
+        "header": {
+            "title": {"tag": "plain_text", "content": "🧪 Schema 2.0 交互测试"},
+            "template": "turquoise",
+        },
+        "body": {
+            "elements": [
+                {
+                    "tag": "markdown",
+                    "content": "<font color='turquoise'>📊 已切换到数据视图</font>",
+                },
+                {"tag": "hr"},
+                {
+                    "tag": "markdown",
+                    "content": "**性能指标**",
+                },
+                {
+                    "tag": "column_set",
+                    "flex_mode": "none",
+                    "columns": [
+                        {
+                            "tag": "column",
+                            "width": "weighted",
+                            "weight": 1,
+                            "elements": [
+                                {
+                                    "tag": "markdown",
+                                    "content": "<font color='grey'>卡片渲染</font>\n**<font color='green'>12ms</font>**",
+                                }
+                            ],
+                        },
+                        {
+                            "tag": "column",
+                            "width": "weighted",
+                            "weight": 1,
+                            "elements": [
+                                {
+                                    "tag": "markdown",
+                                    "content": "<font color='grey'>API 延迟</font>\n**<font color='green'>85ms</font>**",
+                                }
+                            ],
+                        },
+                        {
+                            "tag": "column",
+                            "width": "weighted",
+                            "weight": 1,
+                            "elements": [
+                                {
+                                    "tag": "markdown",
+                                    "content": "<font color='grey'>更新速度</font>\n**<font color='green'>100ms</font>**",
+                                }
+                            ],
+                        },
+                    ],
+                },
+                {"tag": "hr"},
+                {
+                    "tag": "column_set",
+                    "flex_mode": "none",
+                    "columns": [
+                        {
+                            "tag": "column",
+                            "width": "auto",
+                            "elements": [
+                                {
+                                    "tag": "markdown",
+                                    "content": "<font color='grey'>当前状态</font>",
+                                }
+                            ],
+                        },
+                        {
+                            "tag": "column",
+                            "width": "weighted",
+                            "weight": 3,
+                            "elements": [
+                                {
+                                    "tag": "markdown",
+                                    "content": "🟣 **数据展示**",
+                                }
+                            ],
+                        },
+                    ],
+                },
+                {"tag": "hr"},
+                {
+                    "tag": "button",
+                    "text": {"tag": "plain_text", "content": "📊 显示详情"},
+                    "type": "default",
+                    "value": {
+                        "action": "test_card_action",
+                        "sub_action": "show_details",
+                    },
+                },
+                {
+                    "tag": "button",
+                    "text": {"tag": "plain_text", "content": "❌ 结束测试"},
+                    "type": "danger",
+                    "value": {
+                        "action": "test_card_action",
+                        "sub_action": "close_test",
+                    },
+                },
+            ]
+        },
+    }
+
+
+def build_test_card_v2_closed() -> Dict[str, Any]:
+    """
+    构建 Schema 2.0 测试卡片 - 结束状态
+
+    测试完成后的最终状态。
+    """
+    return {
+        "schema": "2.0",
+        "config": {"wide_screen_mode": True},
+        "header": {
+            "title": {"tag": "plain_text", "content": "🧪 Schema 2.0 交互测试"},
+            "template": "grey",
+        },
+        "body": {
+            "elements": [
+                {
+                    "tag": "markdown",
+                    "content": (
+                        "<font color='grey'>✅ **测试已完成**</font>\n\n"
+                        "感谢体验 Schema 2.0 交互卡片！\n\n"
+                        "**测试总结：**\n"
+                        "• 卡片创建成功 ✅\n"
+                        "• 按钮交互正常 ✅\n"
+                        "• 动态更新流畅 ✅\n"
+                        "• Schema 2.0 特性完整 ✅"
+                    ),
+                },
+                {"tag": "hr"},
+                {
+                    "tag": "markdown",
+                    "content": "<font color='grey'>再次测试请发送 `/testcard2`</font>",
+                    "text_size": "notation",
+                },
+            ]
+        },
     }
 
 
@@ -721,21 +1196,21 @@ def _build_complete_card(
 
     # ── 3. 底部元信息（单行紧凑显示，右对齐）────────────────────────────
     footer_parts: List[str] = []
-    
+
     # 状态
     if is_error:
         footer_parts.append("❌ 出错")
     else:
         footer_parts.append("✅ 已完成")
-    
+
     # 耗时
     if elapsed_ms is not None:
         footer_parts.append(f"⏱️ {_format_elapsed(elapsed_ms)}")
-    
+
     # Token 统计
     if token_stats:
         _append_token_stats_compact(footer_parts, token_stats)
-    
+
     # 模型
     if model:
         footer_parts.append(f"🤖 {_simplify_model_name(model)}")
@@ -814,14 +1289,15 @@ def _append_token_stats(parts: List[str], token_stats: Dict) -> None:
 
 def _append_token_stats_compact(parts: List[str], token_stats: Dict) -> None:
     """将紧凑格式的 token 统计信息追加到 parts 列表。
-    
+
     格式: 📊 1.2K tokens (5%) - 更简洁的显示
     """
+
     def format_num(n: int) -> str:
         if n >= 1000:
             return f"{n / 1000:.1f}K"
         return str(n)
-    
+
     # 格式 A: OpenCode 格式
     if "total_tokens" in token_stats:
         total_tokens = token_stats.get("total_tokens", 0)
@@ -831,21 +1307,19 @@ def _append_token_stats_compact(parts: List[str], token_stats: Dict) -> None:
         usage_percent = (
             (context_used / context_window * 100) if context_window > 0 else 0
         )
-        parts.append(
-            f"📊 {format_num(total_tokens)} ({usage_percent:.0f}%)"
-        )
+        parts.append(f"📊 {format_num(total_tokens)} ({usage_percent:.0f}%)")
         return
 
     # 格式 B: Kimi 格式
     if "token_usage" in token_stats or "context_usage" in token_stats:
         token_usage = token_stats.get("token_usage") or {}
         total_tokens = (
-            token_usage.get("input_other", 0) +
-            token_usage.get("input_cache_read", 0) +
-            token_usage.get("input_cache_creation", 0) +
-            token_usage.get("output", 0)
+            token_usage.get("input_other", 0)
+            + token_usage.get("input_cache_read", 0)
+            + token_usage.get("input_cache_creation", 0)
+            + token_usage.get("output", 0)
         )
-        
+
         context_usage = token_stats.get("context_usage")
         max_context_tokens = token_stats.get("max_context_tokens", 128000)
 
@@ -856,9 +1330,7 @@ def _append_token_stats_compact(parts: List[str], token_stats: Dict) -> None:
         else:
             usage_percent = 0
 
-        parts.append(
-            f"📊 {format_num(total_tokens)} ({usage_percent:.0f}%)"
-        )
+        parts.append(f"📊 {format_num(total_tokens)} ({usage_percent:.0f}%)")
 
 
 # ---------------------------------------------------------------------------
@@ -938,18 +1410,18 @@ CATEGORY_EMOJI_MAP = {
 def _add_category_emojis(text: str) -> str:
     """
     为分类标题自动添加 emoji 图标
-    
+
     检测常见的分类标题（如"**信息与搜索**"、"软件开发"等），
     自动在开头添加对应的 emoji 图标。
     """
     lines = text.split("\n")
     result_lines = []
-    
+
     for line in lines:
         original_line = line
         # 移除 Markdown 粗体标记进行检查
         check_line = line.replace("**", "").replace("__", "").strip()
-        
+
         # 检查是否匹配分类关键词
         added_emoji = False
         for keyword, emoji in CATEGORY_EMOJI_MAP.items():
@@ -968,37 +1440,37 @@ def _add_category_emojis(text: str) -> str:
                     line = f"{emoji} {line}"
                 added_emoji = True
                 break
-        
+
         result_lines.append(line)
-    
+
     return "\n".join(result_lines)
 
 
 def _beautify_list_items(text: str) -> str:
     """
     美化列表项显示
-    
+
     - 为列表项添加适当的缩进和格式
     - 确保列表项之间有适当的间距
     """
     lines = text.split("\n")
     result_lines = []
     prev_was_list = False
-    
+
     for i, line in enumerate(lines):
         stripped = line.strip()
-        
+
         # 检测是否是列表项
         is_bullet = stripped.startswith(("- ", "* ", "• "))
         is_numbered = re.match(r"^\d+\.", stripped)
-        
+
         if is_bullet or is_numbered:
             prev_was_list = True
         else:
             prev_was_list = False
-        
+
         result_lines.append(line)
-    
+
     return "\n".join(result_lines)
 
 
@@ -1191,3 +1663,439 @@ def _simplify_model_name(model: str) -> str:
         return model[:21] + "..."
 
     return model
+
+
+def build_session_list_card(
+    sessions: List[Dict[str, Any]],
+    current_session_id: Optional[str] = None,
+    cli_type: str = "opencode",
+    deleting_session_id: Optional[str] = None,
+    working_dir: str = "",
+) -> Dict[str, Any]:
+    """构建会话列表卡片（Schema 2.0）
+
+    Args:
+        sessions: 会话列表，每个会话含 session_id, title, is_current, created_at, updated_at
+        current_session_id: 当前活跃会话ID（绿色标记）
+        cli_type: CLI类型，用于按钮 value
+        deleting_session_id: 处于"确认删除"状态的会话ID（显示确认/取消按钮）
+
+    Returns:
+        飞书卡片 JSON（Schema 2.0）
+    """
+    elements: List[Dict[str, Any]] = []
+
+    # ── 顶部标题行 + 新建按钮 ─────────────────────────────────────────────
+    elements.append({
+        "tag": "column_set",
+        "flex_mode": "none",
+        "columns": [
+            {
+                "tag": "column",
+                "width": "weighted",
+                "weight": 3,
+                "elements": [{"tag": "markdown", "content": "💬 **会话列表**"}],
+            },
+            {
+                "tag": "column",
+                "width": "auto",
+                "elements": [{
+                    "tag": "button",
+                    "text": {"tag": "plain_text", "content": "🆕 新建"},
+                    "type": "primary",
+                    "value": {"action": "create_new_session", "cli_type": cli_type, "working_dir": working_dir},
+                }],
+            },
+        ],
+    })
+    elements.append({"tag": "hr"})
+
+    # ── 会话列表 ──────────────────────────────────────────────────────────
+    if not sessions:
+        elements.append({
+            "tag": "markdown",
+            "content": "ℹ️ **暂无历史会话**\n\n发送消息开始对话，或点击「🆕 新建」",
+        })
+    else:
+        session_list = sessions[:10]
+        for i, session in enumerate(session_list, 1):
+            session_id = session.get("session_id", "")
+            title = session.get("title", "未命名会话")
+            display_id = session.get("display_id", session_id[-8:] if len(session_id) >= 8 else session_id)
+            is_current = session_id == current_session_id
+            is_deleting = session_id == deleting_session_id
+
+            # 格式化时间（优先 updated_at）
+            time_str = ""
+            timestamp = session.get("updated_at") or session.get("created_at", 0)
+            if timestamp:
+                try:
+                    from datetime import datetime
+                    time_str = datetime.fromtimestamp(float(timestamp)).strftime("%m-%d %H:%M")
+                except Exception:
+                    time_str = ""
+
+            # 第一行：状态图标 + ID + 时间
+            status_icon = "🟢" if is_current else "🔴" if is_deleting else "⚪"
+            first_line = f"{status_icon} **{display_id}**"
+            if time_str:
+                first_line += f"  ·  {time_str}"
+            elements.append({"tag": "markdown", "content": first_line})
+
+            # 第二行：标题 + 操作按钮
+            if is_deleting:
+                # 删除确认态：警告文字 + 确认/取消按钮
+                elements.append({
+                    "tag": "column_set",
+                    "flex_mode": "none",
+                    "columns": [
+                        {
+                            "tag": "column",
+                            "width": "weighted",
+                            "weight": 3,
+                            "elements": [{
+                                "tag": "markdown",
+                                "content": f"📋 {title}\n<font color='red'>⚠️ 确认永久删除？</font>",
+                            }],
+                        },
+                        {
+                            "tag": "column",
+                            "width": "auto",
+                            "elements": [
+                                {
+                                    "tag": "button",
+                                    "text": {"tag": "plain_text", "content": "✅ 确认"},
+                                    "type": "danger",
+                                    "value": {
+                                        "action": "delete_session_confirmed",
+                                        "session_id": session_id,
+                                        "cli_type": cli_type,
+                                    },
+                                },
+                                {
+                                    "tag": "button",
+                                    "text": {"tag": "plain_text", "content": "取消"},
+                                    "type": "default",
+                                    "value": {
+                                        "action": "delete_session_cancel",
+                                        "cli_type": cli_type,
+                                    },
+                                },
+                            ],
+                        },
+                    ],
+                })
+            elif is_current:
+                # 当前会话：标题 + 当前标记 + 改名按钮（无删除）
+                elements.append({
+                    "tag": "column_set",
+                    "flex_mode": "none",
+                    "columns": [
+                        {
+                            "tag": "column",
+                            "width": "weighted",
+                            "weight": 3,
+                            "elements": [{
+                                "tag": "markdown",
+                                "content": f"📋 {title}\n<font color='green'>✓ 当前会话</font>",
+                            }],
+                        },
+                        {
+                            "tag": "column",
+                            "width": "auto",
+                            "elements": [
+                                {
+                    "tag": "button",
+                    "text": {"tag": "plain_text", "content": "📝 改名"},
+                    "type": "default",
+                    "value": {
+                        "action": "rename_session_prompt",
+                        "session_id": session_id,
+                        "session_title": title,
+                        "cli_type": cli_type,
+                        "working_dir": working_dir,
+                    },
+                },
+                            ],
+                        },
+                    ],
+                })
+            else:
+                # 非当前会话：标题 + 切换/改名/删除按钮
+                elements.append({
+                    "tag": "column_set",
+                    "flex_mode": "none",
+                    "columns": [
+                        {
+                            "tag": "column",
+                            "width": "weighted",
+                            "weight": 3,
+                            "elements": [{"tag": "markdown", "content": f"📋 {title}"}],
+                        },
+                        {
+                            "tag": "column",
+                            "width": "auto",
+                            "elements": [
+                                {
+                                    "tag": "button",
+                                    "text": {"tag": "plain_text", "content": "▶ 切换"},
+                                    "type": "primary",
+                                    "value": {
+                                        "action": "switch_session",
+                                        "session_id": session_id,
+                                        "cli_type": cli_type,
+                                        "working_dir": working_dir,
+                                    },
+                                },
+                                {
+                    "tag": "button",
+                    "text": {"tag": "plain_text", "content": "📝 改名"},
+                    "type": "default",
+                    "value": {
+                        "action": "rename_session_prompt",
+                        "session_id": session_id,
+                        "session_title": title,
+                        "cli_type": cli_type,
+                        "working_dir": working_dir,
+                    },
+                },
+                                {
+                                    "tag": "button",
+                                    "text": {"tag": "plain_text", "content": "🗑️ 删除"},
+                                    "type": "danger",
+                                    "value": {
+                                        "action": "delete_session_confirm",
+                                        "session_id": session_id,
+                                        "session_title": title,
+                                        "cli_type": cli_type,
+                                        "working_dir": working_dir,
+                                    },
+                                },
+                            ],
+                        },
+                    ],
+                })
+
+            if i < len(session_list):
+                elements.append({"tag": "hr"})
+
+    # ── 底部提示 ──────────────────────────────────────────────────────────
+    elements.append({"tag": "hr"})
+    elements.append({
+        "tag": "markdown",
+        "content": "<font color='grey'>💡 点击「📝 改名」后直接回复新名称即可完成重命名</font>",
+        "text_size": "notation",
+    })
+
+    return {
+        "schema": "2.0",
+        "header": {
+            "title": {"tag": "plain_text", "content": "会话管理"},
+            "template": "blue",
+        },
+        "body": {"elements": elements},
+    }
+
+
+def build_session_info_card(
+    session_info: Dict[str, Any], cli_type: str = "opencode"
+) -> Dict[str, Any]:
+    """构建单个会话详情卡片
+
+    Args:
+        session_info: 会话信息，包含 session_id, title, messages_count 等
+        cli_type: CLI类型
+
+    Returns:
+        飞书卡片 JSON（Schema 2.0）
+    """
+    session_id = session_info.get("session_id", "")
+    title = session_info.get("title", "未命名会话")
+    display_id = session_info.get("display_id", session_id[-8:] if len(session_id) >= 8 else session_id)
+    created_at = session_info.get("created_at", "")
+    updated_at = session_info.get("updated_at", "")
+    messages_count = session_info.get("messages_count", 0)
+    is_current = session_info.get("is_current", False)
+    working_dir = session_info.get("working_dir", "")
+
+    # 格式化时间
+    def format_time(ts):
+        if not ts:
+            return "未知"
+        try:
+            from datetime import datetime
+
+            dt = datetime.fromtimestamp(ts)
+            return dt.strftime("%Y-%m-%d %H:%M:%S")
+        except:
+            return str(ts)
+
+    elements = []
+
+    # 状态标识
+    if is_current:
+        elements.append({"tag": "markdown", "content": "🟢 **当前激活会话**"})
+
+    # 基本信息 - 使用 column_set 两列布局
+    elements.append(
+        {
+            "tag": "column_set",
+            "flex_mode": "none",
+            "background_style": "default",
+            "columns": [
+                {
+                    "tag": "column",
+                    "width": "auto",
+                    "elements": [
+                        {
+                            "tag": "markdown",
+                            "content": "🆔",
+                        }
+                    ],
+                },
+                {
+                    "tag": "column",
+                    "weight": 4,
+                    "elements": [
+                        {
+                            "tag": "markdown",
+                            "content": f"`{display_id}`",
+                        }
+                    ],
+                },
+            ],
+        }
+    )
+
+    elements.append(
+        {
+            "tag": "column_set",
+            "flex_mode": "none",
+            "background_style": "default",
+            "columns": [
+                {
+                    "tag": "column",
+                    "width": "auto",
+                    "elements": [
+                        {
+                            "tag": "markdown",
+                            "content": "📋",
+                        }
+                    ],
+                },
+                {
+                    "tag": "column",
+                    "weight": 4,
+                    "elements": [{"tag": "markdown", "content": title}],
+                },
+            ],
+        }
+    )
+
+    elements.append(
+        {
+            "tag": "column_set",
+            "flex_mode": "none",
+            "background_style": "default",
+            "columns": [
+                {
+                    "tag": "column",
+                    "width": "auto",
+                    "elements": [
+                        {
+                            "tag": "markdown",
+                            "content": "💬",
+                        }
+                    ],
+                },
+                {
+                    "tag": "column",
+                    "weight": 4,
+                    "elements": [
+                        {
+                            "tag": "markdown",
+                            "content": str(messages_count),
+                        }
+                    ],
+                },
+            ],
+        }
+    )
+
+    elements.append(
+        {
+            "tag": "column_set",
+            "flex_mode": "none",
+            "background_style": "default",
+            "columns": [
+                {
+                    "tag": "column",
+                    "width": "auto",
+                    "elements": [
+                        {
+                            "tag": "markdown",
+                            "content": "🕐",
+                        }
+                    ],
+                },
+                {
+                    "tag": "column",
+                    "weight": 4,
+                    "elements": [
+                        {
+                            "tag": "markdown",
+                            "content": format_time(updated_at),
+                        }
+                    ],
+                },
+            ],
+        }
+    )
+
+    # 操作按钮 - Schema 2.0 直接使用 button 标签，不用 action 包裹
+    elements.append({"tag": "hr"})
+
+    if not is_current:
+        elements.append(
+            {
+                "tag": "button",
+                "text": {"tag": "plain_text", "content": "▶ 切换到此会话"},
+                "type": "primary",
+                "value": {
+                    "action": "switch_session",
+                    "session_id": session_id,
+                    "cli_type": cli_type,
+                },
+            }
+        )
+
+    elements.append(
+        {
+            "tag": "button",
+            "text": {"tag": "plain_text", "content": "📝 重命名"},
+            "type": "default",
+            "value": {
+                "action": "rename_session_prompt",
+                "session_id": session_id,
+                "cli_type": cli_type,
+            },
+        }
+    )
+
+    elements.append(
+        {
+            "tag": "button",
+            "text": {"tag": "plain_text", "content": "📋 查看列表"},
+            "type": "default",
+            "value": {"action": "list_sessions", "cli_type": cli_type},
+        }
+    )
+
+    return {
+        "schema": "2.0",
+        "header": {
+            "title": {"tag": "plain_text", "content": "会话详情"},
+            "template": "blue",
+        },
+        "body": {"elements": elements},
+    }

@@ -21,9 +21,17 @@ async def main():
     # 解析路径（相对路径基于配置文件目录，支持服务模式）
     config_dir = get_config_dir()
 
-    storage_dir = Path(config.session.storage_dir)
-    if not storage_dir.is_absolute():
-        storage_dir = config_dir / storage_dir
+    # 会话存储目录（v0.1.7+ 已弃用，使用 OpenCode 服务器管理会话）
+    storage_dir_str = config.session.storage_dir
+    if storage_dir_str:
+        storage_dir = Path(storage_dir_str)
+        if not storage_dir.is_absolute():
+            storage_dir = config_dir / storage_dir
+        # 创建会话存储目录（仅当配置了存储目录时）
+        storage_dir.mkdir(parents=True, exist_ok=True)
+        config.session.storage_dir = str(storage_dir)
+    else:
+        storage_dir = None  # v0.1.7+ 不使用本地会话存储
 
     if config.debug.log_dir:
         log_dir: Path = Path(config.debug.log_dir).expanduser()
@@ -66,10 +74,8 @@ async def main():
     if not available_clis:
         logger.error("❌ 没有可用的 CLI 工具！请至少安装一个：opencode 或 codex")
         sys.exit(1)
-    
-    # 创建会话存储目录（使用解析后的绝对路径）
-    storage_dir.mkdir(parents=True, exist_ok=True)
-    config.session.storage_dir = str(storage_dir)
+
+    # v0.1.7+ 会话管理委托给 OpenCode 服务器，不再使用本地存储
     
     # 创建飞书 API 客户端
     feishu_api = FeishuAPI(

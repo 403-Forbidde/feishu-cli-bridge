@@ -20,7 +20,7 @@ class FeishuConfig:
 class SessionConfig:
     max_sessions: int = 10
     max_history: int = 20
-    storage_dir: str = ".sessions"
+    storage_dir: str = ""  # 已弃用：v0.1.7+ 会话管理完全委托 OpenCode 服务器
 
 
 @dataclass
@@ -144,7 +144,7 @@ def _load_from_env() -> Config:
         session=SessionConfig(
             max_sessions=int(os.getenv("MAX_SESSIONS", "15")),
             max_history=int(os.getenv("MAX_HISTORY", "20")),
-            storage_dir=os.getenv("SESSION_DIR", ".sessions"),
+            storage_dir=os.getenv("SESSION_DIR", ""),  # 已弃用：v0.1.7+ 不再本地存储会话
         ),
         cli={
             "opencode": CLIConfig(
@@ -206,7 +206,7 @@ def _parse_config(data: dict) -> Config:
         session=SessionConfig(
             max_sessions=session_data.get("max_sessions", 15),
             max_history=session_data.get("max_history", 20),
-            storage_dir=session_data.get("storage_dir", ".sessions"),
+            storage_dir=session_data.get("storage_dir", ""),  # 已弃用：v0.1.7+ 不再本地存储会话
         ),
         cli=cli_configs,
         streaming=StreamingConfig(
