@@ -419,12 +419,6 @@ feishu-cli-bridge/
 - ✅ 修复会话改名交互失败（Issue #32）：用户点击「改名」后回复新名称时，系统正确识别并执行重命名
 - ✅ 修复交互式回复卡片空白问题：正确处理 `card_json` 元数据，返回完整会话列表卡片
 
-### v0.1.6 (2026-03-22)
-- ✅ 修复 `parse_chunk` 接口签名与基类不符（内部重命名为 `_parse_event`）
-- ✅ 修复 `asyncio.get_event_loop()` 弃用用法（替换为 `time.monotonic()` / `get_running_loop()`）
-- ✅ 修复消息发送 fire-and-forget 丢失错误，改为 await 直接调用
-- ✅ 修复 `_sessions` 并发竞态，添加 `asyncio.Lock` 保护
-
 完整日志见 [doc/CHANGELOG.md](doc/CHANGELOG.md)
 
 ## 环境变量
