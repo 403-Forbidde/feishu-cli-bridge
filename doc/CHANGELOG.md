@@ -1,37 +1,93 @@
 # 更新日志
 
-## [v0.1.8] - 2026-03-23
+## [v0.1.7] - 2026-03-23  【里程碑版本】
 
 **开发人**: ERROR403
 
-### 修复
+### 重大架构变更：Session 管理完全重构
 
-- **会话改名交互失败** (`src/feishu/handler.py`, `src/tui_commands/__init__.py`) — Issue #32
-  - 问题：用户点击「改名」按钮后回复新名称时，系统错误地将内容当作普通消息处理给 AI，而非执行重命名
-  - 根本原因：当用户直接发送消息（而非点击「回复」按钮）时，`parent_id` 为空，系统使用内容启发式匹配（纯数字 1-10 或 `provider/model` 格式）判断是否为交互式回复，但用户输入的新名称不符合这些格式
-  - 修复：新增 `get_interactive_target()` 方法，对 `rename_session` 交互类型特殊处理——接受任何非命令内容作为有效回复，不再受限于特定格式
+本版本是 Feishu CLI Bridge 的**里程碑版本**，彻底重构了 Session 管理机制，从"本地文件存储 + 多进程"架构升级为"OpenCode HTTP Server 集中管理"架构。
 
-- **交互式回复卡片空白** (`src/feishu/handler.py`)
-  - 问题：`_handle_interactive_reply` 在处理卡片类型结果时，使用 `build_card_content()` 对卡片进行重复包装，导致卡片结构损坏，飞书显示为空白消息
-  - 修复：检测 `result.metadata["card_json"]`，若存在则直接使用原始卡片数据发送，避免二次包装
+#### 旧架构（v0.1.6 及之前）
 
-### 技术细节
+```
+每个 working_dir 一个 opencode 子进程
+        ↓
+本地 JSON 文件存储 session 映射 (.sessions/*.json)
+        ↓
+SessionManager 维护 LRU 缓存和持久化
+        ↓
+问题：进程多开、状态同步复杂、配置分散
+```
 
-- `TUICommandRouter.get_interactive_target()` 新增：获取用户当前的交互式消息目标，支持不依赖 `parent_id` 的交互式回复检测
-- `_handle_interactive_reply()` 逻辑优化：区分 `CARD` / `INTERACTIVE` 结果类型，正确处理预构建的 `card_json`
+**存在的问题**:
+- **多进程资源浪费**: 每个工作目录独立启动 `opencode serve` 进程，端口占用混乱
+- **状态同步困难**: 本地 JSON 与 OpenCode 实际状态可能不一致（Bridge 重启后 session ID 失效但本地仍保留）
+- **配置分散**: 会话配置分布在本地 JSON 和 OpenCode 两端，难以维护
+- **并发隐患**: 多进程同时操作导致文件锁竞争
 
----
+#### 新架构（v0.1.7 起）
 
-## [v0.1.7] - 2026-03-23
+```
+单一 OpenCode Server 实例（端口 4096）
+        ↓
+HTTP API 集中管理所有会话（GET/POST/PATCH/DELETE /session）
+        ↓
+工作目录隔离通过 directory 参数实现（而非多进程）
+        ↓
+本地仅维护内存中的 session_id → working_dir 映射（无持久化）
+```
 
-**开发人**: ERROR403
+**核心改进**:
+- **单 Server 架构**: 整个 Bridge 只启动一个 `opencode serve` 进程，通过 `directory` 查询参数区分不同项目的上下文
+- **服务端权威**: OpenCode 服务器是会话的唯一数据源，Bridge 本地不做任何持久化存储
+- **启动恢复**: Bridge 重启后，通过 `GET /session` 从服务器恢复当前目录的活跃会话
+- **生命周期托管**: Session 创建、切换、重置、删除全部通过 REST API 完成
+
+#### 技术实现细节
+
+**`OpenCodeServerManager` 单例管理** (`src/adapters/opencode.py`):
+```python
+# 单一服务器实例
+self._server_manager: Optional[OpenCodeServerManager] = None
+
+# 每个工作目录对应一个 OpenCode session（key = working_dir）
+self._sessions: Dict[str, OpenCodeSession] = {}
+```
+
+**关键 API 调用**:
+- `POST /session?directory={working_dir}` — 创建新会话，自动绑定工作目录
+- `GET /session` — 获取所有会话，用于列表展示和重启恢复
+- `GET /session/{id}` — 获取会话详情，用于切换会话时验证
+- `PATCH /session/{id}` — 重命名会话
+- `DELETE /session/{id}` — 删除会话
+
+**流式通信机制**:
+- 发送消息: `POST /session/{id}/prompt_async` (返回 204 立即响应)
+- 接收回复: `GET /event` SSE 流，解析 `message.part.delta` / `session.idle` 事件
+- 局部状态 `StreamState` 确保多轮对话并发安全
+
+#### 废弃项
+
+- ❌ `SessionConfig.storage_dir` 配置项已完全移除（原用于指定本地 session JSON 存储路径）
+- ❌ `src/session/manager.py` 已清空为桩文件（保留避免破坏 git 记录）
+- ❌ 本地 `.sessions/` 目录不再创建或使用
+
+#### 迁移说明
+
+升级至 v0.1.7 后：
+1. 原有的本地 session 映射文件将被忽略（可手动删除 `.sessions/` 目录）
+2. OpenCode 服务器中的会话仍然保留，不受影响
+3. 首次启动时会自动从服务器恢复当前目录的会话关联
 
 ### 新增
 
-- **会话管理完全委托 OpenCode 服务器** (`src/adapters/opencode.py`, `src/tui_commands/opencode.py`)
-  - 从 v0.1.7 开始，会话管理完全委托给 OpenCode 服务器，本地不再保留任何会话映射文件
-  - 会话列表通过 `GET /session` 从服务器获取，按 `directory` 字段过滤当前项目
-  - 支持从服务器恢复会话：启动时自动查找当前目录关联的活跃会话
+- **会话管理卡片化** (`src/tui_commands/opencode.py`, `src/feishu/card_builder.py`)
+  - `/session` 命令返回 Schema 2.0 交互式卡片，替代纯文本列表
+  - 每行会话显示：ID 前缀（FSB-xxx）、标题、最后活跃时间
+  - 当前活跃会话高亮显示（🟢 绿色标识）
+  - 支持点击卡片按钮直接切换会话，无需再输入 `/session <序号>`
+  - 新增功能：改名按钮触发交互式改名流程，删除按钮触发二次确认
 
 - **项目管理卡片 Schema 2.0 全面升级** (`src/feishu/card_builder.py`, `src/tui_commands/project.py`)
   - 项目列表卡片从 Schema 1.0 迁移至 Schema 2.0，与 `/mode`、`/model` 等卡片风格统一
@@ -51,6 +107,17 @@
   - 现：操作成功后返回完整的项目列表卡片（`TUIResult.card()`），新添加的项目已激活，效果与 `/pl` 完全一致
   - 用户无需再次执行 `/pl` 即可查看完整项目状态
 
+### 修复
+
+- **会话改名交互失败** (`src/feishu/handler.py`, `src/tui_commands/__init__.py`) — Issue #32
+  - 问题：用户点击「改名」按钮后回复新名称时，系统错误地将内容当作普通消息处理给 AI，而非执行重命名
+  - 根本原因：当用户直接发送消息（而非点击「回复」按钮）时，`parent_id` 为空，系统使用内容启发式匹配（纯数字 1-10 或 `provider/model` 格式）判断是否为交互式回复，但用户输入的新名称不符合这些格式
+  - 修复：新增 `get_interactive_target()` 方法，对 `rename_session` 交互类型特殊处理——接受任何非命令内容作为有效回复，不再受限于特定格式
+
+- **交互式回复卡片空白** (`src/feishu/handler.py`)
+  - 问题：`_handle_interactive_reply` 在处理卡片类型结果时，使用 `build_card_content()` 对卡片进行重复包装，导致卡片结构损坏，飞书显示为空白消息
+  - 修复：检测 `result.metadata["card_json"]`，若存在则直接使用原始卡片数据发送，避免二次包装
+
 ### 改进
 
 - **卡片 Header 风格统一** (`src/feishu/card_builder.py`)
@@ -65,22 +132,17 @@
 
 ### 技术细节
 
+- `OpenCodeAdapter` 完全重写：
+  - 新增 `OpenCodeServerManager` 类管理单一 Server 进程生命周期
+  - `_ensure_server()` 确保 Server 健康，自动注入 `OPENCODE_PERMISSION` 环境变量
+  - `_get_or_create_session()` 支持从服务器恢复会话（按 directory 字段匹配）
+  - `_send_message()` 通过 `prompt_async` 端点发送，支持附件 base64 编码
+  - `_listen_events()` SSE 流监听，使用局部 `StreamState` 避免并发冲突
+
+- `build_session_list_card()` 新增：会话列表 Schema 2.0 卡片构建
 - `build_project_list_card()` 完全重写，从 Schema 1.0 `config` 格式改为 Schema 2.0 `body.elements` 格式
 - `build_project_info_card()` 新增，支持单项目详情展示
-- `TUIResult.card()` 新增 `card_type` metadata 字段，支持 `"project_list"`、`"project_info"` 等类型标识
-- 项目卡片回调逻辑保持不变，兼容新的 Schema 2.0 卡片结构
-
-- **Session 自动命名与卡片化** (`src/session/manager.py`, `src/adapters/opencode.py`, `src/feishu/handler.py`, `src/tui_commands/opencode.py`)
-  - Session 数据模型新增 `title` 和 `title_generated` 字段，支持存储 AI 生成的会话标题
-  - 首次对话完成后自动触发 AI 标题生成：基于用户首条消息和 AI 回复内容，生成 8-15 字中文主题
-  - 降级策略：AI 生成失败时使用用户首条消息前 20 字作为标题
-  - 异步执行：标题生成在后台进行，不阻塞用户查看 AI 回复，生成完成后发送飞书消息通知
-  - `/session` 命令升级为卡片形式（Schema 2.0）：
-    - 两行显示格式：第一行为 Session ID（FSB-xxx），第二行为标题
-    - 当前会话高亮显示（🟢），其他会话显示切换按钮
-    - 显示最后活跃时间，支持点击切换
-  - `/session rename <ID/序号> <新名称>`：支持手动重命名会话
-  - 新增卡片构建函数：`build_session_list_card()` 会话列表卡片，`build_session_info_card()` 会话详情卡片
+- `TUIResult.card()` 新增 `card_type` metadata 字段，支持 `"project_list"`、`"project_info"`、`"session_list"` 等类型标识
 
 ---
 

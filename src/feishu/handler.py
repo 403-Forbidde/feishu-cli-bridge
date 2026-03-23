@@ -5,7 +5,7 @@ import json
 import logging
 import mimetypes
 import time
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any, Tuple
 from pathlib import Path
 
 from .client import FeishuMessage, FeishuClient
@@ -92,6 +92,70 @@ class MessageHandler:
         import os
 
         return os.getcwd()
+
+    async def _get_session_context(
+        self, adapter: Optional[BaseCLIAdapter] = None, working_dir: str = ""
+    ) -> Tuple[str, str]:
+        """获取会话上下文（工作目录和当前会话ID）
+
+        Args:
+            adapter: CLI适配器，如果提供则用于获取当前会话ID
+            working_dir: 可选的工作目录，如果为空则从项目获取
+
+        Returns:
+            (working_dir, current_session_id) 元组
+        """
+        # 确定工作目录
+        if not working_dir and self.project_manager:
+            current_project = await self.project_manager.get_current_project()
+            working_dir = str(current_project.path) if current_project else ""
+
+        # 获取当前会话ID
+        current_session_id = ""
+        if adapter and hasattr(adapter, "get_session_id"):
+            current_session_id = adapter.get_session_id(working_dir) or ""
+
+        return working_dir, current_session_id
+
+    async def _build_session_data_list(
+        self,
+        adapter: BaseCLIAdapter,
+        working_dir: str,
+        current_session_id: str,
+    ) -> List[Dict[str, Any]]:
+        """构建会话数据列表（用于会话列表卡片）
+
+        Args:
+            adapter: CLI适配器
+            working_dir: 工作目录，用于过滤会话
+            current_session_id: 当前会话ID，用于标记当前会话
+
+        Returns:
+            会话数据字典列表
+        """
+        session_data_list: List[Dict[str, Any]] = []
+
+        if not hasattr(adapter, "list_sessions"):
+            return session_data_list
+
+        try:
+            all_sessions = await adapter.list_sessions(limit=20)
+            for session in [s for s in all_sessions if s.get("directory") == working_dir]:
+                sid = session.get("id", "")
+                slug = session.get("slug", "")
+                display_id = slug if slug else sid[-8:] if len(sid) >= 8 else sid
+                session_data_list.append({
+                    "session_id": sid,
+                    "display_id": display_id,
+                    "title": session.get("title", "未命名会话"),
+                    "created_at": session.get("created_at", 0),
+                    "updated_at": session.get("updated_at", 0),
+                    "is_current": sid == current_session_id,
+                })
+        except Exception as e:
+            logger.warning(f"构建会话列表失败: {e}")
+
+        return session_data_list
 
     async def handle_message(self, event_data: dict):
         """
@@ -1070,31 +1134,10 @@ class MessageHandler:
 
                 try:
                     adapter = self.adapters.get(cli_type)
-                    working_dir = ""
-                    if self.project_manager:
-                        current_project = await self.project_manager.get_current_project()
-                        working_dir = str(current_project.path) if current_project else ""
-                    current_session_id = (
-                        adapter.get_session_id(working_dir)
-                        if adapter and hasattr(adapter, "get_session_id")
-                        else ""
-                    ) or ""
-
-                    session_data_list = []
-                    if adapter and hasattr(adapter, "list_sessions"):
-                        all_sessions = await adapter.list_sessions(limit=20)
-                        for session in [s for s in all_sessions if s.get("directory") == working_dir]:
-                            sid = session.get("id", "")
-                            slug = session.get("slug", "")
-                            display_id = slug if slug else sid[-8:] if len(sid) >= 8 else sid
-                            session_data_list.append({
-                                "session_id": sid,
-                                "display_id": display_id,
-                                "title": session.get("title", "未命名会话"),
-                                "created_at": session.get("created_at", 0),
-                                "updated_at": session.get("updated_at", 0),
-                                "is_current": sid == current_session_id,
-                            })
+                    working_dir, current_session_id = await self._get_session_context(adapter)
+                    session_data_list = await self._build_session_data_list(
+                        adapter, working_dir, current_session_id
+                    ) if adapter else []
 
                     from .card_builder import build_session_list_card
 
@@ -1191,32 +1234,11 @@ class MessageHandler:
 
                 adapter = self.adapters.get(cli_type)
                 # 优先使用按钮中传递的 working_dir，其次从当前项目获取
-                working_dir = button_value.get("working_dir", "")
-                if not working_dir and self.project_manager:
-                    current_project = await self.project_manager.get_current_project()
-                    working_dir = str(current_project.path) if current_project else ""
-                current_session_id = ""
-                if self.project_manager:
-                    current_project = await self.project_manager.get_current_project()
-                    working_dir = str(current_project.path) if current_project else ""
-                if adapter and hasattr(adapter, "get_session_id"):
-                    current_session_id = adapter.get_session_id(working_dir) or ""
-
-                session_data_list = []
-                if adapter and hasattr(adapter, "list_sessions"):
-                    all_sessions = await adapter.list_sessions(limit=20)
-                    for session in [s for s in all_sessions if s.get("directory") == working_dir]:
-                        sid = session.get("id", "")
-                        slug = session.get("slug", "")
-                        display_id = slug if slug else sid[-8:] if len(sid) >= 8 else sid
-                        session_data_list.append({
-                            "session_id": sid,
-                            "display_id": display_id,
-                            "title": session.get("title", "未命名会话"),
-                            "created_at": session.get("created_at", 0),
-                            "updated_at": session.get("updated_at", 0),
-                            "is_current": sid == current_session_id,
-                        })
+                working_dir_override = button_value.get("working_dir", "")
+                working_dir, current_session_id = await self._get_session_context(adapter, working_dir_override)
+                session_data_list = await self._build_session_data_list(
+                    adapter, working_dir, current_session_id
+                ) if adapter else []
 
                 from .card_builder import build_session_list_card
                 updated_card = build_session_list_card(
@@ -1235,29 +1257,10 @@ class MessageHandler:
                 # 取消删除：恢复正常列表卡片
                 cli_type = button_value.get("cli_type", "opencode")
                 adapter = self.adapters.get(cli_type)
-                working_dir = ""
-                current_session_id = ""
-                if self.project_manager:
-                    current_project = await self.project_manager.get_current_project()
-                    working_dir = str(current_project.path) if current_project else ""
-                if adapter and hasattr(adapter, "get_session_id"):
-                    current_session_id = adapter.get_session_id(working_dir) or ""
-
-                session_data_list = []
-                if adapter and hasattr(adapter, "list_sessions"):
-                    all_sessions = await adapter.list_sessions(limit=20)
-                    for session in [s for s in all_sessions if s.get("directory") == working_dir]:
-                        sid = session.get("id", "")
-                        slug = session.get("slug", "")
-                        display_id = slug if slug else sid[-8:] if len(sid) >= 8 else sid
-                        session_data_list.append({
-                            "session_id": sid,
-                            "display_id": display_id,
-                            "title": session.get("title", "未命名会话"),
-                            "created_at": session.get("created_at", 0),
-                            "updated_at": session.get("updated_at", 0),
-                            "is_current": sid == current_session_id,
-                        })
+                working_dir, current_session_id = await self._get_session_context(adapter)
+                session_data_list = await self._build_session_data_list(
+                    adapter, working_dir, current_session_id
+                ) if adapter else []
 
                 from .card_builder import build_session_list_card
                 updated_card = build_session_list_card(
@@ -1283,36 +1286,16 @@ class MessageHandler:
                 if not adapter or not hasattr(adapter, "delete_session"):
                     return {"toast": {"type": "error", "content": "适配器不支持删除会话", "i18n": {"zh_cn": "适配器不支持删除会话"}}}
 
-                working_dir = ""
-                if self.project_manager:
-                    current_project = await self.project_manager.get_current_project()
-                    working_dir = str(current_project.path) if current_project else ""
+                working_dir, _ = await self._get_session_context(adapter)
 
                 success = await adapter.delete_session(session_id)
                 if not success:
                     return {"toast": {"type": "error", "content": "删除会话失败", "i18n": {"zh_cn": "删除会话失败"}}}
 
-                current_session_id = (
-                    adapter.get_session_id(working_dir)
-                    if hasattr(adapter, "get_session_id")
-                    else ""
-                ) or ""
-
-                session_data_list = []
-                if hasattr(adapter, "list_sessions"):
-                    all_sessions = await adapter.list_sessions(limit=20)
-                    for session in [s for s in all_sessions if s.get("directory") == working_dir]:
-                        sid = session.get("id", "")
-                        slug = session.get("slug", "")
-                        display_id = slug if slug else sid[-8:] if len(sid) >= 8 else sid
-                        session_data_list.append({
-                            "session_id": sid,
-                            "display_id": display_id,
-                            "title": session.get("title", "未命名会话"),
-                            "created_at": session.get("created_at", 0),
-                            "updated_at": session.get("updated_at", 0),
-                            "is_current": sid == current_session_id,
-                        })
+                current_session_id = adapter.get_session_id(working_dir) if hasattr(adapter, "get_session_id") else ""
+                session_data_list = await self._build_session_data_list(
+                    adapter, working_dir, current_session_id
+                )
 
                 from .card_builder import build_session_list_card
                 updated_card = build_session_list_card(
@@ -1477,11 +1460,12 @@ class MessageHandler:
         """自动生成会话标题（异步后台执行）
 
         使用 OpenCode API PATCH /session/{id} 来设置标题。
+        当前实现：基于首条用户消息前 30 字符生成标题（简单截断）。
 
         Args:
             session_id: 会话ID
             user_msg: 用户消息
-            assistant_msg: AI回复内容
+            assistant_msg: AI回复内容（预留，当前未使用）
             working_dir: 工作目录
             adapter: CLI适配器
             chat_id: 飞书聊天ID（用于发送toast）

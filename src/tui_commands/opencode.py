@@ -309,14 +309,9 @@ class OpenCodeTUICommands(TUIBaseCommand):
             return TUIResult.error(f"删除会话失败: {str(e)}")
 
     async def _get_session_detail(self, session_id: str) -> Optional[Dict[str, Any]]:
-        """获取会话详情（GET /session/{id}）"""
-        try:
-            if hasattr(self.adapter, "_client") and self.adapter._client:
-                response = await self.adapter._client.get(f"/session/{session_id}")
-                if response.status_code == 200:
-                    return response.json()
-        except Exception:
-            pass
+        """获取会话详情（通过适配器公共方法）"""
+        if hasattr(self.adapter, "get_session_detail"):
+            return await self.adapter.get_session_detail(session_id)
         return None
 
     # ── /model ────────────────────────────────────────────────────────────────

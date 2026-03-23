@@ -2,7 +2,7 @@
 
 程序员专属：用飞书私聊向本地 CLI AI 工具下达指令，享受流式打字机输出体验。当前已接入 **OpenCode**，Codex 与 Kimi CLI 支持规划中。
 
-**版本**: v0.1.8
+**版本**: v0.1.7
 **开发**: ERROR403
 **更新日期**: 2026-03-23
 
@@ -29,7 +29,7 @@
 - 📊 **Token 统计** — 右对齐 Footer 紧凑显示耗时、Token 消耗、上下文占用率、模型名
 - 🖼️ **图片/文件输入** — 发送图片或文件自动下载并 base64 编码，作为 FilePart 传给模型视觉识别
 - 📁 **项目管理** — `/pl` 交互式卡片管理多个工作目录，点击「切换」按钮直接切换，带删除二次确认
-- 🔄 **工作目录隔离** — 每个项目对应独立 OpenCode session，工具调用（bash/read_file 等）CWD 精确隔离
+- 🔄 **工作目录隔离** — 每个项目对应独立 OpenCode session（通过 `directory` 参数），工具调用 CWD 精确隔离
 - ⚡ **智能节流** — 长间隙后先批处理再刷新，避免首次更新内容过少
 - 🌐 **跨平台支持** — Windows / Linux / macOS，Linux 含 systemd 用户服务一键安装
 
@@ -49,14 +49,14 @@
 
 ### ✅ v0.1.x — 已完成
 
-- [x] **OpenCode 适配器**（HTTP/SSE）：自动启动 `opencode serve`，`POST /session` 会话管理，SSE 事件流接收
+- [x] **OpenCode 适配器**（HTTP/SSE）：自动启动 `opencode serve`，`POST /session` 会话管理（v0.1.7+ 单 Server 多目录隔离），SSE 事件流接收
 - [x] CardKit 流式输出（打字机效果 + loading 动画，100ms 节流）
 - [x] IM Patch 降级回退（CardKit 不可用时自动切换，1500ms 节流）
 - [x] 可折叠思考面板（Reasoning 过程实时展示）
 - [x] 图片 / 文件输入（base64 FilePart，视觉模型识别）
 - [x] 多项目管理（`/pl` 交互式卡片切换工作目录）
 - [x] TUI 命令（`/new` `/session` `/model` `/mode` `/reset` `/help`）
-- [x] LRU 会话持久化（最多 15 个，`.sessions/*.json`）
+- [x] OpenCode Server 会话管理（v0.1.7+ 完全委托给 OpenCode 服务器，本地零持久化）
 - [x] 跨平台支持：Windows / Linux / macOS
 
 ---
@@ -327,9 +327,9 @@ feishu:
 
 # 会话配置
 session:
-  max_sessions: 10          # 最大保留会话数（LRU）
+  max_sessions: 10          # 最大保留会话数（LRU，本地内存缓存）
   max_history: 20           # 单会话最大历史轮数
-  storage_dir: ".sessions"  # 会话存储目录
+  # storage_dir 已在 v0.1.7 移除，会话由 OpenCode 服务器管理
 
 # CLI 工具配置
 cli:
@@ -388,7 +388,7 @@ feishu-cli-bridge/
 │   │   ├── manager.py         # 增删改查、JSON 持久化
 │   │   └── models.py          # 项目数据模型
 │   ├── session/               # 会话管理
-│   │   └── manager.py         # LRU 缓存 + 持久化
+│   │   └── manager.py         # v0.1.7+ 已废弃（空桩），会话由 OpenCode 服务器管理
 │   ├── tui_commands/          # TUI 斜杠命令
 │   │   ├── base.py            # 命令基类
 │   │   ├── opencode.py        # 会话/模型/模式命令
@@ -415,9 +415,13 @@ feishu-cli-bridge/
 
 ## 更新日志
 
-### v0.1.8 (2026-03-23)
-- ✅ 修复会话改名交互失败（Issue #32）：用户点击「改名」后回复新名称时，系统正确识别并执行重命名
-- ✅ 修复交互式回复卡片空白问题：正确处理 `card_json` 元数据，返回完整会话列表卡片
+### v0.1.7 里程碑 (2026-03-23) — Session 架构完全重构
+
+- 🏗️ **架构升级**：从"本地 JSON 存储 + 多进程"升级为"单 OpenCode HTTP Server 集中管理"
+- 📝 **服务端权威**：会话生命周期完全委托给 OpenCode 服务器（`POST/GET/PATCH/DELETE /session`），本地零持久化
+- 🔧 **工作目录隔离**：通过 `directory` 查询参数实现（非多进程），单一 Server 实例服务所有项目
+- 🔄 **启动恢复**：Bridge 重启后自动从服务器恢复当前目录的会话关联
+- ✅ **修复**：会话改名交互失败（Issue #32）、交互式回复卡片空白问题
 
 完整日志见 [doc/CHANGELOG.md](doc/CHANGELOG.md)
 

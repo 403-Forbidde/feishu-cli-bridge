@@ -182,7 +182,9 @@ class OpenCodeAdapter(BaseCLIAdapter):
         )
         # 每个工作目录对应一个 OpenCode 会话（key = working_dir）
         self._sessions: Dict[str, OpenCodeSession] = {}
-        self._sessions_lock: Optional[asyncio.Lock] = None  # 懒初始化，防止跨循环绑定
+        # 在 __init__ 中初始化锁，避免懒初始化导致的并发问题（Issue #38）
+        # 注意：asyncio.Lock() 需在事件循环中创建，但此处创建后会在第一个 await 前绑定到当前循环
+        self._sessions_lock: Optional[asyncio.Lock] = asyncio.Lock()
         # 当前活跃工作目录（TUI 命令使用）
         self._active_working_dir: str = ""
 
@@ -306,8 +308,6 @@ class OpenCodeAdapter(BaseCLIAdapter):
         内存 miss 时先查服务器已有会话（支持 bridge 重启后恢复上下文），
         找不到才创建新会话。
         """
-        if self._sessions_lock is None:
-            self._sessions_lock = asyncio.Lock()
         async with self._sessions_lock:
             if working_dir in self._sessions:
                 return self._sessions[working_dir]
@@ -813,14 +813,33 @@ class OpenCodeAdapter(BaseCLIAdapter):
                 self.logger.error(f"切换会话失败: {e}")
         return False
 
-    async def reset_session(self) -> bool:
+    async def reset_session(self, working_dir: str = "") -> bool:
+        """重置当前会话
+
+        Args:
+            working_dir: 工作目录，如果为空则使用实例变量 _active_working_dir
+
+        Returns:
+            是否重置成功
+        """
         if self._client is None:
             return False
+
+        # 确定目标工作目录
+        target_dir = working_dir or self._active_working_dir
+        if not target_dir:
+            # 工作目录为空，无法确定会话上下文
+            if self.logger:
+                self.logger.warning("重置会话失败: 工作目录为空，请先执行普通对话建立会话上下文")
+            return False
+
         new_session = await self._create_session(
-            self._client, working_dir=self._active_working_dir
+            self._client, working_dir=target_dir
         )
         if new_session:
-            self._sessions[self._active_working_dir] = new_session
+            self._sessions[target_dir] = new_session
+            if self.logger:
+                self.logger.info(f"已重置会话: {new_session.id[:8]}... 绑定到 {target_dir}")
             return True
         return False
 
@@ -887,6 +906,28 @@ class OpenCodeAdapter(BaseCLIAdapter):
             if self.logger:
                 self.logger.error(f"Delete session error: {e}")
         return False
+
+    async def get_session_detail(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """获取会话详情（GET /session/{id}）
+
+        Args:
+            session_id: OpenCode session ID
+
+        Returns:
+            会话详情字典，失败返回 None
+        """
+        started = await self._ensure_server()
+        if not started or self._client is None:
+            return None
+
+        try:
+            response = await self._client.get(f"/session/{session_id}")
+            if response.status_code == 200:
+                return response.json()
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"获取会话详情失败: {e}")
+        return None
 
     async def get_session_messages(self, session_id: str) -> List[Message]:
         """获取会话的消息历史 - GET /session/{id}/message
