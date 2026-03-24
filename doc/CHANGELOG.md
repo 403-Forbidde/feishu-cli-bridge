@@ -1,5 +1,27 @@
 # 更新日志
 
+## [v0.1.10] - 2026-03-25  【卡片 Schema 2.0 统一】
+
+**开发人**: ERROR403
+
+### 文档修正
+
+- **修正卡片函数注释** — `build_new_session_card()` 和 `build_project_list_card()` 的文档字符串错误标注为 "Schema 1.0"，实际代码已是 Schema 2.0 格式
+- **统一版本声明** — 所有卡片构建函数明确标注 Schema 2.0，消除文档与实际代码的不一致
+
+### 技术细节
+
+本次变更仅涉及文档/注释修正，无代码逻辑改动：
+
+| 文件 | 位置 | 变更 |
+|------|------|------|
+| `src/feishu/card_builder.py` | 第 75 行 | 分区注释 `Schema 1.0` → `Schema 2.0` |
+| `src/feishu/card_builder.py` | 第 90 行 | 函数文档 `Schema 1.0` → `Schema 2.0` |
+| `src/feishu/card_builder.py` | 第 103 行 | Returns 文档 `Schema 1.0` → `Schema 2.0` |
+| `src/feishu/card_builder.py` | 第 190 行 | 分区注释 `Schema 1.0` → `Schema 2.0` |
+
+---
+
 ## [v0.1.9] - 2026-03-24  【TUI 命令优化】
 
 **开发人**: ERROR403

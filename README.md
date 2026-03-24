@@ -2,9 +2,9 @@
 
 程序员专属：用飞书私聊向本地 CLI AI 工具下达指令，享受流式打字机输出体验。当前已接入 **OpenCode**，Codex 与 Kimi CLI 支持规划中。
 
-**版本**: v0.1.9
+**版本**: v0.1.10
 **开发**: ERROR403
-**更新日期**: 2026-03-24
+**更新日期**: 2026-03-25
 
 ## 使用场景
 
@@ -415,10 +415,10 @@ feishu-cli-bridge/
 
 ## 更新日志
 
-### v0.1.9 (2026-03-24) — TUI 命令优化
+### v0.1.10 (2026-03-25) — 卡片 Schema 2.0 统一
 
-- 📖 **新增 `/help` 命令** — 显示 OpenCode TUI 命令帮助卡片（Schema 2.0）
-- 🔄 **`/reset` 卡片化** — 重置成功提示改为卡片格式，界面更统一
+- 📝 **文档修正** — 修正 `build_new_session_card()` 和 `build_project_list_card()` 的错误注释，明确标注为 Schema 2.0（实际代码已是 2.0）
+- ✅ **Schema 统一** — 确认所有卡片构建函数均使用飞书 Schema 2.0 格式
 
 完整日志见 [doc/CHANGELOG.md](doc/CHANGELOG.md)
 

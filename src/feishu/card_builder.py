@@ -72,7 +72,7 @@ def build_card_content(
 
 
 # ---------------------------------------------------------------------------
-# 新建会话卡片（Schema 1.0，与项目管理风格统一）
+# 新建会话卡片（Schema 2.0，与项目管理风格统一）
 # ---------------------------------------------------------------------------
 
 
@@ -87,7 +87,7 @@ def build_new_session_card(
     slug: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    构建「新建会话成功」卡片（Schema 1.0，与项目列表卡片风格一致）
+    构建「新建会话成功」卡片（Schema 2.0，与项目列表卡片风格一致）
 
     Args:
         session_id:           新会话原始 ID
@@ -100,7 +100,7 @@ def build_new_session_card(
         slug:                 OpenCode 会话 slug（可选）
 
     Returns:
-        飞书卡片 JSON（Schema 1.0，含 config/header/elements）
+        飞书卡片 JSON（Schema 2.0，含 config/header/elements）
     """
     import os
 
@@ -187,7 +187,7 @@ def build_new_session_card(
 
 
 # ---------------------------------------------------------------------------
-# 项目列表交互式卡片（Schema 1.0 + action/button，支持点击回调）
+# 项目列表交互式卡片（Schema 2.0 + action/button，支持点击回调）
 # ---------------------------------------------------------------------------
 
 
