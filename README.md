@@ -420,12 +420,6 @@ feishu-cli-bridge/
 - 📖 **新增 `/help` 命令** — 显示 OpenCode TUI 命令帮助卡片（Schema 2.0）
 - 🔄 **`/reset` 卡片化** — 重置成功提示改为卡片格式，界面更统一
 
-### v0.1.8 (2026-03-24) — 三大技术难题修复
-
-- 🔢 **Issue #40**: 上下文百分比计算不准确 — 修复 API 响应解析、Token 累加逻辑、API 端点查询
-- 🔄 **Issue #32/#33**: 会话改名交互失败 — 修复卡片 Schema 结构、交互式回复 ID 匹配逻辑
-- 🔒 **Issue #45**: `asyncio.Lock` 事件循环绑定错误 — 修复 FeishuClient 事件调度逻辑，确保消息处理在主事件循环执行
-
 完整日志见 [doc/CHANGELOG.md](doc/CHANGELOG.md)
 
 ## 环境变量
