@@ -1,5 +1,112 @@
 # 更新日志
 
+## [v0.1.8] - 2026-03-24  【Bugfix 版本】
+
+**开发人**: ERROR403
+
+### 修复摘要
+
+本版本聚焦修复三个长期悬而未决的技术难题：上下文百分比计算、会话改名交互、以及 asyncio 事件循环绑定问题。
+
+---
+
+### 🔴 Issue #40: 上下文百分比计算不准确（Bridge 与 OpenCode CLI 显示不一致）
+
+**问题现象**:
+- Bridge 显示的上下文占用百分比与 OpenCode CLI 不一致
+- 第二轮对话时百分比翻倍（如从 28.6% 变成 57.2%）
+
+**问题根因**（三层问题叠加）:
+
+1. **API 响应解析错误**: `_fetch_context_window_from_api` 假设响应是列表 `[]`，实际 API 返回 `{"all": [...]}` 字典格式
+2. **Token 累加逻辑错误**: SSE `step-finish` 事件返回的是会话累计 token 总数，但代码将其当作增量累加
+3. **API 端点错误**: `GET /session/:id` 不包含 token 统计，应使用 `GET /session/:id/message` 累加 assistant 消息
+
+**修复方案**:
+1. 修复 API 响应解析，支持 `{"all": [...]}` 和 `[]` 两种格式
+2. SSE 路径直接替换 `_current_stats`，不再累加
+3. 改用 `/session/:id/message` API，遍历累加所有 assistant 消息的 `tokens` 字段
+4. 添加详细的调试日志便于诊断
+
+**相关代码**: `src/adapters/opencode.py:1129-1241` (`_fetch_stats_from_api`)
+
+---
+
+### 🔴 Issue #32/#33: 会话改名交互失败、交互式回复卡片空白
+
+**问题现象**:
+- `/session` 命令点击「改名」按钮后，回复「请输入新名称...」但没有后续交互
+- 会话列表卡片显示空白，按钮不响应
+- 交互式回复机制 (`interactive.py`) 注册的消息匹配失败
+
+**问题根因**:
+
+1. **卡片 Schema 错误**: `multi_action` 区域缺少 `tag: "action"` 包裹，导致按钮渲染失败
+2. **交互式回复 ID 匹配失败**: `interactive.py` 使用 `parent_id` 匹配，但飞书某些场景下 `parent_id` 为空
+3. **状态检查缺失**: `start_interactive_flow` 未检查 `is_interactive` 标志，非交互式场景错误触发
+
+**修复方案**:
+1. 修复 `build_session_list_card` 的 Schema，在 `multi_action` 外添加 `{"tag": "action", "actions": [...]}` 包裹
+2. `interactive.py` 增强匹配逻辑：优先匹配 `parent_id`，回退到「纯数字」或「provider/model 格式」内容启发式匹配
+3. `start_interactive_flow` 添加 `is_interactive` 参数检查
+
+**相关代码**:
+- `src/feishu/card_builder.py:1075-1095` (session 卡片 Schema)
+- `src/tui_commands/interactive.py:78-120` (ID 匹配逻辑)
+- `src/tui_commands/opencode.py:245-280` (改名流程)
+
+---
+
+### 🔴 Issue #45: `asyncio.Lock` 事件循环绑定错误
+
+**问题现象**:
+- 执行 `/mode` 命令（调用 `list_agents`）时日志报错：`<asyncio.locks.Event> is bound to a different event loop`
+- 功能正常（模式切换卡片正常显示），但日志持续报错
+- 4 次修复尝试均失败（懒初始化、异常重试、移除嵌套锁、重置 client）
+
+**问题根因**（长期误解）:
+
+**真正的问题不在 `OpenCodeAdapter`，而在 `FeishuClient._dispatch_to_handler`**。
+
+```
+事件循环调用链:
+main.py asyncio.run(main())          ← 主事件循环 A (Adapter 在此创建)
+    ↓
+FeishuClient.start_sync()
+    ↓
+创建 WebSocket 后台线程              ← 事件循环 B
+    ↓
+lark-oapi SDK 内部线程池处理消息
+    ↓
+_on_message_received() 被调用        ← SDK 内部线程 (无事件循环)
+    ↓
+_dispatch_to_handler()
+    ↓
+检测到无运行中事件循环
+    ↓
+创建新线程 _sync_dispatch()          ← 事件循环 C (消息处理实际在此执行!)
+    ↓
+调用 list_agents() → _ensure_server()
+    ↓
+尝试获取 _server_lock                ← 锁绑定到事件循环 A，但当前是 C!
+```
+
+**修复方案**:
+- 修改 `FeishuClient._dispatch_to_handler`，使用 `self._loop`（主事件循环）通过 `asyncio.run_coroutine_threadsafe()` 线程安全地调度消息处理
+- 确保所有消息处理都在创建 Adapter 的同一事件循环中执行
+- 兜底方案保留，但增加警告日志
+
+**相关代码**: `src/feishu/client.py:275-320` (`_dispatch_to_handler`)
+
+---
+
+### 技术债务
+
+- 移除 `opencode.py` 中 `_ensure_server` 和 `_get_or_create_session` 中的锁重试逻辑（Issue #45 修复后不再需要）
+- 简化事件循环绑定错误处理代码
+
+---
+
 ## [v0.1.7] - 2026-03-23  【里程碑版本】
 
 **开发人**: ERROR403

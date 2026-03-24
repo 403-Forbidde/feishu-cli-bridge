@@ -513,7 +513,7 @@ class FeishuAPI:
 
                 elif chunk.type == StreamChunkType.DONE:
                     logger.info(f"收到 DONE 信号，共 {chunk_count} 个 chunks")
-                    break
+                    # 不 break，让生成器自然结束，这样 execute_stream 中的清理代码会被执行
 
             logger.info(f"流式接收完成: {chunk_count} chunks, {content_chars} 字符")
 
@@ -590,7 +590,8 @@ class FeishuAPI:
                         reasoning_start_time = time.time()
                     full_reasoning += chunk.data
                 elif chunk.type == StreamChunkType.DONE:
-                    break
+                    # 不 break，让生成器自然结束
+                    pass
 
                 # 创建或更新卡片
                 now = time.time()
@@ -641,11 +642,7 @@ class FeishuAPI:
                         "elapsed_ms": int(elapsed * 1000),
                         "reasoning_text": full_reasoning or None,
                         "reasoning_elapsed_ms": reasoning_elapsed_ms or None,
-                        "token_stats": {
-                            "total_tokens": stats.total_tokens,
-                            "context_used": stats.context_used,
-                            "context_window": stats.context_window,
-                        },
+                        "token_stats": _convert_stats(stats),
                         "model": model,
                     },
                 )

@@ -273,21 +273,40 @@ class FeishuClient:
         }
 
     def _dispatch_to_handler(self, event_data: Dict[str, Any]):
-        """将事件分发给处理器"""
+        """将事件分发给处理器
+
+        使用主事件循环调度，确保所有异步操作在同一事件循环中执行。
+        修复 Issue #45: asyncio.Lock 绑定到不同事件循环的问题。
+        """
         try:
-            # 尝试获取当前运行中的事件循环
+            # 优先使用已保存的主事件循环（线程安全调度）
+            if self._loop is not None:
+                try:
+                    future = asyncio.run_coroutine_threadsafe(
+                        self._async_dispatch(event_data), self._loop
+                    )
+                    # 添加回调以便记录异常
+                    future.add_done_callback(
+                        lambda f: logger.error(f"消息处理异常: {f.exception()}")
+                        if f.exception() else None
+                    )
+                    logger.debug("✅ 已调度消息处理任务到主事件循环")
+                    return
+                except Exception as e:
+                    logger.warning(f"主事件循环调度失败: {e}")
+
+            # 兜底：尝试获取当前运行中的事件循环
             try:
                 loop = asyncio.get_running_loop()
                 if loop.is_running():
-                    # 在主事件循环中创建任务
                     asyncio.create_task(self._async_dispatch(event_data))
-                    logger.debug("✅ 已调度消息处理任务到主事件循环")
+                    logger.debug("✅ 已调度消息处理任务到当前事件循环")
                     return
             except RuntimeError:
                 pass
 
-            # 如果没有运行中的事件循环，创建新线程处理
-            logger.debug("🔄 创建新线程处理消息")
+            # 最后兜底：创建新线程处理（不推荐，会导致事件循环混乱）
+            logger.warning("🔄 主事件循环不可用，创建新线程处理消息（可能导致 Issue #45）")
             threading.Thread(
                 target=self._sync_dispatch, args=(event_data,), daemon=True
             ).start()

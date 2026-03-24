@@ -552,4 +552,4 @@ Start-Process python -ArgumentList "-m src.main" -WorkingDirectory $PWD -WindowS
 
 ---
 
-*最后更新: 2026-03-22（v0.1.6）*
+*最后更新: 2026-03-24（v0.1.8）*

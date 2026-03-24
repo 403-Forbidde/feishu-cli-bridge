@@ -1245,18 +1245,22 @@ def _build_complete_card(
 
 def _append_token_stats(parts: List[str], token_stats: Dict) -> None:
     """将 token 统计信息追加到 parts 列表。支持两种格式。"""
+    # 优先使用已计算的 context_percent（如果可用且大于0）
+    context_percent = token_stats.get("context_percent", 0)
+
     # 格式 A: OpenCode 格式 (total_tokens, context_used, context_window)
     if "total_tokens" in token_stats:
         total_tokens = token_stats.get("total_tokens", 0)
         context_used = token_stats.get("context_used", 0)
         context_window = token_stats.get("context_window", 128000)
 
-        usage_percent = (
-            (context_used / context_window * 100) if context_window > 0 else 0
-        )
+        # 如果没有预先计算的百分比，则自己计算
+        if not context_percent and context_window > 0:
+            context_percent = (context_used / context_window * 100)
+
         # 合并为单个字符串，与 OpenClaw 一致
         parts.append(
-            f"📊 {total_tokens:,} tokens ({usage_percent:.1f}%) · Context: {context_window // 1000}K"
+            f"📊 {total_tokens:,} tokens ({context_percent:.1f}%) · Context: {context_window // 1000}K"
         )
         return
 
@@ -1292,22 +1296,30 @@ def _append_token_stats_compact(parts: List[str], token_stats: Dict) -> None:
 
     格式: 📊 1.2K tokens (5%) - 更简洁的显示
     """
-
     def format_num(n: int) -> str:
         if n >= 1000:
             return f"{n / 1000:.1f}K"
         return str(n)
 
-    # 格式 A: OpenCode 格式
+    # 优先使用已计算的 context_percent（如果存在且大于等于0）
+    # 使用 'in' 检查而非 falsy 检查，避免 0 被误判为缺失
+    if "context_percent" in token_stats and token_stats["context_percent"] is not None:
+        context_percent = float(token_stats["context_percent"])
+        total_tokens = token_stats.get("total_tokens", 0)
+        # 使用 .1f 保留一位小数，避免小于 0.5% 显示为 0%
+        parts.append(f"📊 {format_num(total_tokens)} ({context_percent:.1f}%)")
+        return
+
+    # 如果没有 context_percent 但有 total_tokens，尝试计算
     if "total_tokens" in token_stats:
         total_tokens = token_stats.get("total_tokens", 0)
         context_used = token_stats.get("context_used", 0)
         context_window = token_stats.get("context_window", 128000)
 
-        usage_percent = (
+        context_percent = (
             (context_used / context_window * 100) if context_window > 0 else 0
         )
-        parts.append(f"📊 {format_num(total_tokens)} ({usage_percent:.0f}%)")
+        parts.append(f"📊 {format_num(total_tokens)} ({context_percent:.1f}%)")
         return
 
     # 格式 B: Kimi 格式
@@ -1330,7 +1342,7 @@ def _append_token_stats_compact(parts: List[str], token_stats: Dict) -> None:
         else:
             usage_percent = 0
 
-        parts.append(f"📊 {format_num(total_tokens)} ({usage_percent:.0f}%)")
+        parts.append(f"📊 {format_num(total_tokens)} ({usage_percent:.1f}%)")
 
 
 # ---------------------------------------------------------------------------
