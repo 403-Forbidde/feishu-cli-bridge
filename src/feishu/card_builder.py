@@ -640,6 +640,141 @@ def build_model_select_card(
     }
 
 
+def build_help_card(
+    cli_type: str = "opencode",
+    working_dir: str = "",
+    project_name: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    构建 TUI 命令帮助卡片（Schema 2.0 格式）
+
+    展示当前 CLI 工具支持的所有 TUI 命令及其说明。
+
+    Args:
+        cli_type: CLI 工具类型（如 opencode）
+        working_dir: 当前工作目录
+        project_name: 当前项目名称
+
+    Returns:
+        飞书卡片 JSON（Schema 2.0）
+    """
+    elements: List[Dict[str, Any]] = []
+
+    # ── 头部信息 ─────────────────────────────────────────────────────────────
+    header_text = f"🟢 **{cli_type.upper()}**"
+    if project_name:
+        header_text += f" · 项目: `{project_name}`"
+
+    elements.append(
+        {
+            "tag": "markdown",
+            "content": header_text,
+        }
+    )
+    if working_dir:
+        elements.append(
+            {
+                "tag": "markdown",
+                "content": f"<font color='grey'>工作目录: `{working_dir}`</font>",
+            }
+        )
+    elements.append({"tag": "hr"})
+
+    # ── 命令列表 ─────────────────────────────────────────────────────────────
+    commands = [
+        {
+            "cmd": "/new",
+            "desc": "创建新会话",
+            "detail": "在 OpenCode 中创建一个新的对话会话",
+        },
+        {
+            "cmd": "/session",
+            "desc": "管理会话",
+            "detail": "列出当前项目的所有会话",
+        },
+        {
+            "cmd": "/model",
+            "desc": "切换模型",
+            "detail": "查看可用模型列表并切换当前使用的 AI 模型",
+        },
+        {
+            "cmd": "/mode",
+            "desc": "切换模式",
+            "detail": "切换 Agent 工作模式（如 build、debug、review）",
+        },
+        {
+            "cmd": "/reset",
+            "desc": "重置会话",
+            "detail": "清空当前会话的对话历史，重新开始",
+        },
+        {
+            "cmd": "/help",
+            "desc": "显示帮助",
+            "detail": "显示此帮助信息",
+        },
+    ]
+
+    for item in commands:
+        elements.append(
+            {
+                "tag": "markdown",
+                "content": (
+                    f"**{item['cmd']}** "
+                    f"<font color='grey'>{item['desc']}</font>\n"
+                    f"{item['detail']}"
+                ),
+            }
+        )
+        elements.append({"tag": "hr"})
+
+    # ── 底部提示 ─────────────────────────────────────────────────────────────
+    elements.append(
+        {
+            "tag": "markdown",
+            "content": "💡 <font color='grey'>命令可随时输入，不受流式输出影响</font>",
+        }
+    )
+
+    return {
+        "schema": "2.0",
+        "config": {"wide_screen_mode": True},
+        "header": {
+            "title": {"tag": "plain_text", "content": "📖 命令帮助"},
+            "template": "blue",
+        },
+        "body": {"elements": elements},
+    }
+
+
+def build_reset_success_card() -> Dict[str, Any]:
+    """
+    构建重置成功提示卡片（Schema 2.0 格式）
+
+    Returns:
+        飞书卡片 JSON（Schema 2.0）
+    """
+    elements: List[Dict[str, Any]] = [
+        {
+            "tag": "markdown",
+            "content": "🗑️ 对话历史已清空",
+        },
+        {
+            "tag": "markdown",
+            "content": "💡 可以开始新的对话了",
+        },
+    ]
+
+    return {
+        "schema": "2.0",
+        "config": {"wide_screen_mode": True},
+        "header": {
+            "title": {"tag": "plain_text", "content": "✅ 已重置当前会话"},
+            "template": "green",
+        },
+        "body": {"elements": elements},
+    }
+
+
 # ---------------------------------------------------------------------------
 # Schema 2.0 测试卡片（交互式）
 # ---------------------------------------------------------------------------

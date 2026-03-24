@@ -29,7 +29,7 @@ class OpenCodeTUICommands(TUIBaseCommand):
 
     @property
     def supported_commands(self) -> List[str]:
-        return ["new", "session", "model", "mode", "reset"]
+        return ["new", "session", "model", "mode", "reset", "help"]
 
     async def execute(
         self, command: str, args: Optional[str], context: CommandContext
@@ -44,6 +44,8 @@ class OpenCodeTUICommands(TUIBaseCommand):
             return await self._handle_mode(args, context)
         elif command == "reset":
             return await self._handle_reset(context)
+        elif command == "help":
+            return await self._handle_help(context)
         else:
             return TUIResult.error(f"未知命令: {command}")
 
@@ -424,9 +426,10 @@ class OpenCodeTUICommands(TUIBaseCommand):
             if hasattr(self.adapter, "reset_session"):
                 success = await self.adapter.reset_session()
                 if success:
-                    return TUIResult.text(
-                        f"✅ **已重置当前会话**\n\n🗑️ 对话历史已清空\n💡 可以开始新的对话了"
-                    )
+                    from ..feishu.card_builder import build_reset_success_card
+
+                    card = build_reset_success_card()
+                    return TUIResult.card("", metadata={"card_json": card})
                 else:
                     return TUIResult.error("重置会话失败")
             return TUIResult.error("重置会话失败: 适配器不支持 reset_session")
@@ -434,6 +437,24 @@ class OpenCodeTUICommands(TUIBaseCommand):
             if self.logger:
                 self.logger.error(f"重置会话失败: {e}")
             return TUIResult.error(f"重置会话失败: {str(e)}")
+
+    # ── /help ─────────────────────────────────────────────────────────────────
+
+    async def _handle_help(self, context: CommandContext) -> TUIResult:
+        """处理 /help 命令 - 显示 OpenCode TUI 命令帮助卡片"""
+        try:
+            from ..feishu.card_builder import build_help_card
+
+            card = build_help_card(
+                cli_type=context.cli_type,
+                working_dir=context.working_dir,
+                project_name=context.project_display_name or context.project_name,
+            )
+            return TUIResult.card("", metadata={"card_json": card})
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"生成帮助卡片失败: {e}")
+            return TUIResult.error(f"生成帮助失败: {str(e)}")
 
     # ── 交互式回复处理 ───────────────────────────────────────────────────────
 
