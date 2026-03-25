@@ -681,5 +681,55 @@ git checkout HEAD -- src/feishu/handler.py
 
 ---
 
+### 2026-03-25 Token 统计修复
+
+#### 问题描述
+
+卡片 footer 中缺失 Token 统计信息，仅显示 `⏱️ 6.9s · 🤖 Kimi`，缺少 `📊 63.7K (6.1%)`。
+
+#### 根本原因
+
+`_convert_stats()` 函数在转换 `TokenStats` 为字典时，遗漏了 `prompt_tokens` 和 `completion_tokens` 字段：
+
+```python
+# 修复前（api.py:680-687）
+def _convert_stats(token_stats: TokenStats) -> Dict[str, Any]:
+    return {
+        "total_tokens": token_stats.total_tokens,
+        "context_used": token_stats.context_used,
+        "context_window": token_stats.context_window,
+        "context_percent": token_stats.context_percent,
+    }  # 缺少 prompt_tokens 和 completion_tokens
+```
+
+#### 修复内容
+
+**文件**: `src/feishu/api.py:680-689`
+
+```python
+# 修复后
+def _convert_stats(token_stats: TokenStats) -> Dict[str, Any]:
+    """转换 TokenStats 为字典格式"""
+    return {
+        "total_tokens": token_stats.total_tokens,
+        "prompt_tokens": token_stats.prompt_tokens,
+        "completion_tokens": token_stats.completion_tokens,
+        "context_used": token_stats.context_used,
+        "context_window": token_stats.context_window,
+        "context_percent": token_stats.context_percent,
+    }
+```
+
+#### 验证结果
+
+- [x] Token 统计信息正确显示在卡片 footer
+- [x] 格式符合预期：`📊 63.7K (6.1%)`
+- [x] CardKit 和 IM Patch 模式均正常
+
+**修复者**: Claude Code
+**完成日期**: 2026-03-25
+
+---
+
 *本计划由 Claude Code 制定*
 *文档仅上传本地代码库（Gitea），不上传 GitHub*

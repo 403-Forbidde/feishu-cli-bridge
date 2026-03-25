@@ -681,6 +681,8 @@ def _convert_stats(token_stats: TokenStats) -> Dict[str, Any]:
     """转换 TokenStats 为字典格式"""
     return {
         "total_tokens": token_stats.total_tokens,
+        "prompt_tokens": token_stats.prompt_tokens,
+        "completion_tokens": token_stats.completion_tokens,
         "context_used": token_stats.context_used,
         "context_window": token_stats.context_window,
         "context_percent": token_stats.context_percent,
