@@ -361,7 +361,7 @@ class FeishuClient:
             # 解析 content JSON
             try:
                 content_obj = json.loads(content_str)
-            except:
+            except json.JSONDecodeError:
                 content_obj = {"text": content_str}
 
             # 提取文本内容

@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 
 import httpx
 
-from .base import BaseCLIAdapter, StreamChunk, StreamChunkType, Message, TokenStats
+from ..base import BaseCLIAdapter, StreamChunk, StreamChunkType, Message, TokenStats
 
 
 @dataclass

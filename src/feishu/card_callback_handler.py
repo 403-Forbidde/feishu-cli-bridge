@@ -6,6 +6,8 @@
 import logging
 from typing import Dict, Optional, Any
 
+from .toast_helper import error_toast, success_toast, warning_toast, info_toast
+
 logger = logging.getLogger(__name__)
 
 
@@ -68,11 +70,11 @@ class CardCallbackHandler:
                 return await handler(event_data, button_value, message_id)
 
             logger.warning(f"未知卡片回调 action: {action_type}")
-            return self._error_toast("未知操作")
+            return error_toast("未知操作")
 
         except Exception as e:
             logger.exception("处理卡片回调异常")
-            return self._error_toast(f"处理失败: {e}")
+            return error_toast(f"处理失败: {e}")
 
     # ==================== 项目相关回调 ====================
 
@@ -81,11 +83,11 @@ class CardCallbackHandler:
     ) -> dict:
         """处理切换项目"""
         if not self.project_manager:
-            return self._error_toast("项目管理功能未启用")
+            return error_toast("项目管理功能未启用")
 
         project_name = button_value.get("project_name")
         if not project_name:
-            return self._error_toast("未指定项目")
+            return error_toast("未指定项目")
 
         try:
             from ..project.models import ProjectError
@@ -98,30 +100,25 @@ class CardCallbackHandler:
             projects = await self.project_manager.list_projects()
             updated_card = build_project_list_card(projects, project.name)
 
-            return {
-                "toast": {
-                    "type": "success",
-                    "content": f"✅ 已切换到: {project.display_name}",
-                    "i18n": {"zh_cn": f"✅ 已切换到: {project.display_name}"},
-                },
+            return success_toast(f"✅ 已切换到: {project.display_name}") | {
                 "update_card": {
                     "message_id": message_id,
                     "card": updated_card,
-                },
+                }
             }
         except ProjectError as e:
-            return self._error_toast(e.message)
+            return error_toast(e.message)
 
     async def _handle_delete_project_confirm(
         self, event_data: dict, button_value: dict, message_id: str
     ) -> dict:
         """处理删除项目确认（第一步）"""
         if not self.project_manager:
-            return self._error_toast("项目管理功能未启用")
+            return error_toast("项目管理功能未启用")
 
         project_name = button_value.get("project_name")
         if not project_name:
-            return self._error_toast("未指定项目")
+            return error_toast("未指定项目")
 
         from .card_builder import build_project_list_card
 
@@ -132,13 +129,8 @@ class CardCallbackHandler:
             projects, current_name, confirming_project=project_name
         )
 
-        return {
-            "toast": {
-                "type": "warning",
-                "content": f"⚠️ 确认删除项目 {project_name}？",
-                "i18n": {"zh_cn": f"⚠️ 确认删除项目 {project_name}？"},
-            },
-            "update_card": {"message_id": message_id, "card": updated_card},
+        return warning_toast(f"⚠️ 确认删除项目 {project_name}？") | {
+            "update_card": {"message_id": message_id, "card": updated_card}
         }
 
     async def _handle_delete_project_cancel(
@@ -146,7 +138,7 @@ class CardCallbackHandler:
     ) -> dict:
         """处理取消删除项目"""
         if not self.project_manager:
-            return self._error_toast("项目管理功能未启用")
+            return error_toast("项目管理功能未启用")
 
         from .card_builder import build_project_list_card
 
@@ -155,13 +147,8 @@ class CardCallbackHandler:
         current_name = current.name if current else None
         updated_card = build_project_list_card(projects, current_name)
 
-        return {
-            "toast": {
-                "type": "info",
-                "content": "已取消删除",
-                "i18n": {"zh_cn": "已取消删除"},
-            },
-            "update_card": {"message_id": message_id, "card": updated_card},
+        return info_toast("已取消删除") | {
+            "update_card": {"message_id": message_id, "card": updated_card}
         }
 
     async def _handle_delete_project_confirmed(
@@ -169,11 +156,11 @@ class CardCallbackHandler:
     ) -> dict:
         """处理确认删除项目"""
         if not self.project_manager:
-            return self._error_toast("项目管理功能未启用")
+            return error_toast("项目管理功能未启用")
 
         project_name = button_value.get("project_name")
         if not project_name:
-            return self._error_toast("未指定项目")
+            return error_toast("未指定项目")
 
         try:
             from ..project.models import ProjectError
@@ -189,19 +176,14 @@ class CardCallbackHandler:
             current_name = current.name if current else None
             updated_card = build_project_list_card(projects, current_name)
 
-            return {
-                "toast": {
-                    "type": "success",
-                    "content": f"✅ 已删除项目: {display_name}",
-                    "i18n": {"zh_cn": f"✅ 已删除项目: {display_name}"},
-                },
+            return success_toast(f"✅ 已删除项目: {display_name}") | {
                 "update_card": {
                     "message_id": message_id,
                     "card": updated_card,
-                },
+                }
             }
         except ProjectError as e:
-            return self._error_toast(e.message)
+            return error_toast(e.message)
 
     # ==================== 模型相关回调 ====================
 
@@ -213,11 +195,11 @@ class CardCallbackHandler:
         cli_type = button_value.get("cli_type", "opencode")
 
         if not model_id:
-            return self._error_toast("未指定模型")
+            return error_toast("未指定模型")
 
         adapter = self.adapters.get(cli_type)
         if not adapter or not hasattr(adapter, "switch_model"):
-            return self._error_toast("适配器不支持模型切换")
+            return error_toast("适配器不支持模型切换")
 
         await adapter.switch_model(model_id)
         logger.info(f"卡片回调切换模型成功: {model_id}")
@@ -232,16 +214,11 @@ class CardCallbackHandler:
             model_id,
         )
 
-        return {
-            "toast": {
-                "type": "success",
-                "content": f"✅ 已切换到: {model_name}",
-                "i18n": {"zh_cn": f"✅ 已切换到: {model_name}"},
-            },
+        return success_toast(f"✅ 已切换到: {model_name}") | {
             "update_card": {
                 "message_id": message_id,
                 "card": updated_card,
-            },
+            }
         }
 
     # ==================== Agent 模式相关回调 ====================
@@ -254,11 +231,11 @@ class CardCallbackHandler:
         cli_type = button_value.get("cli_type", "opencode")
 
         if not agent_id:
-            return self._error_toast("未指定 agent")
+            return error_toast("未指定 agent")
 
         adapter = self.adapters.get(cli_type)
         if not adapter or not hasattr(adapter, "switch_agent"):
-            return self._error_toast("适配器不支持模式切换")
+            return error_toast("适配器不支持模式切换")
 
         await adapter.switch_agent(agent_id)
         logger.info(f"卡片回调切换 agent 成功: {agent_id}")
@@ -269,16 +246,11 @@ class CardCallbackHandler:
 
         updated_card = build_mode_select_card(agents, agent_id, cli_type=cli_type)
 
-        return {
-            "toast": {
-                "type": "success",
-                "content": f"✅ 已切换到: {agent_id}",
-                "i18n": {"zh_cn": f"✅ 已切换到: {agent_id}"},
-            },
+        return success_toast(f"✅ 已切换到: {agent_id}") | {
             "update_card": {
                 "message_id": message_id,
                 "card": updated_card,
-            },
+            }
         }
 
     # ==================== 测试卡片相关回调 ====================
@@ -298,47 +270,32 @@ class CardCallbackHandler:
 
         if sub_action == "show_details":
             updated_card = build_test_card_v2_details()
-            return {
-                "toast": {
-                    "type": "success",
-                    "content": "✅ 已切换到详情视图",
-                    "i18n": {"zh_cn": "✅ 已切换到详情视图"},
-                },
+            return success_toast("✅ 已切换到详情视图") | {
                 "update_card": {
                     "message_id": message_id,
                     "card": updated_card,
-                },
+                }
             }
 
         elif sub_action == "show_data":
             updated_card = build_test_card_v2_data()
-            return {
-                "toast": {
-                    "type": "success",
-                    "content": "✅ 已切换到数据视图",
-                    "i18n": {"zh_cn": "✅ 已切换到数据视图"},
-                },
+            return success_toast("✅ 已切换到数据视图") | {
                 "update_card": {
                     "message_id": message_id,
                     "card": updated_card,
-                },
+                }
             }
 
         elif sub_action == "close_test":
             updated_card = build_test_card_v2_closed()
-            return {
-                "toast": {
-                    "type": "success",
-                    "content": "✅ 测试已完成",
-                    "i18n": {"zh_cn": "✅ 测试已完成"},
-                },
+            return success_toast("✅ 测试已完成") | {
                 "update_card": {
                     "message_id": message_id,
                     "card": updated_card,
-                },
+                }
             }
 
-        return self._error_toast("未知操作")
+        return error_toast("未知操作")
 
     # ==================== 会话相关回调 ====================
 
@@ -350,7 +307,7 @@ class CardCallbackHandler:
         adapter = self.adapters.get(cli_type)
 
         if not adapter or not hasattr(adapter, "create_new_session"):
-            return self._error_toast("适配器不支持创建新会话")
+            return error_toast("适配器不支持创建新会话")
 
         try:
             # 优先使用按钮中传递的 working_dir
@@ -377,20 +334,15 @@ class CardCallbackHandler:
                 working_dir=working_dir,
             )
 
-            return {
-                "toast": {
-                    "type": "success",
-                    "content": "✅ 已创建新会话",
-                    "i18n": {"zh_cn": "✅ 已创建新会话"},
-                },
+            return success_toast("✅ 已创建新会话") | {
                 "update_card": {
                     "message_id": message_id,
                     "card": updated_card,
-                },
+                }
             }
         except Exception as e:
             logger.exception("创建新会话失败")
-            return self._error_toast(f"创建失败: {str(e)}")
+            return error_toast(f"创建失败: {str(e)}")
 
     async def _handle_switch_session(
         self, event_data: dict, button_value: dict, message_id: str
@@ -401,11 +353,11 @@ class CardCallbackHandler:
         working_dir = button_value.get("working_dir", "")
 
         if not session_id:
-            return self._error_toast("未指定会话ID")
+            return error_toast("未指定会话ID")
 
         adapter = self.adapters.get(cli_type)
         if not adapter or not hasattr(adapter, "switch_session"):
-            return self._error_toast("适配器不支持切换会话")
+            return error_toast("适配器不支持切换会话")
 
         try:
             # 使用按钮中传递的 working_dir
@@ -432,22 +384,17 @@ class CardCallbackHandler:
                     working_dir=working_dir,
                 )
 
-                return {
-                    "toast": {
-                        "type": "success",
-                        "content": "✅ 已切换会话",
-                        "i18n": {"zh_cn": "✅ 已切换会话"},
-                    },
+                return success_toast("✅ 已切换会话") | {
                     "update_card": {
                         "message_id": message_id,
                         "card": updated_card,
-                    },
+                    }
                 }
             else:
-                return self._error_toast("切换会话失败")
+                return error_toast("切换会话失败")
         except Exception as e:
             logger.exception("切换会话失败")
-            return self._error_toast(f"切换失败: {str(e)}")
+            return error_toast(f"切换失败: {str(e)}")
 
     async def _handle_list_sessions(
         self, event_data: dict, button_value: dict, message_id: str
@@ -479,20 +426,15 @@ class CardCallbackHandler:
                 working_dir=working_dir,
             )
 
-            return {
-                "toast": {
-                    "type": "success",
-                    "content": "✅ 已刷新会话列表",
-                    "i18n": {"zh_cn": "✅ 已刷新会话列表"},
-                },
+            return success_toast("✅ 已刷新会话列表") | {
                 "update_card": {
                     "message_id": message_id,
                     "card": updated_card,
-                },
+                }
             }
         except Exception as e:
             logger.exception("刷新会话列表失败")
-            return self._error_toast(f"刷新失败: {str(e)}")
+            return error_toast(f"刷新失败: {str(e)}")
 
     async def _handle_rename_session_prompt(
         self, event_data: dict, button_value: dict, message_id: str
@@ -508,13 +450,13 @@ class CardCallbackHandler:
         user_id = event_data.get("open_id", "")
 
         if not session_id:
-            return self._error_toast("未指定会话ID")
+            return error_toast("未指定会话ID")
 
         if not chat_id:
-            return self._error_toast("无法获取聊天ID")
+            return error_toast("无法获取聊天ID")
 
         if not self.api or not self.tui_router:
-            return self._error_toast("功能未启用")
+            return error_toast("功能未启用")
 
         # 发送提示消息，并注册为交互式消息
         display_id = session_id[-8:] if len(session_id) >= 8 else session_id
@@ -547,9 +489,7 @@ class CardCallbackHandler:
                 },
             )
 
-        return {
-            "toast": {"type": "info", "content": "请回复新名称", "i18n": {"zh_cn": "请回复新名称"}}
-        }
+        return info_toast("请回复新名称")
 
     async def _handle_delete_session_confirm(
         self, event_data: dict, button_value: dict, message_id: str
@@ -559,7 +499,7 @@ class CardCallbackHandler:
         cli_type = button_value.get("cli_type", "opencode")
 
         if not session_id:
-            return self._error_toast("未指定会话ID")
+            return error_toast("未指定会话ID")
 
         adapter = self.adapters.get(cli_type)
         working_dir_override = button_value.get("working_dir", "")
@@ -586,10 +526,7 @@ class CardCallbackHandler:
             working_dir=working_dir,
         )
 
-        return {
-            "toast": {"type": "warning", "content": "⚠️ 确认删除会话？", "i18n": {"zh_cn": "⚠️ 确认删除会话？"}},
-            "update_card": {"message_id": message_id, "card": updated_card},
-        }
+        return warning_toast("⚠️ 确认删除会话？") | {"update_card": {"message_id": message_id, "card": updated_card}}
 
     async def _handle_delete_session_cancel(
         self, event_data: dict, button_value: dict, message_id: str
@@ -620,10 +557,7 @@ class CardCallbackHandler:
             working_dir=working_dir,
         )
 
-        return {
-            "toast": {"type": "info", "content": "已取消删除", "i18n": {"zh_cn": "已取消删除"}},
-            "update_card": {"message_id": message_id, "card": updated_card},
-        }
+        return info_toast("已取消删除") | {"update_card": {"message_id": message_id, "card": updated_card}}
 
     async def _handle_delete_session_confirmed(
         self, event_data: dict, button_value: dict, message_id: str
@@ -633,11 +567,11 @@ class CardCallbackHandler:
         cli_type = button_value.get("cli_type", "opencode")
 
         if not session_id:
-            return self._error_toast("未指定会话ID")
+            return error_toast("未指定会话ID")
 
         adapter = self.adapters.get(cli_type)
         if not adapter or not hasattr(adapter, "delete_session"):
-            return self._error_toast("适配器不支持删除会话")
+            return error_toast("适配器不支持删除会话")
 
         working_dir = ""
         if self.project_manager:
@@ -646,7 +580,7 @@ class CardCallbackHandler:
 
         success = await adapter.delete_session(session_id)
         if not success:
-            return self._error_toast("删除会话失败")
+            return error_toast("删除会话失败")
 
         current_session_id = ""
         if hasattr(adapter, "get_session_id"):
@@ -665,10 +599,7 @@ class CardCallbackHandler:
             working_dir=working_dir,
         )
 
-        return {
-            "toast": {"type": "success", "content": "✅ 已删除会话", "i18n": {"zh_cn": "✅ 已删除会话"}},
-            "update_card": {"message_id": message_id, "card": updated_card},
-        }
+        return success_toast("✅ 已删除会话") | {"update_card": {"message_id": message_id, "card": updated_card}}
 
     # ==================== 辅助方法 ====================
 
@@ -692,13 +623,3 @@ class CardCallbackHandler:
                     "is_current": sid == current_session_id,
                 })
         return session_data_list
-
-    def _error_toast(self, message: str) -> dict:
-        """构建错误 toast 响应"""
-        return {
-            "toast": {
-                "type": "error",
-                "content": message,
-                "i18n": {"zh_cn": message},
-            }
-        }

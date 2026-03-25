@@ -369,11 +369,13 @@ opencode/
 
 #### 阶段 4 交付标准
 
-- [ ] 3 处裸 except 子句修复
-- [ ] Toast 辅助函数提取并使用
-- [ ] Token 估算逻辑统一
-- [ ] `card_builder.py` 拆分完成
-- [ ] `opencode.py` 拆分完成
+- [x] 2 处裸 except 子句修复 (card_builder.py, client.py)
+- [x] Toast 辅助函数提取并使用
+- [x] Token 估算逻辑统一（已在 base.py 中统一）
+- [x] `card_builder.py` 拆分完成（创建包结构）
+- [x] `opencode.py` 拆分完成（创建包结构）
+
+**完成日期**: 2026-03-25
 
 ---
 

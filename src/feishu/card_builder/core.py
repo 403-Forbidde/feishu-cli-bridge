@@ -2074,7 +2074,7 @@ def build_session_info_card(
 
             dt = datetime.fromtimestamp(ts)
             return dt.strftime("%Y-%m-%d %H:%M:%S")
-        except:
+        except (ValueError, TypeError, OSError):
             return str(ts)
 
     elements = []
