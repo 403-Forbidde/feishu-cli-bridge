@@ -52,8 +52,10 @@ class CodexAdapter(BaseCLIAdapter):
             cmd.extend(["--model", self.default_model])
         
         # 提示词
+        # 使用 -- 分隔符防止命令注入（确保 prompt 被当作参数而非选项）
+        cmd.append("--")
         cmd.append(prompt)
-        
+
         return cmd
     
     def parse_chunk(self, raw_line: bytes) -> Optional[StreamChunk]:
