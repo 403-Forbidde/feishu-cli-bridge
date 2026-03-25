@@ -11,6 +11,7 @@
 
 from typing import Any, Dict, List, Optional
 
+from ..adapters.opencode.core import _paths_equal
 from .base import TUIBaseCommand, TUIResult, CommandContext, TUIResultType
 
 
@@ -119,12 +120,8 @@ class OpenCodeTUICommands(TUIBaseCommand):
             if not hasattr(self.adapter, "list_sessions"):
                 return TUIResult.error("列出会话失败: 适配器不支持 list_sessions")
 
-            # 从服务器获取所有会话，按当前项目目录过滤
-            all_sessions = await self.adapter.list_sessions(limit=50)
-            filtered = [
-                s for s in all_sessions
-                if s.get("directory") == context.working_dir
-            ]
+            # 从服务器获取当前项目目录的会话（使用规范化路径匹配）
+            filtered = await self.adapter.list_sessions(limit=50, directory=context.working_dir)
 
             # 当前活跃会话（内存缓存）
             current_session_id = (
@@ -187,8 +184,8 @@ class OpenCodeTUICommands(TUIBaseCommand):
             # 纯数字：从当前项目会话列表取第 N 个
             if session_id.isdigit():
                 index = int(session_id) - 1
-                all_sessions = await self.adapter.list_sessions(limit=50)
-                filtered = [s for s in all_sessions if s.get("directory") == context.working_dir]
+                # 使用 directory 参数进行规范化路径匹配
+                filtered = await self.adapter.list_sessions(limit=50, directory=context.working_dir)
                 if 0 <= index < len(filtered):
                     session_id = filtered[index].get("id", "")
                 else:
@@ -198,7 +195,7 @@ class OpenCodeTUICommands(TUIBaseCommand):
             session_detail = await self._get_session_detail(session_id)
             if session_detail:
                 session_dir = session_detail.get("directory", "")
-                if session_dir and session_dir != context.working_dir:
+                if session_dir and not _paths_equal(session_dir, context.working_dir):
                     return TUIResult.error(
                         f"无法切换: 该会话属于其他项目\n"
                         f"**当前项目:** `{context.working_dir}`\n"
@@ -235,8 +232,8 @@ class OpenCodeTUICommands(TUIBaseCommand):
             session_id = session_id_or_index.strip()
             if session_id.isdigit():
                 index = int(session_id) - 1
-                all_sessions = await self.adapter.list_sessions(limit=50)
-                filtered = [s for s in all_sessions if s.get("directory") == context.working_dir]
+                # 使用 directory 参数进行规范化路径匹配
+                filtered = await self.adapter.list_sessions(limit=50, directory=context.working_dir)
                 if 0 <= index < len(filtered):
                     session_id = filtered[index].get("id", "")
                 else:
@@ -278,8 +275,8 @@ class OpenCodeTUICommands(TUIBaseCommand):
             session_id = session_id_or_index.strip()
             if session_id.isdigit():
                 index = int(session_id) - 1
-                all_sessions = await self.adapter.list_sessions(limit=50)
-                filtered = [s for s in all_sessions if s.get("directory") == context.working_dir]
+                # 使用 directory 参数进行规范化路径匹配
+                filtered = await self.adapter.list_sessions(limit=50, directory=context.working_dir)
                 if 0 <= index < len(filtered):
                     session_id = filtered[index].get("id", "")
                 else:
@@ -288,7 +285,7 @@ class OpenCodeTUICommands(TUIBaseCommand):
             session_detail = await self._get_session_detail(session_id)
             if session_detail:
                 session_dir = session_detail.get("directory", "")
-                if session_dir and session_dir != context.working_dir:
+                if session_dir and not _paths_equal(session_dir, context.working_dir):
                     return TUIResult.error("无法删除: 该会话属于其他项目")
 
             success = await self.adapter.delete_session(session_id)
@@ -505,8 +502,8 @@ class OpenCodeTUICommands(TUIBaseCommand):
             else ""
         ) or ""
 
-        all_sessions = await self.adapter.list_sessions(limit=20)
-        filtered = [s for s in all_sessions if s.get("directory") == working_dir]
+        # 使用 directory 参数进行规范化路径匹配
+        filtered = await self.adapter.list_sessions(limit=20, directory=working_dir)
         filtered.sort(
             key=lambda s: (s.get("id") != current_session_id,
                            -(s.get("updated_at") or s.get("created_at", 0)))

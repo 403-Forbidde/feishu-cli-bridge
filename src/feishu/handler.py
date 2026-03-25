@@ -153,8 +153,9 @@ class MessageHandler:
             return session_data_list
 
         try:
-            all_sessions = await adapter.list_sessions(limit=20)
-            for session in [s for s in all_sessions if s.get("directory") == working_dir]:
+            # 使用 directory 参数进行规范化路径匹配
+            filtered_sessions = await adapter.list_sessions(limit=20, directory=working_dir)
+            for session in filtered_sessions:
                 sid = session.get("id", "")
                 slug = session.get("slug", "")
                 display_id = slug if slug else sid[-8:] if len(sid) >= 8 else sid

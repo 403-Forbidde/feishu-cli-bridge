@@ -148,7 +148,7 @@ def _load_from_env() -> Config:
             "opencode": CLIConfig(
                 enabled=os.getenv("OPENCODE_ENABLED", "true").lower() == "true",
                 command=os.getenv("OPENCODE_CMD", "opencode"),
-                default_model=os.getenv("OPENCODE_MODEL", "gpt-4"),
+                default_model=os.getenv("OPENCODE_MODEL", "kimi-for-coding/k2p5"),
                 timeout=int(os.getenv("OPENCODE_TIMEOUT", "300")),
             ),
             "codex": CLIConfig(

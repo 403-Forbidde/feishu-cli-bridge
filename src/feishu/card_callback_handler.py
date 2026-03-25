@@ -606,11 +606,12 @@ class CardCallbackHandler:
     async def _build_session_data_list(
         self, adapter, working_dir: str, current_session_id: str
     ) -> list:
-        """构建会话数据列表"""
+        """构建会话数据列表（使用规范化路径匹配）"""
         session_data_list = []
         if adapter and hasattr(adapter, "list_sessions"):
-            all_sessions = await adapter.list_sessions(limit=20)
-            for session in [s for s in all_sessions if s.get("directory") == str(working_dir)]:
+            # 使用 directory 参数进行规范化路径匹配
+            filtered_sessions = await adapter.list_sessions(limit=20, directory=working_dir)
+            for session in filtered_sessions:
                 sid = session.get("id", "")
                 slug = session.get("slug", "")
                 display_id = slug if slug else sid[-8:] if len(sid) >= 8 else sid

@@ -37,6 +37,46 @@ class StreamState:
     current_stats: Optional[TokenStats] = None
 
 
+def _normalize_path(path: str) -> str:
+    """规范化路径，用于比较
+
+    解决以下问题：
+    1. 尾随斜杠：/code/test/ == /code/test
+    2. 符号链接：通过 realpath 解析到实际路径
+
+    Args:
+        path: 原始路径字符串
+
+    Returns:
+        规范化后的路径字符串
+    """
+    if not path:
+        return ""
+    try:
+        # 先展开 ~ 和 ~user，然后规范化
+        expanded = os.path.expanduser(path)
+        # 解析符号链接并规范化
+        normalized = os.path.realpath(expanded)
+        # 移除尾随斜杠（根目录 / 除外）
+        return normalized.rstrip("/") or "/"
+    except (OSError, ValueError):
+        # 如果路径不存在或无法解析，至少做基本的字符串规范化
+        return path.rstrip("/") or "/"
+
+
+def _paths_equal(path1: str, path2: str) -> bool:
+    """比较两个路径是否指向同一位置
+
+    Args:
+        path1: 第一个路径
+        path2: 第二个路径
+
+    Returns:
+        如果两个路径指向同一位置则返回 True
+    """
+    return _normalize_path(path1) == _normalize_path(path2)
+
+
 class OpenCodeServerManager:
     """OpenCode Server 进程管理器（单实例，工作目录隔离通过 session directory 参数实现）
 
@@ -384,7 +424,7 @@ class OpenCodeAdapter(BaseCLIAdapter):
                             all_sessions = response.json()
                             if isinstance(all_sessions, list):
                                 matching = [
-                                    s for s in all_sessions if s.get("directory") == working_dir
+                                    s for s in all_sessions if _paths_equal(s.get("directory", ""), working_dir)
                                 ]
                                 if matching:
                                     latest = max(
@@ -996,27 +1036,84 @@ class OpenCodeAdapter(BaseCLIAdapter):
                 self.logger.error(f"创建会话失败: {e}")
         return None
 
-    async def list_sessions(self, limit: int = 10) -> List[Dict[str, Any]]:
+    async def list_sessions(self, limit: int = 10, directory: Optional[str] = None) -> List[Dict[str, Any]]:
+        """列出会话
+
+        注意：由于 OpenCode 服务器的限制，GET /session 只返回特定 projectID 的会话，
+        而使用 directory 参数创建的会话可能被标记为 global project 而不在列表中。
+        因此需要合并服务器返回的列表和本地 _sessions 缓存中的会话。
+
+        Args:
+            limit: 最大返回会话数
+            directory: 可选，只返回指定目录的会话（支持路径规范化匹配）
+        """
         started = await self._ensure_server()
         if not started or self._client is None:
             return []
 
         try:
             response = await self._client.get("/session")
+            all_sessions = []
+
             if response.status_code == 200:
                 data = response.json()
                 sessions = data if isinstance(data, list) else data.get("items", [])
-                return [
-                    {
-                        "id": s.get("id"),
-                        "slug": s.get("slug", ""),
-                        "title": s.get("title", "未命名会话"),
-                        "created_at": s.get("time", {}).get("created", 0) / 1000,
-                        "updated_at": s.get("time", {}).get("updated", 0) / 1000,
-                        "directory": s.get("directory", ""),
-                    }
-                    for s in sessions[:limit]
+                all_sessions.extend(sessions)
+
+            # 合并本地 _sessions 缓存中的会话（解决 OpenCode 列表不完整的问题）
+            # 使用 directory 参数创建的会话可能被标记为 global project，不在服务器列表中
+            local_session_ids = {s.get("id") for s in all_sessions}
+            for working_dir, session in self._sessions.items():
+                if session.id not in local_session_ids:
+                    # 从服务器获取详情以确保数据最新
+                    try:
+                        detail_response = await self._client.get(f"/session/{session.id}")
+                        if detail_response.status_code == 200:
+                            detail = detail_response.json()
+                            all_sessions.append(detail)
+                        else:
+                            # 如果获取详情失败，使用本地缓存的数据
+                            all_sessions.append({
+                                "id": session.id,
+                                "title": session.title,
+                                "slug": session.slug,
+                                "directory": session.working_dir,
+                                "time": {
+                                    "created": int(session.created_at * 1000),
+                                    "updated": int(session.created_at * 1000),
+                                }
+                            })
+                    except Exception:
+                        # 获取详情失败，使用本地缓存
+                        all_sessions.append({
+                            "id": session.id,
+                            "title": session.title,
+                            "slug": session.slug,
+                            "directory": session.working_dir,
+                            "time": {
+                                "created": int(session.created_at * 1000),
+                                "updated": int(session.created_at * 1000),
+                            }
+                        })
+
+            # 如果指定了目录，进行规范化匹配
+            if directory:
+                all_sessions = [
+                    s for s in all_sessions
+                    if _paths_equal(s.get("directory", ""), directory)
                 ]
+
+            return [
+                {
+                    "id": s.get("id"),
+                    "slug": s.get("slug", ""),
+                    "title": s.get("title", "未命名会话"),
+                    "created_at": s.get("time", {}).get("created", 0) / 1000,
+                    "updated_at": s.get("time", {}).get("updated", 0) / 1000,
+                    "directory": s.get("directory", ""),
+                }
+                for s in all_sessions[:limit]
+            ]
         except Exception as e:
             if self.logger:
                 self.logger.error(f"列出会话失败: {e}")

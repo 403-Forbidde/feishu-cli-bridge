@@ -430,10 +430,12 @@ session:
 
 #### 阶段 5 交付标准
 
-- [ ] `requirements.txt` 移除未使用依赖
-- [ ] `config.yaml` 移除过时配置
-- [ ] 环境变量默认值统一
-- [ ] 应用正常启动并测试通过
+- [x] `requirements.txt` 移除未使用依赖
+- [x] `config.yaml` 移除过时配置
+- [x] 环境变量默认值统一
+- [x] 应用正常启动并测试通过
+
+**完成日期**: 2026-03-25
 
 ---
 
@@ -728,6 +730,48 @@ def _convert_stats(token_stats: TokenStats) -> Dict[str, Any]:
 
 **修复者**: Claude Code
 **完成日期**: 2026-03-25
+
+---
+
+### 2026-03-25 Phase 5 依赖清理完成
+
+#### 已完成工作
+
+| 任务 | 文件 | 修改内容 | 状态 |
+|------|------|----------|------|
+| 移除未使用依赖 | `requirements.txt` | 移除 `aiofiles>=23.0`, `pydantic>=2.0`；升级 `lark-oapi>=2.0.0`；添加版本上限 `httpx<1.0.0`, `httpx-sse<1.0.0` | ✅ |
+| 清理过时配置 | `config.yaml`, `config.example.yaml` | 移除 `session.storage_dir` 配置项 | ✅ |
+| 统一环境变量默认值 | `src/config.py` | `OPENCODE_MODEL` 默认值从 `gpt-4` 改为 `kimi-for-coding/k2p5` | ✅ |
+
+#### 修改详情
+
+**requirements.txt**:
+```diff
+- lark-oapi>=1.4.0
++ lark-oapi>=2.0.0
+  pyyaml>=6.0
+- aiofiles>=23.0
+- pydantic>=2.0
+  rich>=13.0
+- httpx>=0.27.0
++ httpx>=0.27.0,<1.0.0
+- httpx-sse>=0.4.0
++ httpx-sse>=0.4.0,<1.0.0
+```
+
+**config.yaml / config.example.yaml**:
+```diff
+  session:
+    max_sessions: 10
+    max_history: 20
+-   storage_dir: ".sessions"
+```
+
+**src/config.py**:
+```diff
+- default_model=os.getenv("OPENCODE_MODEL", "gpt-4"),
++ default_model=os.getenv("OPENCODE_MODEL", "kimi-for-coding/k2p5"),
+```
 
 ---
 
