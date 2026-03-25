@@ -15,6 +15,30 @@
 3. **增量提交**: 每个修复点独立提交，便于回滚
 4. **测试验证**: 每个阶段结束后进行功能验证
 
+### 分支策略
+
+**当前分支**: `fix/code-review-issues`
+
+```bash
+# 开发流程
+git checkout fix/code-review-issues
+# ... 进行修复 ...
+git add .
+git commit -m "fix: 具体修复描述"
+git push origin fix/code-review-issues
+
+# 修复完成后合并到 main
+git checkout main
+git merge fix/code-review-issues
+git push origin main
+
+# 清理分支（可选）
+git branch -d fix/code-review-issues
+git push origin --delete fix/code-review-issues
+```
+
+**注意**: 此分支仅推送至 Gitea（origin），不上传 GitHub。
+
 ### 执行顺序
 
 ```
