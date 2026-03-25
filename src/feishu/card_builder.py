@@ -636,7 +636,7 @@ def build_model_select_card(
             "title": {"tag": "plain_text", "content": "🤖 切换模型"},
             "template": "turquoise",
         },
-        "elements": elements,
+        "body": {"elements": elements},
     }
 
 
