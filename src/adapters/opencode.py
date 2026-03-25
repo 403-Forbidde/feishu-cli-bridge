@@ -89,10 +89,12 @@ class OpenCodeServerManager:
                 env=env,
             )
 
-            # 等待服务启动，最多 10 秒（Windows 冷启动更慢）
-            for i in range(100):
-                await asyncio.sleep(0.1)
+            # 等待服务启动，使用指数退避策略（100ms -> 200ms -> 400ms ... 最大1s）
+            start_time = time.time()
+            delay = 0.1  # 初始延迟 100ms
+            timeout = 10.0  # 总超时 10 秒
 
+            while time.time() - start_time < timeout:
                 # 进程已退出 → 立即读取 stderr 并报错
                 if self.process.returncode is not None:
                     stderr_bytes = b""
@@ -110,9 +112,18 @@ class OpenCodeServerManager:
                         )
                     return False
 
+                # 检查服务健康状态
                 if await self._check_health():
                     self._is_running = True
+                    if self._logger:
+                        self._logger.info(
+                            f"opencode serve 启动成功，耗时 {(time.time() - start_time)*1000:.0f}ms"
+                        )
                     return True
+
+                # 指数退避等待
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, 1.0)  # 翻倍，但不超过 1 秒
 
             # 超时：读取 stderr 帮助诊断
             stderr_bytes = b""

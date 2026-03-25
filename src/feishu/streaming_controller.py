@@ -105,20 +105,40 @@ class TextState:
     """
     正式回复文本状态
 
-    accumulatedText  完整的累积文本（用于显示和最终卡片）
-    completedText    deliver() 回调累积的文本（多轮时拼接）
-    streamingPrefix  多轮回复时已完成部分的前缀
-    lastPartialText  上次 onPartialReply 收到的文本（用于边界检测）
+    使用列表存储文本 chunks，延迟拼接以优化性能（避免 O(n²) 字符串拼接）。
     """
 
-    accumulated_text: str = ""
+    # 使用列表存储 chunks，延迟拼接
+    _text_chunks: list = field(default_factory=list)
+    _cached_text: Optional[str] = None
+    _dirty: bool = False
+
+    # 其他状态
     completed_text: str = ""
     streaming_prefix: str = ""
     last_partial_text: str = ""
 
-    # 统计
-    total_chars_received: int = 0
+    # 统计（直接计算，无需缓存）
     token_stats: Optional[Dict] = field(default=None)
+
+    def append(self, text: str) -> None:
+        """追加增量文本到 chunks 列表。"""
+        if text:
+            self._text_chunks.append(text)
+            self._dirty = True
+
+    @property
+    def accumulated_text(self) -> str:
+        """获取累积的完整文本（按需拼接并缓存）。"""
+        if self._dirty:
+            self._cached_text = "".join(self._text_chunks)
+            self._dirty = False
+        return self._cached_text or ""
+
+    @property
+    def total_chars_received(self) -> int:
+        """获取接收的总字符数（直接计算，无需拼接）。"""
+        return sum(len(chunk) for chunk in self._text_chunks)
 
 
 @dataclass
@@ -293,8 +313,7 @@ class StreamingCardController:
                 )
 
         # 追加增量内容
-        self.text.accumulated_text += text
-        self.text.total_chars_received = len(self.text.accumulated_text)
+        self.text.append(text)
 
         await self._ensure_card_created()
 
