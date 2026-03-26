@@ -130,13 +130,6 @@ class OpenCodeTUICommands(TUIBaseCommand):
                 else None
             ) or ""
 
-            if not filtered:
-                return TUIResult.text(
-                    f"ℹ️ 暂无历史会话\n\n"
-                    f"**工作目录:** `{context.working_dir}`\n"
-                    f"发送 `/new` 创建新会话"
-                )
-
             # 当前会话排最前
             filtered.sort(
                 key=lambda s: (s.get("id") != current_session_id,

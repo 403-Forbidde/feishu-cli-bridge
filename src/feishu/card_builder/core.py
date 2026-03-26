@@ -1826,11 +1826,50 @@ def build_session_list_card(
         current_session_id: 当前活跃会话ID（绿色标记）
         cli_type: CLI类型，用于按钮 value
         deleting_session_id: 处于"确认删除"状态的会话ID（显示确认/取消按钮）
+        working_dir: 当前工作目录路径
 
     Returns:
         飞书卡片 JSON（Schema 2.0）
     """
     elements: List[Dict[str, Any]] = []
+
+    # ── 项目信息头部 ────────────────────────────────────────────────────────
+    # 解析项目信息
+    import os
+    import subprocess
+
+    project_name = os.path.basename(working_dir) if working_dir else "未知项目"
+    display_dir = working_dir
+    home = os.path.expanduser("~")
+    if display_dir.startswith(home):
+        display_dir = display_dir.replace(home, "~", 1)
+
+    # 获取 Git 分支
+    git_branch = ""
+    if working_dir and os.path.isdir(os.path.join(working_dir, ".git")):
+        try:
+            result = subprocess.run(
+                ["git", "-C", working_dir, "branch", "--show-current"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+            if result.returncode == 0:
+                git_branch = result.stdout.strip()
+        except Exception:
+            pass
+
+    # 构建项目信息区域
+    project_info_lines = [f"**📂 目录**: `{display_dir}`"]
+    if git_branch:
+        project_info_lines.append(f"**🌿 分支**: `{git_branch}`")
+    project_info_lines.append(f"**💬 会话**: {len(sessions)} 个")
+
+    elements.append({
+        "tag": "markdown",
+        "content": f"📁 **{project_name}**\n\n" + "\n".join(project_info_lines),
+    })
+    elements.append({"tag": "hr"})
 
     # ── 顶部标题行 + 新建按钮 ─────────────────────────────────────────────
     elements.append({

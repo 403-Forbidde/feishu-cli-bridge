@@ -6,7 +6,6 @@
 |-------|------|--------|----------|
 | #55 | 每个工作目录会话列表最多显示最新10条 | 中 | `src/tui_commands/interactive.py`, `src/feishu/card_builder.py` |
 | #54 | Session 名称自动更新为首次对话内容 | 中 | `src/feishu/handler.py`, `src/session/manager.py` |
-| #53 | `/pl` 命令显示工作目录和项目信息 | 中 | `src/tui_commands/interactive.py`, `src/feishu/card_builder.py` |
 | #51 | `/session` 命令在无会话时返回格式难看 | 低 | `src/feishu/handler.py`, `src/feishu/card_builder.py` |
 | #16 | `FeishuClient._parse_message` 解析结果丢弃，重复解析 | 高 | `src/feishu/client.py`, `src/feishu/handler.py` |
 | #17 | `_stream_reply_legacy` 丢失 `reply_to` 参数 | 高 | `src/feishu/api.py` |
@@ -100,19 +99,19 @@ if session.is_new or not session.name:
 
 ---
 
-## Issue #53 详情（新增）
+## Issue #53 详情（已修复）
 
-**标题**: `/pl` 命令显示工作目录和项目信息
+**标题**: `/session` 命令显示工作目录和项目信息
 
-**状态**: ⏳ 待处理
+**状态**: ✅ 已修复
 
 **优先级**: 中
 
 **描述**:
-当前使用 `/pl`（项目列表）命令时，只显示会话列表，缺少当前工作目录和项目相关信息的展示，用户难以快速识别会话对应的项目。
+当前使用 `/session` 命令显示会话列表时，缺少当前工作目录和项目相关信息的展示，用户难以快速识别会话对应的项目。
 
 **期望行为**:
-`/pl` 命令返回的卡片应包含以下信息：
+`/session` 命令返回的卡片应包含以下信息：
 1. 当前工作目录路径（绝对路径）
 2. 项目名称（可从目录名推断或显示 Git 仓库名）
 3. 如果是 Git 仓库，显示当前分支名
@@ -122,21 +121,20 @@ if session.is_new or not session.name:
 仅显示会话列表，无工作目录和项目上下文信息。
 
 **相关代码**:
-- `src/tui_commands/interactive.py` - `/pl` 命令处理逻辑
-- `src/feishu/card_builder.py` - 项目列表卡片构建
-- `src/session/manager.py` - 获取会话列表和工作目录信息
+- `src/tui_commands/opencode.py` - `/session` 命令处理逻辑
+- `src/feishu/card_builder/core.py` - 会话列表卡片构建
 
-**实现思路**:
-```python
-# 在 interactive.py 中处理 /pl 命令
-def handle_project_list():
-    working_dir = session.working_dir
-    project_name = os.path.basename(working_dir)
-    git_branch = get_git_branch(working_dir)  # 如果是 git 仓库
-    session_count = len(sessions)
+**修复内容**:
+1. 在 `build_session_list_card()` 函数中添加项目信息头部区域
+2. 显示项目名称（目录名）
+3. 显示工作目录路径（home 目录替换为 ~）
+4. 自动检测并显示 Git 分支（如果是 Git 仓库）
+5. 显示会话数量统计
+6. 统一使用卡片展示，包括无会话时的空状态
 
-    # 构建包含这些信息的卡片
-```
+**修改文件**:
+- `src/feishu/card_builder/core.py`: 在 `build_session_list_card()` 中添加项目信息头部
+- `src/tui_commands/opencode.py`: 移除无会话时的纯文本回退，统一使用卡片
 
 ---
 
@@ -246,6 +244,8 @@ def handle_project_list():
 
 | Issue | 标题 | 修复版本 | 修复日期 |
 |-------|------|----------|----------|
+| #53 | `/session` 命令显示工作目录和项目信息 | - | 2026-03-26 |
+| #52 | 需要 `/stop` 命令强制停止模型输出 | - | 2026-03-26 |
 | #40 | 上下文百分比计算不准确 | v0.1.8 | 2026-03-24 |
 | #45 | `asyncio.Lock` 事件循环绑定错误 | v0.1.8 | 2026-03-24 |
 | #32/#33 | 会话改名交互失败、交互式回复卡片空白 | v0.1.8 | 2026-03-24 |
