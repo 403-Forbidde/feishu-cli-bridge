@@ -7,7 +7,6 @@
 | #55 | 每个工作目录会话列表最多显示最新10条 | 中 | `src/tui_commands/interactive.py`, `src/feishu/card_builder.py` |
 | #54 | Session 名称自动更新为首次对话内容 | 中 | `src/feishu/handler.py`, `src/session/manager.py` |
 | #53 | `/pl` 命令显示工作目录和项目信息 | 中 | `src/tui_commands/interactive.py`, `src/feishu/card_builder.py` |
-| #52 | 需要 `/stop` 命令强制停止模型输出 | 中 | `src/feishu/handler.py`, `src/feishu/api.py`, `src/adapters/opencode.py` |
 | #51 | `/session` 命令在无会话时返回格式难看 | 低 | `src/feishu/handler.py`, `src/feishu/card_builder.py` |
 | #16 | `FeishuClient._parse_message` 解析结果丢弃，重复解析 | 高 | `src/feishu/client.py`, `src/feishu/handler.py` |
 | #17 | `_stream_reply_legacy` 丢失 `reply_to` 参数 | 高 | `src/feishu/api.py` |
@@ -141,21 +140,16 @@ def handle_project_list():
 
 ---
 
-## Issue #52 详情（新增）
+## Issue #52 详情（已修复）
 
 **标题**: 需要 `/stop` 命令强制停止模型输出
 
-**状态**: ⏳ 待处理
+**状态**: ✅ 已修复
 
 **优先级**: 中
 
 **描述**:
 当用户发送了错误的指令或模型正在生成不期望的输出时，需要一个 `/stop` 命令来强制中断模型的思考和输出过程。
-
-**使用场景**:
-1. 用户发送了错误/不完整的 prompt，想立即中断而不是等待完成
-2. 模型进入了无限循环或冗长输出
-3. 用户意识到问题提错了，想快速终止当前会话
 
 **期望行为**:
 - 发送 `/stop` 后立即中断当前进行中的 AI 流式输出
@@ -163,35 +157,26 @@ def handle_project_list():
 - 可选：发送一个 Toast 通知或简短文本确认已停止
 - 停止后可以继续发送新消息开始新的对话
 
-**技术难点**:
-1. **流式输出中断**: 需要与 `api.stream_reply()` 协作，传入一个可取消的标识
-2. **适配器层支持**: OpenCode HTTP/SSE 流需要支持中断连接或发送取消信号
-3. **多并发处理**: 需要确保停止的是当前用户的请求，不影响其他用户
-4. **状态同步**: 需要同步更新卡片状态（如果使用了 CardKit 流式卡片）
+**实现方案**:
+使用 `asyncio.Event` 作为取消信号，在 handler 层跟踪当前生成任务，用户发送 `/stop` 时设置事件并取消任务。
 
-**相关代码**:
-- `src/feishu/api.py` - `stream_reply()` 方法需要支持取消机制
-- `src/feishu/handler.py` - `_handle_ai_message()` 需要处理 stop 信号
-- `src/adapters/opencode.py` - SSE 流需要支持中断
-- `src/feishu/streaming_controller.py` - 流式卡片状态管理
+**修改文件**:
+- `src/adapters/opencode/core.py`:
+  - 添加 `_cancel_event: Optional[asyncio.Event]` 实例变量
+  - 添加 `stop_generation()` 方法设置取消事件
+  - 在 `_listen_events()` SSE 循环中检查取消事件
+  - 在 `execute_stream()` 开始/结束时初始化和重置事件
+  - 添加 "stop" 到 `supported_tui_commands`
 
-**实现思路**:
-```python
-# 方案1: 使用 asyncio.Event 作为取消信号
-stop_event = asyncio.Event()
+- `src/tui_commands/__init__.py`:
+  - 添加 "stop" 到 `SUPPORTED_COMMANDS` 列表
 
-async def execute_stream(...):
-    async for chunk in sse_stream:
-        if stop_event.is_set():
-            break
-        yield chunk
-
-# 方案2: 使用 asyncio.Task.cancel()
-task = asyncio.create_task(stream_reply(...))
-task.cancel()
-```
-
-**备注**: 这是一个功能性增强需求，非紧急修复。
+- `src/feishu/handler.py`:
+  - 添加 `_current_generation_lock`, `_current_generation_task`, `_stop_event` 跟踪状态
+  - 修改 `_handle_ai_message()` 使用 `tracked_stream()` 包装流以支持停止检测
+  - 添加 `_handle_stop()` 方法处理停止命令
+  - 修改 `_handle_tui_command()` 优先检测 `/stop` 命令
+  - 更新帮助文本添加 `/stop` 说明
 
 ---
 

@@ -30,6 +30,7 @@ class TUICommandRouter:
         "clear",
         "help",
         "testcard2",
+        "stop",
     ]
 
     def __init__(self):

@@ -286,3 +286,13 @@ class BaseCLIAdapter(ABC):
             模型完整 ID
         """
         return self.default_model
+
+    async def stop_generation(self) -> bool:
+        """停止当前正在进行的生成
+
+        用于实现 /stop 命令，强制中断模型的思考和输出。
+
+        Returns:
+            是否成功触发停止
+        """
+        return False

@@ -41,6 +41,11 @@ class MessageHandler:
         self.dedup = MessageDeduplicator()  # 消息去重
         self.tui_router = create_router()  # TUI 命令路由器
 
+        # Issue #52: 用于跟踪当前正在进行的 AI 生成任务
+        self._current_generation_lock = asyncio.Lock()
+        self._current_generation_task: Optional[asyncio.Task] = None
+        self._stop_event: Optional[asyncio.Event] = None
+
         # 初始化新组件
         self.message_parser = MessageParser()
         self.command_router = CommandRouter(self.tui_router, project_manager)
@@ -252,6 +257,9 @@ class MessageHandler:
             )
             return
 
+        # Issue #52: 初始化停止事件
+        self._stop_event = asyncio.Event()
+
         # 给用户消息添加"打字中"表情反应
         typing_reaction_id = await self.api.add_typing_reaction(message.message_id)
 
@@ -266,27 +274,53 @@ class MessageHandler:
                 if len(history) > self.config.session.max_history * 2:
                     history = history[-self.config.session.max_history * 2 :]
 
-            # 执行 CLI 命令
-            stream = adapter.execute_stream(
-                prompt=content,
-                context=history,  # 使用从 OpenCode 获取的历史
-                working_dir=working_dir,
-                attachments=message.attachments,
-            )
+            # Issue #52: 使用 stop_event 包装 stream 以支持中断
+            async def tracked_stream():
+                """包装 stream 以支持停止检测"""
+                raw_stream = adapter.execute_stream(
+                    prompt=content,
+                    context=history,
+                    working_dir=working_dir,
+                    attachments=message.attachments,
+                )
+                async for chunk in raw_stream:
+                    # 检查是否收到停止信号
+                    if self._stop_event and self._stop_event.is_set():
+                        logger.info("AI 流式输出被用户停止")
+                        break
+                    yield chunk
+
+            # 执行 CLI 命令（使用包装后的 stream）
+            stream = tracked_stream()
 
             # 统计信息提供者
             def get_stats(full_content: str) -> TokenStats:
                 stats = adapter.get_stats(history, full_content)
                 return stats
 
-            # 流式处理并发送回复（reply_to_message_id 让飞书显示原生引用气泡）
-            full_response = await self.api.stream_reply(
-                chat_id=message.chat_id,
-                stream=stream,
-                stats_provider=get_stats,
-                model=adapter.default_model,
-                reply_to_message_id=message.message_id,
+            # Issue #52: 创建并跟踪生成任务
+            generation_task = asyncio.create_task(
+                self.api.stream_reply(
+                    chat_id=message.chat_id,
+                    stream=stream,
+                    stats_provider=get_stats,
+                    model=adapter.default_model,
+                    reply_to_message_id=message.message_id,
+                )
             )
+
+            async with self._current_generation_lock:
+                self._current_generation_task = generation_task
+
+            try:
+                # 等待生成完成或取消
+                full_response = await generation_task
+            except asyncio.CancelledError:
+                logger.info("生成任务被取消")
+                full_response = ""
+            finally:
+                async with self._current_generation_lock:
+                    self._current_generation_task = None
 
             # 流完成后，从适配器获取当前实际使用的 session_id（可能是新建的）
             current_session_id = (
@@ -327,6 +361,8 @@ class MessageHandler:
             await self.api.remove_typing_reaction(
                 message.message_id, typing_reaction_id
             )
+            # Issue #52: 重置停止事件
+            self._stop_event = None
 
     async def _download_attachments(
         self, message_id: str, pending: List[Dict]
@@ -396,6 +432,7 @@ class MessageHandler:
 • `/session` — 列出会话，回复数字切换
 • `/model` — 列出模型，回复 ID 切换
 • `/reset` 或 `/clear` — 清空当前会话上下文
+• `/stop` — 停止当前正在进行的 AI 生成
 
 **项目管理命令：**
 • `/pa <路径> [名称]` — 添加项目
@@ -409,6 +446,44 @@ class MessageHandler:
 • 切换项目后工具调用自动在对应目录执行
 """
         await self.api.send_text(message.chat_id, help_text)
+
+    async def _handle_stop(self, message: FeishuMessage):
+        """处理停止命令 - 停止当前正在进行的 AI 生成
+
+        Issue #52: 实现 /stop 命令强制停止模型输出
+        """
+        async with self._current_generation_lock:
+            # 检查是否有正在进行的生成任务
+            if self._current_generation_task is None or self._current_generation_task.done():
+                await self.api.send_text(
+                    message.chat_id,
+                    "ℹ️ 当前没有正在进行的 AI 生成",
+                )
+                return
+
+            # 设置停止事件，通知流式输出停止
+            if self._stop_event is not None:
+                self._stop_event.set()
+                logger.info("用户触发 /stop 命令，停止 AI 生成")
+
+            # 同时尝试调用适配器的 stop_generation 方法（针对 OpenCode SSE 流）
+            cli_type = self._detect_cli_type("")
+            if cli_type:
+                adapter = self.adapters.get(cli_type)
+                if adapter and hasattr(adapter, "stop_generation"):
+                    try:
+                        await adapter.stop_generation()
+                    except Exception as e:
+                        logger.warning(f"调用适配器 stop_generation 失败: {e}")
+
+            # 取消当前任务
+            self._current_generation_task.cancel()
+
+        # 发送确认消息
+        await self.api.send_text(
+            message.chat_id,
+            "🛑 已停止 AI 生成",
+        )
 
     async def _handle_interactive_reply(self, message: FeishuMessage):
         """处理交互式消息的回复
@@ -487,6 +562,12 @@ class MessageHandler:
             content: 命令内容
             message: 飞书消息对象
         """
+        # Issue #52: 优先处理 /stop 命令（不依赖 CLI 类型）
+        content_stripped = content.strip().lower()
+        if content_stripped == "/stop":
+            await self._handle_stop(message)
+            return
+
         # 检测 CLI 类型
         cli_type = self._detect_cli_type(content)
         if not cli_type:

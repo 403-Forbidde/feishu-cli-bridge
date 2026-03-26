@@ -242,6 +242,8 @@ class OpenCodeAdapter(BaseCLIAdapter):
         # 缓存格式: {model_id: (context_window, timestamp)}
         # 缓存 TTL: 10 分钟
         self._context_window_cache_ttl: float = 600.0
+        # Issue #52: 取消事件，用于停止模型生成
+        self._cancel_event: Optional[asyncio.Event] = None
 
     @property
     def name(self) -> str:
@@ -727,6 +729,21 @@ class OpenCodeAdapter(BaseCLIAdapter):
                 self.logger.error(f"Failed to send message: {e}")
             return False
 
+    async def stop_generation(self) -> bool:
+        """停止当前正在进行的生成
+
+        用于实现 /stop 命令，强制中断模型的思考和输出。
+
+        Returns:
+            是否成功触发停止
+        """
+        if self._cancel_event is not None:
+            self._cancel_event.set()
+            if self.logger:
+                self.logger.info("stop_generation: triggered cancellation")
+            return True
+        return False
+
     async def _listen_events(
         self,
         client: httpx.AsyncClient,
@@ -744,6 +761,12 @@ class OpenCodeAdapter(BaseCLIAdapter):
             params = {"directory": working_dir} if working_dir else {}
             async with client.stream("GET", "/event", params=params) as response:
                 async for line in response.aiter_lines():
+                    # Issue #52: 检查取消事件
+                    if self._cancel_event is not None and self._cancel_event.is_set():
+                        if self.logger:
+                            self.logger.info("_listen_events: cancellation detected, breaking stream")
+                        break
+
                     if not line.startswith("data: "):
                         continue
 
@@ -825,6 +848,9 @@ class OpenCodeAdapter(BaseCLIAdapter):
 
         self._active_working_dir = working_dir
 
+        # Issue #52: 初始化取消事件
+        self._cancel_event = asyncio.Event()
+
         # Issue #40: 预加载 context window 缓存，确保后续使用准确的值
         # 如果缓存不存在或已过期，异步刷新缓存
         cached = self._context_window_cache.get(self.default_model)
@@ -899,8 +925,16 @@ class OpenCodeAdapter(BaseCLIAdapter):
                         "execute_stream: failed to fetch stats from API, will use fallback estimation"
                     )
 
-    def get_stats(self, context: List[Message], completion_text: str) -> TokenStats:
-        """获取 Token 统计"""
+        # Issue #52: 重置取消事件，以便下次生成可以正常运行
+        self._cancel_event = None
+
+    # 获取 Token 统计
+    def get_stats(
+        self,
+        context: Optional[List[Message]] = None,
+        completion_text: Optional[str] = None,
+    ) -> Optional[TokenStats]:
+        """获取 Token 统计信息"""
         # 如果已经有统计，直接返回
         if self._current_stats:
             if self.logger:
@@ -966,7 +1000,7 @@ class OpenCodeAdapter(BaseCLIAdapter):
 
     @property
     def supported_tui_commands(self) -> List[str]:
-        return ["new", "session", "model", "reset"]
+        return ["new", "session", "model", "reset", "stop"]
 
     def _get_active_client_session(
         self,
