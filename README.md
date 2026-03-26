@@ -55,7 +55,7 @@
 - [x] 可折叠思考面板（Reasoning 过程实时展示）
 - [x] 图片 / 文件输入（base64 FilePart，视觉模型识别）
 - [x] 多项目管理（`/pl` 交互式卡片切换工作目录）
-- [x] TUI 命令（`/new` `/session` `/model` `/mode` `/reset` `/help`）
+- [x] TUI 命令（`/new` `/session` `/model` `/mode` `/reset` `/help` `/stop`）
 - [x] OpenCode Server 会话管理（v0.1.7+ 完全委托给 OpenCode 服务器，本地零持久化）
 - [x] 跨平台支持：Windows / Linux / macOS
 
@@ -291,6 +291,7 @@ schtasks /delete /tn "FeiShuBridge" /f  & REM 卸载
 | `/mode` | 列出 Agent 模式，点击卡片按钮切换（Build / Plan / oh-my-openagent） |
 | `/mode <agent>` | 直接切换到指定 Agent 模式 |
 | `/reset` 或 `/clear` | 清空当前会话上下文 |
+| `/stop` | 强制停止当前 AI 输出 |
 | `/help` | 显示帮助 |
 
 #### 项目管理
@@ -372,16 +373,27 @@ feishu-cli-bridge/
 ├── src/
 │   ├── adapters/              # CLI 适配器
 │   │   ├── base.py            # 适配器抽象基类
-│   │   ├── opencode.py        # OpenCode HTTP/SSE 适配器
+│   │   ├── opencode/          # OpenCode HTTP/SSE 适配器（包结构）
+│   │   │   ├── core.py        # 主适配器类
+│   │   │   ├── server_manager.py  # 服务器生命周期管理
+│   │   │   └── session_manager.py # 会话数据类
 │   │   └── codex.py           # Codex 子进程适配器
 │   ├── feishu/                # 飞书模块
 │   │   ├── client.py          # WebSocket 客户端（lark-oapi 封装）
 │   │   ├── handler.py         # 消息路由主编排器
+│   │   ├── message_parser.py  # 消息事件数据解析
+│   │   ├── command_router.py  # 命令路由
+│   │   ├── card_callback_handler.py  # 卡片回调处理
 │   │   ├── api.py             # Feishu API 调用 + stream_reply 编排
 │   │   ├── streaming_controller.py  # 流式状态机
 │   │   ├── flush_controller.py      # 节流/互斥调度
 │   │   ├── cardkit_client.py  # CardKit HTTP 客户端
-│   │   ├── card_builder.py    # Schema 2.0 卡片 JSON 构建
+│   │   ├── card_builder/      # Schema 2.0 卡片 JSON 构建（包结构）
+│   │   │   ├── base.py        # 基础卡片构建
+│   │   │   ├── interactive_cards.py  # 交互式卡片
+│   │   │   ├── project_cards.py      # 项目相关卡片
+│   │   │   ├── session_cards.py      # 会话相关卡片
+│   │   │   └── utils.py       # 工具函数
 │   │   ├── formatter.py       # Markdown 后处理 + Emoji 图标
 │   │   └── dedup.py           # 消息去重
 │   ├── project/               # 项目管理
@@ -395,6 +407,8 @@ feishu-cli-bridge/
 │   │   ├── project.py         # 项目管理命令
 │   │   └── interactive.py     # 交互式回复跟踪
 │   ├── utils/
+│   │   ├── error_codes.py     # 错误代码枚举与异常类
+│   │   ├── retry.py           # 指数退避重试机制
 │   │   └── logger.py          # 日志工具
 │   ├── config.py              # 配置管理（YAML + 环境变量）
 │   └── main.py                # 入口
