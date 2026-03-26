@@ -296,3 +296,28 @@ class BaseCLIAdapter(ABC):
             是否成功触发停止
         """
         return False
+
+    def generate_fallback_title(self, user_msg: str) -> str:
+        """根据用户首条消息生成会话标题（Issue #54）
+
+        子类可覆盖此方法提供自定义的标题生成逻辑。
+        默认实现：去除标点后截取前30个字符。
+
+        Args:
+            user_msg: 用户第一条消息
+
+        Returns:
+            str: 会话标题
+        """
+        import re
+        import time
+
+        if not user_msg:
+            return f"会话_{time.strftime('%m%d_%H%M')}"
+
+        # 去除常见标点符号和空格
+        clean_msg = re.sub(r'[，。！？.,!?;:：；"\'\s]', "", user_msg)
+
+        if len(clean_msg) > 20:
+            return clean_msg[:20] + "..."
+        return clean_msg if clean_msg else f"会话_{time.strftime('%m%d_%H%M')}"

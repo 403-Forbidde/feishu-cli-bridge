@@ -329,16 +329,43 @@ class MessageHandler:
                 else session_id
             ) or session_id
 
+            # Issue #54: 添加日志以便调试标题生成问题
+            logger.debug(f"Issue #54: current_session_id={current_session_id[:8] if current_session_id else None}, working_dir={working_dir}")
+
             # 检测是否需要自动生成会话标题（标题还是临时生成名时替换）
             should_generate_title = False
-            if current_session_id and hasattr(adapter, "list_sessions"):
-                sessions = await adapter.list_sessions(limit=20)
-                for s in sessions:
-                    if s.get("id") == current_session_id:
-                        title = s.get("title", "")
-                        if title.startswith("Feishu Bridge "):
-                            should_generate_title = True
-                        break
+            if current_session_id:
+                # Issue #54 Fix: 直接从适配器的本地缓存获取会话标题
+                # 避免依赖 list_sessions 返回的数据（可能不包含 title 字段）
+                current_title = None
+                if hasattr(adapter, "_sessions"):
+                    session_obj = adapter._sessions.get(working_dir)
+                    if session_obj:
+                        current_title = getattr(session_obj, "title", None)
+                        logger.debug(f"Issue #54: Got title from adapter._sessions cache: '{current_title}'")
+
+                # 如果本地缓存没有，尝试从 list_sessions 获取（备用）
+                if not current_title and hasattr(adapter, "list_sessions"):
+                    sessions = await adapter.list_sessions(limit=20)
+                    logger.debug(f"Issue #54: list_sessions returned {len(sessions)} sessions")
+                    for s in sessions:
+                        if s.get("id") == current_session_id:
+                            current_title = s.get("title", "")
+                            logger.debug(f"Issue #54: Got title from list_sessions: '{current_title}'")
+                            break
+                    else:
+                        logger.warning(f"Issue #54: current_session_id {current_session_id[:8]}... not found in {len(sessions)} sessions")
+
+                # 检查标题是否需要更新
+                if current_title and current_title.startswith("Feishu Bridge "):
+                    should_generate_title = True
+                    logger.info(f"Issue #54: Will auto-generate title for session {current_session_id[:8]}... (current title='{current_title}')")
+                elif current_title:
+                    logger.debug(f"Issue #54: Session {current_session_id[:8]}... title '{current_title}' does not start with 'Feishu Bridge ', skipping")
+                else:
+                    logger.warning(f"Issue #54: Could not get title for session {current_session_id[:8]}..., skipping auto-title")
+            else:
+                logger.debug(f"Issue #54: Skip title generation - current_session_id is None")
 
             if should_generate_title and full_response:
                 # 异步生成标题（不阻塞主流程）
@@ -691,8 +718,9 @@ class MessageHandler:
     ):
         """自动生成会话标题（异步后台执行）
 
+        Issue #54: Session 名称自动更新为首次对话内容
         使用 OpenCode API PATCH /session/{id} 来设置标题。
-        当前实现：基于首条用户消息前 30 字符生成标题（简单截断）。
+        基于首条用户消息生成标题，去除标点，截取前20个字符。
 
         Args:
             session_id: 会话ID
@@ -708,9 +736,12 @@ class MessageHandler:
                 logger.debug(f"Adapter {adapter.name} does not support rename_session")
                 return
 
-            # 生成标题（基于首条用户消息和助手回复）
-            # 简单规则：取用户消息前 30 字作为标题
-            title = user_msg[:30] + "..." if len(user_msg) > 30 else user_msg
+            # Issue #54: 使用适配器的 generate_fallback_title 方法生成更干净的标题
+            if hasattr(adapter, "generate_fallback_title"):
+                title = adapter.generate_fallback_title(user_msg)
+            else:
+                # 兑底：简单截断前30字符
+                title = user_msg[:30] + "..." if len(user_msg) > 30 else user_msg
             if not title:
                 title = f"会话_{time.strftime('%m%d_%H%M')}"
 

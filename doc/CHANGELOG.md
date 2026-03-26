@@ -1,5 +1,39 @@
 # 更新日志
 
+## [v0.1.11] - 2026-03-26  【Issue #54 修复：会话自动命名】
+
+**开发人**: ERROR403
+
+### 修复摘要
+
+修复用户首次发送消息后，Session 名称未自动更新为消息内容的问题。
+
+### 问题分析
+
+- `list_sessions()` 从 OpenCode 服务器获取的会话详情中可能不包含 `title` 字段
+- 导致 `should_generate_title` 判断失败，无法触发自动重命名
+
+### 解决方案
+
+修改 `src/feishu/handler.py`，优先从适配器的本地缓存 `adapter._sessions` 获取会话标题：
+
+```python
+# Issue #54 Fix: 直接从适配器的本地缓存获取会话标题
+if hasattr(adapter, "_sessions"):
+    session_obj = adapter._sessions.get(working_dir)
+    if session_obj:
+        current_title = getattr(session_obj, "title", None)
+```
+
+### 技术细节
+
+| 文件 | 变更 |
+|------|------|
+| `src/feishu/handler.py` | 修改标题生成检测逻辑，优先使用本地缓存 |
+| `src/adapters/base.py` | 新增 `Message` 和 `TokenStats` 类（支持代码） |
+
+---
+
 ## [v0.1.10] - 2026-03-25  【卡片 Schema 2.0 统一】
 
 **开发人**: ERROR403
