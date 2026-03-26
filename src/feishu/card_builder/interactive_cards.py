@@ -249,6 +249,11 @@ def build_help_card(
             "detail": "清空当前会话的对话历史，重新开始",
         },
         {
+            "cmd": "/stop",
+            "desc": "停止生成",
+            "detail": "中断当前正在进行的 AI 回复生成",
+        },
+        {
             "cmd": "/help",
             "desc": "显示帮助",
             "detail": "显示此帮助信息",
