@@ -291,7 +291,7 @@ def build_help_card(
                     "elements": [
                         {
                             "tag": "markdown",
-                            "content": f"{icon} <font color='{color}'>**`{cmd}`**</font>",
+                            "content": f"<font color='{color}'>{icon} **`{cmd}`**</font>",
                         }
                     ],
                 },
