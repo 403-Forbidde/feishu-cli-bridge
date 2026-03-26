@@ -259,7 +259,7 @@ def build_help_card(
         },
         {
             "cmd": "/stop",
-            "icon": "⏹️",
+            "icon": "🛑",
             "color": "red",
             "desc": "停止生成",
             "detail": "立即中断 AI 正在进行的回复生成",
