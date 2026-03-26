@@ -187,9 +187,15 @@ def build_help_card(
     project_name: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    构建 TUI 命令帮助卡片（Schema 2.0 格式）
+    构建 TUI 命令帮助卡片（Schema 2.0 格式）- 优化版
 
-    展示当前 CLI 工具支持的所有 TUI 命令及其说明。
+    采用颜色编码+图标系统，使命令作用一目了然：
+    - 🟢 绿色 = 创建类操作（/new）
+    - 🔵 蓝色 = 管理类操作（/session）
+    - 🟣 紫色 = 配置类操作（/model）
+    - 🟠 橙色 = 模式切换（/mode）
+    - 🔴 红色 = 重置/停止（/reset, /stop）
+    - ⚪ 灰色 = 信息类（/help）
 
     Args:
         cli_type: CLI 工具类型（如 opencode）
@@ -201,89 +207,134 @@ def build_help_card(
     """
     elements: List[Dict[str, Any]] = []
 
-    # ── 头部信息 ─────────────────────────────────────────────────────────────
-    header_text = f"🟢 **{cli_type.upper()}**"
+    # ── 头部信息区 ─────────────────────────────────────────────────────────
+    header_parts = [f"🤖 **{cli_type.upper()}** 智能助手"]
     if project_name:
-        header_text += f" · 项目: `{project_name}`"
-
-    elements.append(
-        {
-            "tag": "markdown",
-            "content": header_text,
-        }
-    )
+        header_parts.append(f"📁 **当前项目**：`{project_name}`")
     if working_dir:
-        elements.append(
-            {
-                "tag": "markdown",
-                "content": f"<font color='grey'>工作目录: `{working_dir}`</font>",
-            }
-        )
+        header_parts.append(f"<font color='grey'>💼 工作目录：`{working_dir}`</font>")
+
+    elements.append({
+        "tag": "markdown",
+        "content": "\n".join(header_parts),
+    })
     elements.append({"tag": "hr"})
 
-    # ── 命令列表 ─────────────────────────────────────────────────────────────
+    # ── 命令列表（颜色编码+图标系统）─────────────────────────────────────────
     commands = [
         {
             "cmd": "/new",
-            "desc": "创建新会话",
-            "detail": "在 OpenCode 中创建一个新的对话会话",
+            "icon": "🆕",
+            "color": "green",
+            "desc": "新建会话",
+            "detail": "创建全新的对话上下文，开始独立话题讨论",
         },
         {
             "cmd": "/session",
-            "desc": "管理会话",
-            "detail": "列出当前项目的所有会话",
+            "icon": "📋",
+            "color": "blue",
+            "desc": "会话管理",
+            "detail": "查看、切换和管理所有历史会话记录",
         },
         {
             "cmd": "/model",
+            "icon": "🧠",
+            "color": "purple",
             "desc": "切换模型",
-            "detail": "查看可用模型列表并切换当前使用的 AI 模型",
+            "detail": "在配置的 AI 模型列表中选择使用",
         },
         {
             "cmd": "/mode",
-            "desc": "切换模式",
-            "detail": "切换 Agent 工作模式（如 build、debug、review）",
+            "icon": "🎯",
+            "color": "orange",
+            "desc": "工作模式",
+            "detail": "切换 Agent 角色（编码、审查、调试等）",
         },
         {
             "cmd": "/reset",
-            "desc": "重置会话",
-            "detail": "清空当前会话的对话历史，重新开始",
+            "icon": "🔄",
+            "color": "red",
+            "desc": "清空对话",
+            "detail": "重置当前会话，清除所有历史消息",
         },
         {
             "cmd": "/stop",
+            "icon": "⏹️",
+            "color": "red",
             "desc": "停止生成",
-            "detail": "中断当前正在进行的 AI 回复生成",
+            "detail": "立即中断 AI 正在进行的回复生成",
         },
         {
             "cmd": "/help",
-            "desc": "显示帮助",
-            "detail": "显示此帮助信息",
+            "icon": "❓",
+            "color": "grey",
+            "desc": "使用帮助",
+            "detail": "显示所有可用命令的详细说明",
         },
     ]
 
     for item in commands:
-        elements.append(
+        color = item["color"]
+        cmd = item["cmd"]
+        icon = item["icon"]
+        desc = item["desc"]
+        detail = item["detail"]
+
+        # 使用 column_set 实现左右布局：左侧命令，右侧描述
+        elements.append({
+            "tag": "column_set",
+            "flex_mode": "none",
+            "columns": [
+                {
+                    "tag": "column",
+                    "width": "auto",
+                    "elements": [
+                        {
+                            "tag": "markdown",
+                            "content": f"{icon} <font color='{color}'>**`{cmd}`**</font>",
+                        }
+                    ],
+                },
+                {
+                    "tag": "column",
+                    "width": "weighted",
+                    "weight": 3,
+                    "elements": [
+                        {
+                            "tag": "markdown",
+                            "content": (
+                                f"**{desc}**\n"
+                                f"<font color='grey'>{detail}</font>"
+                            ),
+                        }
+                    ],
+                },
+            ],
+        })
+        elements.append({"tag": "hr"})
+
+    # ── 快速提示区（使用 note 组件突出显示）──────────────────────────────────
+    elements.append({
+        "tag": "note",
+        "elements": [
             {
                 "tag": "markdown",
                 "content": (
-                    f"**{item['cmd']}** "
-                    f"<font color='grey'>{item['desc']}</font>\n"
-                    f"{item['detail']}"
+                    "💡 **使用提示**\n"
+                    "• 所有命令以 `/` 开头，支持随时发送\n"
+                    "• 流式输出期间也可执行命令\n"
+                    "• `/stop` 可立即中断正在生成的回复"
                 ),
             }
-        )
-        elements.append({"tag": "hr"})
-
-    # ── 底部提示 ─────────────────────────────────────────────────────────────
-    elements.append(
-        {
-            "tag": "markdown",
-            "content": "💡 <font color='grey'>命令可随时输入，不受流式输出影响</font>",
-        }
-    )
+        ],
+    })
 
     return {
         "schema": "2.0",
-        "config": {"wide_screen_mode": True},
+        "config": {
+            "wide_screen_mode": True,
+            "update_multi": True,
+        },
         "header": {
             "title": {"tag": "plain_text", "content": "📖 命令帮助"},
             "template": "blue",
