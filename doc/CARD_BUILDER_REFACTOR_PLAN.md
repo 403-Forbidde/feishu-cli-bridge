@@ -4,8 +4,11 @@
 
 - **版本**: 1.0
 - **制定日期**: 2026-03-26
+- **最后更新**: 2026-03-26
 - **目标文件**: `src/feishu/card_builder/core.py` (2300 行)
 - **拆分策略**: 功能聚合（方案 C）
+- **当前状态**: 阶段四已完成 ✅ (2026-03-26)
+- **测试状态**: 8.1 单元测试已通过 ✅ (2026-03-26)
 
 ---
 
@@ -215,15 +218,33 @@ REASONING_ELEMENT_ID = "reasoning_content"
 
 ## 5. 实施计划
 
-### 5.1 阶段一：准备（第 1 天）
+### 5.1 阶段一：准备（第 1 天）✅ 已完成
 
 **目标**: 创建基础模块，保持 `core.py` 不变
 
 **任务清单**:
-1. [ ] 创建 `constants.py`，迁移常量定义
-2. [ ] 创建 `utils.py`，迁移工具函数
-3. [ ] 更新 `__init__.py`，添加对新模块的导入
-4. [ ] 单元测试：验证 `constants` 和 `utils` 导出正常
+1. [x] 创建 `constants.py`，迁移常量定义
+2. [x] 创建 `utils.py`，迁移工具函数
+3. [x] 更新 `__init__.py`，添加对新模块的导入
+4. [x] 单元测试：验证 `constants` 和 `utils` 导出正常
+
+**完成时间**: 2026-03-26
+
+**实际创建文件**:
+| 文件 | 实际行数 | 说明 |
+|------|----------|------|
+| `constants.py` | 22 | STREAMING_ELEMENT_ID, REASONING_ELEMENT_ID |
+| `utils.py` | 277 | CATEGORY_EMOJI_MAP + 8 个工具函数 |
+| `__init__.py` | 更新 | 添加从 constants/utils 的导入 |
+
+**验证结果**:
+```bash
+✓ 基础模块导入成功
+✓ 工具函数可用 (optimize_markdown_style, _format_elapsed, _format_reasoning_duration, _simplify_model_name)
+✓ 常量导入成功 (STREAMING_ELEMENT_ID, REASONING_ELEMENT_ID)
+✓ 原有功能导入正常 (build_card_content, build_new_session_card 等)
+✓ 工具函数功能正常
+```
 
 **验证命令**:
 ```bash
@@ -233,15 +254,34 @@ python -c "from src.feishu.card_builder.utils import optimize_markdown_style; pr
 
 ---
 
-### 5.2 阶段二：核心模块迁移（第 2 天）
+### 5.2 阶段二：核心模块迁移（第 2 天）✅ 已完成
 
 **目标**: 创建 `base.py`，迁移核心流式卡片
 
 **任务清单**:
-1. [ ] 创建 `base.py`
-2. [ ] 从 `core.py` 复制 `_build_thinking/streaming/complete_card` 等函数
-3. [ ] 修改导入路径（从相对导入改为从 `utils` 导入）
-4. [ ] 单元测试：验证 `build_card_content` 各状态正常
+1. [x] 创建 `base.py`
+2. [x] 从 `core.py` 复制 `_build_thinking/streaming/complete_card` 等函数
+3. [x] 修改导入路径（从相对导入改为从 `utils` 导入）
+4. [x] 单元测试：验证 `build_card_content` 各状态正常
+
+**完成时间**: 2026-03-26
+
+**实际创建文件**:
+| 文件 | 实际行数 | 说明 |
+|------|----------|------|
+| `base.py` | 282 | 7 个函数（主入口 + 6 个内部函数）|
+
+**验证结果**:
+```bash
+✓ base.py 各状态卡片构建成功
+  - thinking: 116 字符
+  - streaming: 141 字符
+  - complete: 298 字符
+✓ 从 __init__.py 导入成功
+✓ build_card_content 各状态正常
+✓ _format_elapsed 工具函数正常
+✓ optimize_markdown_style 工具函数正常
+```
 
 **验证命令**:
 ```bash
@@ -262,34 +302,51 @@ print('✓ base.py 各状态卡片构建成功')
 **目标**: 创建业务模块，逐个迁移
 
 **任务清单**:
-1. [ ] 创建 `session_cards.py`，迁移会话相关函数
-2. [ ] 创建 `project_cards.py`，迁移项目相关函数
-3. [ ] 创建 `interactive_cards.py`，迁移交互式卡片函数
-4. [ ] 逐个模块验证
+1. [x] 创建 `session_cards.py`，迁移会话相关函数
+2. [x] 创建 `project_cards.py`，迁移项目相关函数
+3. [x] 创建 `interactive_cards.py`，迁移交互式卡片函数
+4. [x] 逐个模块验证
 
-**验证命令**:
+**完成时间**: 2026-03-26
+
+**实际创建文件**:
+| 文件 | 实际行数 | 说明 |
+|------|----------|------|
+| `session_cards.py` | 485 | 3 个函数（新建会话、会话列表、会话详情）|
+| `project_cards.py` | 245 | 2 个函数（项目列表、项目信息）|
+| `interactive_cards.py` | 480 | 8 个函数（模式/模型选择、帮助、重置、4个测试卡片）|
+
+**验证结果**:
 ```bash
-# 会话卡片
-python -c "from src.feishu.card_builder.session_cards import build_new_session_card; print('✓ session_cards OK')"
-
-# 项目卡片
-python -c "from src.feishu.card_builder.project_cards import build_project_list_card; print('✓ project_cards OK')"
-
-# 交互式卡片
-python -c "from src.feishu.card_builder.interactive_cards import build_help_card; print('✓ interactive_cards OK')"
+✓ session_cards OK
+✓ project_cards OK
+✓ interactive_cards OK
+✓ 所有导出函数导入成功
 ```
 
 ---
 
-### 5.4 阶段四：整合与清理（第 4 天）
+### 5.4 阶段四：整合与清理（第 4 天）✅ 已完成
 
 **目标**: 更新 `__init__.py`，删除 `core.py`
 
 **任务清单**:
-1. [ ] 更新 `__init__.py`，从各模块导入而非 `core`
-2. [ ] 运行完整功能测试
-3. [ ] 删除 `core.py`
-4. [ ] 运行集成测试
+1. [x] 更新 `__init__.py`，从各模块导入而非 `core`
+2. [x] 运行完整功能测试
+3. [x] 删除 `core.py`
+4. [x] 运行集成测试
+
+**完成时间**: 2026-03-26
+
+**验证结果**:
+```bash
+✓ 所有导出函数导入成功
+✓ build_card_content 各状态正常 (thinking/streaming/complete)
+✓ optimize_markdown_style 工具函数正常
+✓ _format_elapsed 工具函数正常
+✓ Python 语法检查通过
+✓ core.py 已删除
+```
 
 **完整导入测试**:
 ```bash
@@ -519,7 +576,7 @@ __all__ = [
 
 ## 8. 测试验证清单
 
-### 8.1 单元测试
+### 8.1 单元测试 ✅ 已完成 (2026-03-26)
 
 每个模块创建后运行：
 
@@ -534,6 +591,22 @@ from src.feishu.card_builder.XXX import YYY
 sig = inspect.signature(YYY)
 print(f'{YYY.__name__}{sig}')
 "
+```
+
+**测试结果**:
+```
+✓ 6 个模块导入测试全部通过
+  - constants, utils, base, session_cards, project_cards, interactive_cards
+✓ 13 个函数签名测试全部通过
+✓ 12 项功能测试全部通过
+  - build_card_content (thinking/streaming/complete)
+  - build_new_session_card, build_session_list_card
+  - build_project_list_card
+  - build_model_select_card, build_mode_select_card
+  - build_help_card, build_reset_success_card
+  - optimize_markdown_style, _format_elapsed
+✓ 20 个 __all__ 导出项集成测试通过
+✓ Python 语法检查通过
 ```
 
 ### 8.2 集成测试
@@ -594,16 +667,16 @@ python -m src.main
 
 ### 9.2 代码行数统计
 
-| 模块 | 预估行数 | 实际行数（迁移后更新） |
-|------|----------|------------------------|
-| constants.py | 30 | - |
-| utils.py | 450 | - |
-| base.py | 400 | - |
-| session_cards.py | 700 | - |
-| project_cards.py | 400 | - |
-| interactive_cards.py | 400 | - |
-| __init__.py | 62 | - |
-| **总计** | **~2442** | **2300 (原 core.py)** |
+| 模块 | 预估行数 | 实际行数 | 状态 |
+|------|----------|----------|------|
+| constants.py | 30 | 22 | ✅ 已完成 |
+| utils.py | 450 | 277 | ✅ 已完成 |
+| base.py | 400 | 282 | ✅ 已完成 |
+| session_cards.py | 700 | 485 | ✅ 已完成 |
+| project_cards.py | 400 | 245 | ✅ 已完成 |
+| interactive_cards.py | 400 | 480 | ✅ 已完成 |
+| __init__.py | 62 | 已更新 | ✅ 已更新 |
+| **总计** | **~2442** | **1791 / 2300** | **78%** |
 
 ---
 
