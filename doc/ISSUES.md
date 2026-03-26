@@ -31,11 +31,13 @@ sessions_sorted = sorted(sessions, key=lambda s: s.updated_at, reverse=True)[:10
 
 ## Issue #54 详情
 
+**状态**: ✅ 已修复 (v0.1.11, 2026-03-26)
+
 **问题**: 用户首次发送消息后，Session 名称未自动更新为消息内容。
 
 **根本原因**: `list_sessions()` 从 OpenCode 服务器获取的会话详情中可能不包含 `title` 字段，导致无法判断会话是否是临时生成的名称（以 "Feishu Bridge " 开头）。日志显示 `current_session_id not found in 20 sessions`。
 
-**修复方案** (2026-03-26):
+**修复方案**:
 修改 `src/feishu/handler.py`，优先从适配器的本地缓存 `adapter._sessions` 获取会话标题，而不是依赖 `list_sessions()` 返回的数据：
 
 ```python
@@ -45,11 +47,6 @@ if hasattr(adapter, "_sessions"):
     if session_obj:
         current_title = getattr(session_obj, "title", None)
 ```
-
-**测试步骤**:
-1. 发送一条消息给机器人
-2. 检查日志是否显示 `Will auto-generate title for session ...`
-3. 使用 `/session` 命令查看会话名称是否已更新为用户消息内容
 
 ---
 
