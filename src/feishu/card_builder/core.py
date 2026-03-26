@@ -1818,6 +1818,7 @@ def build_session_list_card(
     cli_type: str = "opencode",
     deleting_session_id: Optional[str] = None,
     working_dir: str = "",
+    total_count: Optional[int] = None,
 ) -> Dict[str, Any]:
     """构建会话列表卡片（Schema 2.0）
 
@@ -1827,6 +1828,7 @@ def build_session_list_card(
         cli_type: CLI类型，用于按钮 value
         deleting_session_id: 处于"确认删除"状态的会话ID（显示确认/取消按钮）
         working_dir: 当前工作目录路径
+        total_count: 总会话数（用于显示"还有N条未显示"），None则使用len(sessions)
 
     Returns:
         飞书卡片 JSON（Schema 2.0）
@@ -2067,6 +2069,17 @@ def build_session_list_card(
 
     # ── 底部提示 ──────────────────────────────────────────────────────────
     elements.append({"tag": "hr"})
+
+    # 显示超出提示（如果有超过10条会话未显示）
+    actual_total = total_count if total_count is not None else len(sessions)
+    if actual_total > 10:
+        hidden_count = actual_total - 10
+        elements.append({
+            "tag": "markdown",
+            "content": f"<font color='grey'>ℹ️ 还有 {hidden_count} 条历史会话未显示</font>",
+            "text_size": "notation",
+        })
+
     elements.append({
         "tag": "markdown",
         "content": "<font color='grey'>💡 点击「📝 改名」后直接回复新名称即可完成重命名</font>",

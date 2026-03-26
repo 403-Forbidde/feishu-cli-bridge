@@ -137,6 +137,7 @@ class OpenCodeTUICommands(TUIBaseCommand):
             )
 
             session_data_list = []
+            total_count = len(filtered)  # 保存总会话数
             for session in filtered[:10]:
                 sid = session.get("id", "")
                 slug = session.get("slug", "")
@@ -158,6 +159,7 @@ class OpenCodeTUICommands(TUIBaseCommand):
                 current_session_id=current_session_id,
                 cli_type=context.cli_type,
                 working_dir=context.working_dir,
+                total_count=total_count,
             )
             return TUIResult.card("", metadata={"card_json": card})
 
@@ -503,6 +505,7 @@ class OpenCodeTUICommands(TUIBaseCommand):
         )
 
         session_data_list = []
+        total_count = len(filtered)  # 保存总会话数
         for session in filtered[:10]:
             sid = session.get("id", "")
             slug = session.get("slug", "")
@@ -523,5 +526,6 @@ class OpenCodeTUICommands(TUIBaseCommand):
             current_session_id=current_session_id,
             cli_type=cli_type,
             working_dir=working_dir,
+            total_count=total_count,
         )
         return TUIResult.card("", metadata={"card_json": card})

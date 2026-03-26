@@ -4,7 +4,6 @@
 
 | Issue | 描述 | 优先级 | 相关文件 |
 |-------|------|--------|----------|
-| #55 | 每个工作目录会话列表最多显示最新10条 | 中 | `src/tui_commands/interactive.py`, `src/feishu/card_builder.py` |
 | #16 | `FeishuClient._parse_message` 解析结果丢弃，重复解析 | 高 | `src/feishu/client.py`, `src/feishu/handler.py` |
 | #17 | `_stream_reply_legacy` 丢失 `reply_to` 参数 | 高 | `src/feishu/api.py` |
 | #18 | `SessionManager._save_session` 同步阻塞事件循环 | 高 | `src/session/manager.py` |
@@ -14,18 +13,6 @@
 | #24 | `_beautify_list_items` 是完全空操作 | 中 | `src/feishu/card_builder.py` |
 | #25 | `formatter.py` 大量死代码待清理 | 低 | `src/feishu/formatter.py` |
 | #50 | 测试卡片代码待删除 | 低 | `src/tui_commands/testcard.py`, `src/feishu/card_builder.py:779-1200+` |
-
----
-
-## Issue #55 详情
-
-Session 列表每工作目录最多显示10条，超出时提示"还有 N 条历史会话未显示"。
-
-**实现思路**:
-```python
-sessions = session_manager.get_sessions(working_dir)
-sessions_sorted = sorted(sessions, key=lambda s: s.updated_at, reverse=True)[:10]
-```
 
 ---
 
@@ -50,10 +37,29 @@ if hasattr(adapter, "_sessions"):
 
 ---
 
+## Issue #55 详情
+
+**状态**: ✅ 已修复 (2026-03-26)
+
+**问题**: Session 列表每工作目录最多显示10条，超出时提示"还有 N 条历史会话未显示"。
+
+**修复方案**:
+1. 修改 `build_session_list_card` 函数，添加 `total_count` 参数
+2. 在卡片底部添加提示："还有 N 条历史会话未显示"
+3. 更新所有调用点传递总会话数
+
+**相关文件**:
+- `src/feishu/card_builder/core.py`
+- `src/tui_commands/opencode.py`
+- `src/feishu/card_callback_handler.py`
+
+---
+
 ## 已修复问题
 
 | Issue | 标题 | 日期 |
 |-------|------|------|
+| #55 | 每个工作目录会话列表最多显示最新10条 | 2026-03-26 |
 | #54 | Session 名称自动更新为首次对话内容 | 2026-03-26 |
 | #53 | `/session` 命令显示工作目录和项目信息 | 2026-03-26 |
 | #52 | `/stop` 命令强制停止模型输出 | 2026-03-26 |

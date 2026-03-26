@@ -3,6 +3,7 @@
 import asyncio
 import base64
 import json
+import logging
 import os
 import shutil
 import time
@@ -244,6 +245,8 @@ class OpenCodeAdapter(BaseCLIAdapter):
         self._context_window_cache_ttl: float = 600.0
         # Issue #52: 取消事件，用于停止模型生成
         self._cancel_event: Optional[asyncio.Event] = None
+        # SSE 事件计数器（采样日志用）
+        self._sse_event_counter: int = 0
 
     @property
     def name(self) -> str:
@@ -773,11 +776,18 @@ class OpenCodeAdapter(BaseCLIAdapter):
                     # 诊断：记录所有非内容事件的原始数据
                     raw_data = line[6:]
                     if self.logger:
-                        # 记录所有事件，帮助诊断
-                        event_preview = (
-                            raw_data[:150] if len(raw_data) > 150 else raw_data
-                        )
-                        self.logger.info(f"DEBUG SSE RAW: {event_preview}")
+                        self._sse_event_counter += 1
+                        # 使用 DEBUG 级别避免生产环境日志膨胀
+                        if self.logger.isEnabledFor(logging.DEBUG):
+                            event_preview = (
+                                raw_data[:150] if len(raw_data) > 150 else raw_data
+                            )
+                            self.logger.debug(f"SSE RAW: {event_preview}")
+                        # 每 1000 条记录一次统计信息（采样）
+                        if self._sse_event_counter % 1000 == 0:
+                            self.logger.info(
+                                f"SSE events processed: {self._sse_event_counter}"
+                            )
 
                     chunk = self._parse_event(raw_data.encode("utf-8"), state)
                     if not chunk:

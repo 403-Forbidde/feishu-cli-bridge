@@ -370,9 +370,6 @@ INFO  - opencode serve 已启动（port 4096）
 ```bash
 # 查看完整日志
 python3 -m src.main 2>&1
-
-# 运行诊断脚本
-python3 scripts/diagnose_feishu.py
 ```
 
 可能原因（按出现频率排序）：
@@ -548,7 +545,6 @@ Start-Process python -ArgumentList "-m src.main" -WorkingDirectory $PWD -WindowS
 | 新建会话 | 私聊发送 `/new` |
 | Lint 检查 | `ruff check src/` |
 | 类型检查 | `mypy src/` |
-| 诊断工具 | `python3 scripts/diagnose_feishu.py` |
 
 ---
 

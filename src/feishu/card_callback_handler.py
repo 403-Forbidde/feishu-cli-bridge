@@ -321,7 +321,7 @@ class CardCallbackHandler:
             logger.info(f"卡片回调创建新会话成功: {new_session_id}")
 
             # 刷新会话列表卡片
-            session_data_list = await self._build_session_data_list(
+            session_data_list, total_count = await self._build_session_data_list(
                 adapter, working_dir, new_session_id
             )
 
@@ -332,6 +332,7 @@ class CardCallbackHandler:
                 current_session_id=new_session_id,
                 cli_type=cli_type,
                 working_dir=working_dir,
+                total_count=total_count,
             )
 
             return success_toast("✅ 已创建新会话") | {
@@ -371,7 +372,7 @@ class CardCallbackHandler:
                 logger.info(f"卡片回调切换会话成功: {session_id}")
 
                 # 刷新会话列表卡片
-                session_data_list = await self._build_session_data_list(
+                session_data_list, total_count = await self._build_session_data_list(
                     adapter, working_dir, session_id
                 )
 
@@ -382,6 +383,7 @@ class CardCallbackHandler:
                     current_session_id=session_id,
                     cli_type=cli_type,
                     working_dir=working_dir,
+                    total_count=total_count,
                 )
 
                 return success_toast("✅ 已切换会话") | {
@@ -413,7 +415,7 @@ class CardCallbackHandler:
                     working_dir = str(current_project.path) if current_project else ""
                 current_session_id = adapter.get_session_id(working_dir) or ""
 
-            session_data_list = await self._build_session_data_list(
+            session_data_list, total_count = await self._build_session_data_list(
                 adapter, working_dir, current_session_id
             )
 
@@ -424,6 +426,7 @@ class CardCallbackHandler:
                 current_session_id=current_session_id,
                 cli_type=cli_type,
                 working_dir=working_dir,
+                total_count=total_count,
             )
 
             return success_toast("✅ 已刷新会话列表") | {
@@ -512,7 +515,7 @@ class CardCallbackHandler:
                 working_dir = str(current_project.path) if current_project else ""
             current_session_id = adapter.get_session_id(working_dir) or ""
 
-        session_data_list = await self._build_session_data_list(
+        session_data_list, total_count = await self._build_session_data_list(
             adapter, working_dir, current_session_id
         )
 
@@ -524,6 +527,7 @@ class CardCallbackHandler:
             cli_type=cli_type,
             deleting_session_id=session_id,
             working_dir=working_dir,
+            total_count=total_count,
         )
 
         return warning_toast("⚠️ 确认删除会话？") | {"update_card": {"message_id": message_id, "card": updated_card}}
@@ -544,7 +548,7 @@ class CardCallbackHandler:
                 working_dir = str(current_project.path) if current_project else ""
             current_session_id = adapter.get_session_id(working_dir) or ""
 
-        session_data_list = await self._build_session_data_list(
+        session_data_list, total_count = await self._build_session_data_list(
             adapter, working_dir, current_session_id
         )
 
@@ -555,6 +559,7 @@ class CardCallbackHandler:
             current_session_id=current_session_id,
             cli_type=cli_type,
             working_dir=working_dir,
+            total_count=total_count,
         )
 
         return info_toast("已取消删除") | {"update_card": {"message_id": message_id, "card": updated_card}}
@@ -586,7 +591,7 @@ class CardCallbackHandler:
         if hasattr(adapter, "get_session_id"):
             current_session_id = adapter.get_session_id(working_dir) or ""
 
-        session_data_list = await self._build_session_data_list(
+        session_data_list, total_count = await self._build_session_data_list(
             adapter, working_dir, current_session_id
         )
 
@@ -597,6 +602,7 @@ class CardCallbackHandler:
             current_session_id=current_session_id,
             cli_type=cli_type,
             working_dir=working_dir,
+            total_count=total_count,
         )
 
         return success_toast("✅ 已删除会话") | {"update_card": {"message_id": message_id, "card": updated_card}}
@@ -605,13 +611,19 @@ class CardCallbackHandler:
 
     async def _build_session_data_list(
         self, adapter, working_dir: str, current_session_id: str
-    ) -> list:
-        """构建会话数据列表（使用规范化路径匹配）"""
+    ) -> tuple:
+        """构建会话数据列表（使用规范化路径匹配）
+
+        Returns:
+            tuple: (session_data_list, total_count)
+        """
         session_data_list = []
+        total_count = 0
         if adapter and hasattr(adapter, "list_sessions"):
             # 使用 directory 参数进行规范化路径匹配
-            filtered_sessions = await adapter.list_sessions(limit=20, directory=working_dir)
-            for session in filtered_sessions:
+            filtered_sessions = await adapter.list_sessions(limit=50, directory=working_dir)
+            total_count = len(filtered_sessions)
+            for session in filtered_sessions[:10]:
                 sid = session.get("id", "")
                 slug = session.get("slug", "")
                 display_id = slug if slug else sid[-8:] if len(sid) >= 8 else sid
@@ -623,4 +635,4 @@ class CardCallbackHandler:
                     "updated_at": session.get("updated_at", 0),
                     "is_current": sid == current_session_id,
                 })
-        return session_data_list
+        return session_data_list, total_count

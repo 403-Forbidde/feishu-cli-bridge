@@ -553,10 +553,12 @@ if self._sse_event_counter % 100 == 0:
 
 #### 阶段 6 交付标准
 
-- [ ] `retry.py` 实现并应用到关键操作
-- [ ] `error_codes.py` 创建并使用
-- [ ] SSE 日志优化
-- [ ] 错误处理测试通过
+- [x] `retry.py` 实现并应用到关键操作
+- [x] `error_codes.py` 创建并使用
+- [x] SSE 日志优化
+- [x] 错误处理测试通过
+
+**完成日期**: 2026-03-26
 
 ---
 
@@ -615,6 +617,40 @@ git reset --hard <commit_hash>
 # 或者回滚单个文件
 git checkout HEAD -- src/feishu/handler.py
 ```
+
+---
+
+### 2026-03-26 Phase 6 错误处理增强完成
+
+#### 已完成工作
+
+| 任务 | 文件 | 修改内容 | 状态 |
+|------|------|----------|------|
+| 错误代码体系 | `src/utils/error_codes.py` | 创建错误代码枚举（ErrorCode）、基础异常类（FeishuBridgeError）、可重试错误（TransientError）、永久错误（PermanentError）、验证错误（ValidationError） | ✅ |
+| 指数退避重试 | `src/utils/retry.py` | 实现 `retry_with_backoff()` 函数、`@retry` 装饰器、`RetryableOperation` 类、`is_retryable_error()` 辅助函数 | ✅ |
+| 更新工具模块 | `src/utils/__init__.py` | 导出新模块的所有公共接口 | ✅ |
+| SSE 日志优化 | `src/adapters/opencode/core.py` | 使用 DEBUG 级别替代 INFO 级别，添加每 1000 条采样机制，添加 `_sse_event_counter` 计数器 | ✅ |
+
+#### 技术细节
+
+**错误代码分类**:
+- CDKxxx: CardKit 错误（限速、序列冲突、卡片不存在等）
+- NETxxx: 网络错误（超时、连接失败、DNS、SSL）
+- SRVxxx: 服务器错误（启动失败、无响应、内部错误）
+- SESxxx: 会话错误（不存在、过期、创建/删除失败）
+- MSGxxx: 消息错误（发送失败、解析失败、过大）
+- CFGxxx: 配置错误（无效、缺失、已废弃）
+
+**重试机制特性**:
+- 指数退避: base_delay * 2^attempt，带最大上限
+- 随机抖动: 0-25% 随机因子避免 thundering herd
+- 灵活配置: 支持装饰器、函数调用、类封装三种方式
+- 智能重试判断: 基于异常类型和 HTTP 状态码
+
+**SSE 日志优化**:
+- 生产环境不再输出每条 SSE 事件（避免日志膨胀）
+- DEBUG 级别下可查看详细事件内容
+- 每 1000 条事件记录一次统计采样
 
 ---
 
