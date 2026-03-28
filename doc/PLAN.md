@@ -31,8 +31,8 @@
 ```
 Week 1 (Day 1-5):   基础设施 + 核心框架  → 可编译运行
 Week 2 (Day 6-10):  业务逻辑 + 流式系统  → 核心功能可用
-Week 3 (Day 11-15): 适配器 + 集成       → 端到端可用
-Week 4 (Day 16-20): 测试 + 优化         → 生产就绪
+Week 3 (Day 11-13): 适配器 + 集成       → 端到端可用
+Week 4 (Day 14-18): 测试 + 优化         → 生产就绪
 ```
 
 ---
@@ -678,101 +678,27 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
 ```
 
 **验收标准:**
-- [ ] HTTP 调用正常
-- [ ] 流解析正确
+- [x] HTTP 调用正常
+- [x] 流解析正确
+
+**已完成:**
+- 创建了 OpenCode 适配器核心模块 `src/adapters/opencode/`：
+  - `types.ts` - OpenCode 特有类型定义（OpenCodeSession, StreamState, SSEEventType 等）
+  - `http-client.ts` - HTTP 客户端管理，使用 axios 与 keep-alive 连接池
+  - `sse-parser.ts` - SSE 流解析器（原生实现 + eventsource-parser 库版本）
+  - `server-manager.ts` - opencode serve 子进程生命周期管理
+  - `session-manager.ts` - 会话管理器（按工作目录隔离）
+  - `adapter.ts` - 主适配器实现，继承 BaseCLIAdapter
+  - `index.ts` - 统一导出
+- 创建了重试工具模块 `src/core/retry.ts`（指数退避策略）
+- 在 `src/adapters/index.ts` 注册 OpenCode 适配器
+- 所有模块类型检查通过
 
 ---
 
-#### Day 12: OpenCode 服务器管理器
+#### Day 12: 项目管理 + 入口文件
 
-**任务 12.1: 子进程管理**
-
-**Python → Node.js:**
-| Python | Node.js |
-|--------|---------|
-| `asyncio.create_subprocess_exec` | `child_process.spawn` |
-| `asyncio.wait_for` | `setTimeout` + Promise |
-| `process.returncode` | `process.exitCode` |
-| `process.stderr.read()` | `process.stderr.on('data')` |
-
-```typescript
-// src/adapters/opencode/server-manager.ts
-export class OpenCodeServerManager {
-  private process: ChildProcess | null = null;
-  private isRunning = false;
-
-  async start(): Promise<boolean>;
-  async stop(): Promise<void>;
-  async checkHealth(): Promise<boolean>;
-
-  private async waitForServer(timeout: number): Promise<boolean>;
-}
-```
-
-**任务 12.2: 会话管理器**
-
-```typescript
-// src/adapters/opencode/session-manager.ts
-export class OpenCodeSessionManager {
-  private sessions: Map<string, OpenCodeSession> = new Map(); // workingDir -> Session
-
-  async getOrCreateSession(workingDir: string): Promise<OpenCodeSession>;
-  async recoverSessions(): Promise<void>;
-  async renameSession(sessionId: string, title: string): Promise<boolean>;
-  getSessionId(workingDir: string): string | null;
-}
-```
-
-**验收标准:**
-- [ ] 服务启动/停止正常
-- [ ] 健康检查通过
-- [ ] 会话恢复工作
-
----
-
-#### Day 13: Codex 适配器 + 会话管理
-
-**任务 13.1: CodexAdapter (子进程模式)**
-
-```typescript
-// src/adapters/codex.ts
-export class CodexAdapter extends BaseCLIAdapter {
-  readonly name = 'codex';
-
-  async executeStream(
-    prompt: string,
-    context: Message[],
-    workingDir: string,
-    attachments?: unknown[]
-  ): AsyncIterable<StreamChunk> {
-    // 使用 child_process.spawn 启动 codex CLI
-    // 解析 --stream 输出
-  }
-}
-```
-
-**任务 13.2: SessionManager (通用)**
-
-```typescript
-// src/session/manager.ts
-export class SessionManager {
-  private sessions: Map<string, Session> = new Map(); // userId -> Session
-  private maxSessions: number;
-
-  getOrCreate(userId: string, cliType: string, workingDir: string): Session;
-  cleanupLRU(): void;
-}
-```
-
-**验收标准:**
-- [ ] Codex 子进程调用正常
-- [ ] LRU 清理工作
-
----
-
-#### Day 14: 项目管理 + 入口文件
-
-**任务 14.1: ProjectManager**
+**任务 12.1: ProjectManager**
 
 ```typescript
 // src/project/manager.ts
@@ -799,7 +725,7 @@ export class ProjectManager {
 }
 ```
 
-**任务 14.2: 主入口 (main.ts)**
+**任务 12.2: 主入口 (main.ts)**
 
 ```typescript
 // src/main.ts
@@ -837,9 +763,9 @@ main().catch(console.error);
 
 ---
 
-#### Day 15: 集成测试 + Bug 修复
+#### Day 13: 集成测试 + Bug 修复
 
-**任务 15.1: 集成测试场景**
+**任务 13.1: 集成测试场景**
 
 | 场景 | 步骤 |
 |------|------|
@@ -858,7 +784,7 @@ main().catch(console.error);
 
 ### Week 4: 测试与优化
 
-#### Day 16-17: 单元测试
+#### Day 14-15: 单元测试
 
 **测试覆盖目标:**
 
@@ -895,7 +821,7 @@ describe('FlushController', () => {
 
 ---
 
-#### Day 18-19: 流式场景测试
+#### Day 16-17: 流式场景测试
 
 **测试用例:**
 
@@ -919,7 +845,7 @@ describe('FlushController', () => {
 
 ---
 
-#### Day 20: 性能优化 + 文档完善
+#### Day 18: 性能优化 + 文档完善
 
 **优化项:**
 
@@ -968,11 +894,11 @@ describe('FlushController', () => {
 | `src/feishu/formatter.py` | `src/feishu/formatter.ts` | 待迁移 | 低 |
 | `src/adapters/__init__.py` | `src/adapters/index.ts` | 已完成 | 低 |
 | `src/adapters/base.py` | `src/adapters/base.ts` | 待迁移 | 低 |
-| `src/adapters/codex.py` | `src/adapters/codex.ts` | 待迁移 | 低 |
-| `src/adapters/opencode/__init__.py` | `src/adapters/opencode/index.ts` | 待迁移 | 低 |
-| `src/adapters/opencode/core.py` | `src/adapters/opencode/adapter.ts` | 待迁移 | 高 |
-| `src/adapters/opencode/server_manager.py` | `src/adapters/opencode/server-manager.ts` | 待迁移 | 中 |
-| `src/adapters/opencode/session_manager.py` | `src/adapters/opencode/session-manager.ts` | 待迁移 | 中 |
+| `src/adapters/codex.py` | ~~删除~~ | 无需 | - |
+| `src/adapters/opencode/__init__.py` | `src/adapters/opencode/index.ts` | 已完成 | 低 |
+| `src/adapters/opencode/core.py` | `src/adapters/opencode/adapter.ts` | 已完成 | 高 |
+| `src/adapters/opencode/server_manager.py` | `src/adapters/opencode/server-manager.ts` | 已完成 | 中 |
+| `src/adapters/opencode/session_manager.py` | `src/adapters/opencode/session-manager.ts` | 已完成 | 中 |
 | `src/session/__init__.py` | `src/session/index.ts` | 已完成 | 低 |
 | `src/session/manager.py` | `src/session/manager.ts` | 已完成 | 低 |
 | `src/project/__init__.py` | `src/project/index.ts` | 已完成 | 低 |
