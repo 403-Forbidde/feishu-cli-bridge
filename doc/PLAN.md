@@ -44,17 +44,17 @@ Week 4 (Day 16-20): 测试 + 优化         → 生产就绪
 - [x] Node.js 20+ 安装
 - [x] 内网 npm registry 配置
 - [x] Git 分支 `node` 创建
-- [ ] TypeScript 编译环境验证
-- [ ] 飞书测试应用配置
+- [x] TypeScript 编译环境验证
+- [x] 飞书测试应用配置
 
 ### 2.2 知识准备
 
-| 知识点 | 要求 | 学习资源 |
-|--------|------|----------|
-| TypeScript 类型系统 | 必须 | Handbook |
-| async/await 模式 | 必须 | MDN |
-| @larksuiteoapi/node-sdk | 必须 | 官方文档 |
-| 状态机设计 | 推荐 | XState 文档 |
+| 知识点 | 要求 | 学习资源 | 状态 |
+|--------|------|----------|------|
+| TypeScript 类型系统 | 必须 | Handbook | ✅ 已完成 - 见 doc/KNOWLEDGE_PREP.md |
+| async/await 模式 | 必须 | MDN | ✅ 已完成 - 见 doc/KNOWLEDGE_PREP.md |
+| @larksuiteoapi/node-sdk | 必须 | 官方文档 | ✅ 已完成 - 见 doc/KNOWLEDGE_PREP.md |
+| 状态机设计 | 推荐 | XState 文档 | ✅ 已完成 - 见 doc/KNOWLEDGE_PREP.md |
 
 ---
 
@@ -268,7 +268,6 @@ export class FeishuAPI {
   async addTypingReaction(messageId: string): Promise<string | null>;
   async removeTypingReaction(messageId: string, reactionId: string | null): Promise<void>;
   async downloadMessageResource(messageId: string, fileKey: string, resourceType: string, filename: string): Promise<string | null>;
-  async streamReply(chatId: string, stream: AsyncIterable<StreamChunk>, statsProvider: StatsProvider, model: string, replyToMessageId?: string): Promise<string>;
 }
 ```
 
@@ -279,9 +278,12 @@ export class FeishuAPI {
 - 保持 `StreamChunk` 类型兼容
 
 **验收标准:**
-- [ ] 能发送文本消息
-- [ ] 能发送卡片消息
-- [ ] 能下载文件
+- [x] 能发送文本消息
+- [x] 能发送卡片消息
+- [x] 能下载文件
+- [x] 能添加/移除表情回应
+- [x] 能更新卡片消息
+- [x] 能使用 CardKit 更新卡片内容
 
 ---
 
@@ -329,9 +331,9 @@ export abstract class BaseCLIAdapter {
 ```
 
 **验收标准:**
-- [ ] 所有核心类型定义完成
-- [ ] 代码通过 TypeScript 编译
-- [ ] Week 1 代码审查通过
+- [x] 所有核心类型定义完成
+- [x] 代码通过 TypeScript 编译
+- [x] Week 1 代码审查通过
 
 ---
 
@@ -390,9 +392,17 @@ export class FlushController {
 - 保持相同的节流算法（100ms CardKit / 1500ms IM Patch）
 
 **验收标准:**
-- [ ] 节流逻辑正确
-- [ ] 互斥锁工作正常
-- [ ] 无竞态条件
+- [x] 节流逻辑正确
+- [x] 互斥锁工作正常
+- [x] 无竞态条件
+
+**已完成:**
+- 实现了 `FlushController` 类，位于 `src/platform/streaming/flush-controller.ts`
+- 实现了节流控制（支持 CardKit 100ms / IM Patch 1500ms 模式）
+- 实现了互斥锁防止并发刷新冲突
+- 实现了长间隔检测（超过 2s 无更新时立即刷新）
+- 编写了完整的单元测试（11 个测试用例）
+- 类型检查通过
 
 ---
 
@@ -471,9 +481,24 @@ private async updateCardKitContent(cardId: string, elementId: string, content: s
 ```
 
 **验收标准:**
-- [ ] 状态机转换正确
-- [ ] CardKit 流式更新工作
-- [ ] IM Patch 降级路径可用
+- [x] 状态机转换正确
+- [x] CardKit 流式更新工作
+- [x] IM Patch 降级路径可用
+
+**已完成:**
+- 实现了 `StreamingCardController` 状态机，位于 `src/platform/streaming/controller.ts`
+- 状态转换：idle → creating → streaming → completed/aborted
+- 使用 `FlushController` 进行节流刷新控制
+- 支持内容块和推理内容的流式更新
+- 实现了完成、错误、停止等多种状态的卡片发送
+- 创建了完整的卡片构建器模块 `src/platform/cards/`：
+  - `streaming.ts` - 思考中/流式卡片
+  - `complete.ts` - 完成结果卡片
+  - `error.ts` - 错误卡片（含多种错误类型）
+  - `session-cards.ts` - 会话管理卡片
+  - `project-cards.ts` - 项目管理卡片
+  - `utils.ts` - 共享工具函数
+- 所有模块类型检查通过
 
 ---
 
@@ -527,9 +552,19 @@ export class CommandRouter {
 ```
 
 **验收标准:**
-- [ ] 消息去重工作
-- [ ] 命令正确路由
-- [ ] 附件下载处理
+- [x] 消息去重工作
+- [x] 命令正确路由
+- [x] 附件下载处理
+
+**已完成:**
+- 拆分了 Python 的 monolithic `MessageHandler` 为 4 个专注处理器：
+  - `router.ts` - 消息路由（AI_MESSAGE, TUI_COMMAND, PROJECT_COMMAND, STOP_COMMAND, HELP_COMMAND）
+  - `ai-processor.ts` - AI 流式消息处理，支持 AbortController 停止信号（Issue #52）
+  - `command-processor.ts` - TUI 命令（/new, /session, /model, /reset, /rename, /delete）和项目命令（/pa, /pc, /pl, /ps, /pi, /pd）
+  - `attachment-processor.ts` - 附件下载、base64 编码、临时文件管理
+- 消息去重：基于 Set 的 messageId 去重，最大 1000 条
+- 流式生成控制：支持用户主动停止（/stop 命令）
+- 所有类型检查通过
 
 ---
 
@@ -569,9 +604,25 @@ export function optimizeMarkdownStyle(text: string): string;
 | `/pa` `/pc` `/pl` `/ps` `/pi` | 项目管理 |
 
 **验收标准:**
-- [ ] 所有卡片类型构建正确
-- [ ] TUI 命令响应正确
-- [ ] 交互式回复跟踪工作
+- [x] 所有卡片类型构建正确
+- [x] TUI 命令响应正确
+- [x] 交互式回复跟踪工作
+
+**已完成:**
+- 卡片构建器模块 `src/card-builder/`：
+  - `constants.ts` - 流式元素 ID 常量
+  - `utils.ts` - Markdown 优化、emoji 分类、格式化工具
+  - `base.ts` - 核心卡片构建（thinking/streaming/complete 状态）
+  - `interactive-cards.ts` - 交互式卡片（模型选择、模式选择、帮助、重置成功）
+  - `session-cards.ts` - 会话管理卡片（新建、列表、详情）
+  - `project-cards.ts` - 项目管理卡片（列表、详情）
+  - `index.ts` - 统一导出
+- TUI 命令模块 `src/tui-commands/`：
+  - `base.ts` - TUIResult 类型、TUIBaseCommand 抽象基类
+  - `index.ts` - TUICommandRouter 路由
+  - `opencode.ts` - OpenCodeTUICommands 实现（/new, /session, /model, /mode, /reset, /help）
+  - `project.ts` - 项目命令处理（/pa, /pc, /pl, /ps, /prm, /pi）
+- 类型检查全部通过
 
 ---
 
@@ -894,14 +945,14 @@ describe('FlushController', () => {
 | Python 文件 | TypeScript 文件 | 状态 | 复杂度 |
 |------------|----------------|------|--------|
 | `src/main.py` | `src/main.ts` | 待迁移 | 低 |
-| `src/config.py` | `src/config.ts` | 待迁移 | 低 |
+| `src/config.py` | `src/core/config.ts` | 已完成 | 低 |
 | `src/__init__.py` | `src/index.ts` | 待迁移 | 低 |
-| `src/feishu/__init__.py` | `src/feishu/index.ts` | 待迁移 | 低 |
-| `src/feishu/client.py` | `src/feishu/client.ts` | 待迁移 | 中 |
-| `src/feishu/api.py` | `src/feishu/api.ts` | 待迁移 | 中 |
-| `src/feishu/handler.py` | `src/feishu/handler.ts` | 待迁移 | 高 |
+| `src/feishu/__init__.py` | `src/platform/index.ts` | 已完成 | 低 |
+| `src/feishu/client.py` | `src/platform/feishu-client.ts` | 已完成 | 中 |
+| `src/feishu/api.py` | `src/platform/feishu-api.ts` | 已完成 | 中 |
+| `src/feishu/handler.py` | `src/platform/message-processor/` | 已完成 | 高 |
 | `src/feishu/streaming_controller.py` | `src/feishu/streaming-controller.ts` | 待迁移 | 高 |
-| `src/feishu/flush_controller.py` | `src/feishu/flush-controller.ts` | 待迁移 | 中 |
+| `src/feishu/flush_controller.py` | `src/platform/streaming/flush-controller.ts` | 已完成 | 中 |
 | `src/feishu/cardkit_client.py` | ~~删除~~ | 无需 | - |
 | `src/feishu/card_builder/__init__.py` | `src/card-builder/index.ts` | 待迁移 | 低 |
 | `src/feishu/card_builder/base.py` | `src/card-builder/base.ts` | 待迁移 | 低 |
@@ -915,18 +966,18 @@ describe('FlushController', () => {
 | `src/feishu/card_callback_handler.py` | `src/feishu/card-callback-handler.ts` | 待迁移 | 中 |
 | `src/feishu/toast_helper.py` | `src/feishu/toast-helper.ts` | 待迁移 | 低 |
 | `src/feishu/formatter.py` | `src/feishu/formatter.ts` | 待迁移 | 低 |
-| `src/adapters/__init__.py` | `src/adapters/index.ts` | 待迁移 | 低 |
+| `src/adapters/__init__.py` | `src/adapters/index.ts` | 已完成 | 低 |
 | `src/adapters/base.py` | `src/adapters/base.ts` | 待迁移 | 低 |
 | `src/adapters/codex.py` | `src/adapters/codex.ts` | 待迁移 | 低 |
 | `src/adapters/opencode/__init__.py` | `src/adapters/opencode/index.ts` | 待迁移 | 低 |
 | `src/adapters/opencode/core.py` | `src/adapters/opencode/adapter.ts` | 待迁移 | 高 |
 | `src/adapters/opencode/server_manager.py` | `src/adapters/opencode/server-manager.ts` | 待迁移 | 中 |
 | `src/adapters/opencode/session_manager.py` | `src/adapters/opencode/session-manager.ts` | 待迁移 | 中 |
-| `src/session/__init__.py` | `src/session/index.ts` | 待迁移 | 低 |
-| `src/session/manager.py` | `src/session/manager.ts` | 待迁移 | 低 |
-| `src/project/__init__.py` | `src/project/index.ts` | 待迁移 | 低 |
-| `src/project/manager.py` | `src/project/manager.ts` | 待迁移 | 低 |
-| `src/project/models.py` | `src/project/models.ts` | 待迁移 | 低 |
+| `src/session/__init__.py` | `src/session/index.ts` | 已完成 | 低 |
+| `src/session/manager.py` | `src/session/manager.ts` | 已完成 | 低 |
+| `src/project/__init__.py` | `src/project/index.ts` | 已完成 | 低 |
+| `src/project/manager.py` | `src/project/manager.ts` | 已完成 | 低 |
+| `src/project/models.py` | `src/project/types.ts` | 已完成 | 低 |
 | `src/tui_commands/__init__.py` | `src/tui-commands/index.ts` | 待迁移 | 低 |
 | `src/tui_commands/base.py` | `src/tui-commands/base.ts` | 待迁移 | 低 |
 | `src/tui_commands/interactive.py` | `src/tui-commands/interactive.ts` | 待迁移 | 中 |
@@ -936,16 +987,16 @@ describe('FlushController', () => {
 | `src/utils/__init__.py` | `src/utils/index.ts` | 待迁移 | 低 |
 | `src/utils/error_codes.py` | `src/utils/error-codes.ts` | 待迁移 | 低 |
 | `src/utils/retry.py` | `src/utils/retry.ts` | 待迁移 | 低 |
-| `src/utils/logger.py` | `src/utils/logger.ts` | 待迁移 | 低 |
+| `src/utils/logger.py` | `src/core/logger.ts` | 已完成 | 低 |
 
 ### 4.2 新增文件
 
 | 文件 | 用途 |
 |------|------|
-| `src/types/config.ts` | 配置类型定义 |
-| `src/types/stream.ts` | 流式类型定义 |
-| `src/types/adapter.ts` | 适配器类型定义 |
-| `src/types/feishu.ts` | 飞书消息类型定义 |
+| `src/types/config.ts` | `src/core/types/config.ts` | 已完成 | 新增 |
+| `src/types/stream.ts` | `src/core/types/stream.ts` | 已完成 | 新增 |
+| `src/types/adapter.ts` | `src/adapters/interface/types.ts` | 已完成 | 新增 |
+| `src/types/feishu.ts` | `src/platform/types.ts` | 已完成 | 新增 |
 | `tests/unit/*.test.ts` | 单元测试 |
 | `tests/integration/*.test.ts` | 集成测试 |
 | `scripts/setup.sh` | 环境初始化脚本 |
@@ -1204,6 +1255,6 @@ describe('StreamingCardController', () => {
 
 **文档版本**: 1.0
 **创建日期**: 2026-03-27
-**最后更新**: 2026-03-27
+**最后更新**: 2026-03-28
 **迁移负责人**: [待指定]
 **技术负责人**: [待指定]

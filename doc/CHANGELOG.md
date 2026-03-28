@@ -1,5 +1,94 @@
 # 更新日志
 
+## [Node.js v2.0.0] - 2026-03-28  【Node.js 迁移 - Week 1 进行中】
+
+**开发人**: Claude Code (AI Assistant)
+
+### 迁移进度
+
+#### Day 1: 项目初始化 ✅
+
+- **创建 TypeScript 项目结构**
+  - 目录结构: `src/{core,platform,adapters,session,project}/`
+  - 测试目录: `tests/{unit,integration}/`
+
+- **配置文件**
+  - `package.json` - 项目依赖和脚本
+  - `tsconfig.json` - TypeScript 严格模式配置
+
+- **入口文件**
+  - `src/main.ts` - 应用程序入口
+
+#### Day 2: 配置模块 ✅
+
+- **实现 `src/core/config.ts`**
+  - YAML 配置文件加载 (`js-yaml`)
+  - 环境变量覆盖支持
+  - 路径解析（支持 `~` 展开和相对路径）
+  - 配置验证函数
+
+- **配置加载优先级**
+  1. 显式传入的配置文件路径
+  2. `CONFIG_FILE` 环境变量
+  3. `XDG_CONFIG_HOME/cli-feishu-bridge/config.yaml`
+  4. 当前工作目录的 `config.yaml`
+  5. 环境变量默认值
+
+- **类型定义**
+  - `src/core/types/config.ts` - 配置类型定义
+  - `src/core/types/stream.ts` - 流式数据类型
+  - 支持的安全配置（路径遍历保护、附件大小限制等）
+
+#### Day 3: 飞书客户端封装 ✅
+
+- **实现 `src/platform/types.ts`**
+  - 飞书消息类型定义 (`FeishuMessage`, `Attachment`)
+  - 卡片回调类型 (`CardCallbackEvent`, `CardCallbackResponse`)
+  - WebSocket 事件类型 (`RawMessageEvent`, `RawCardCallbackEvent`)
+  - 错误码枚举 (`FeishuErrorCode`)
+
+- **实现 `src/platform/feishu-api.ts`**
+  - `FeishuAPI` 类封装 HTTP API 调用
+  - 消息发送（文本、富文本、交互式卡片）
+  - 卡片消息更新（CardKit 和 IM Patch）
+  - 表情回应管理（添加/移除）
+  - 文件资源下载
+  - 消息回复和删除
+
+- **实现 `src/platform/feishu-client.ts`**
+  - `FeishuClient` WebSocket 客户端封装
+  - 基于 `EventDispatcher` 的事件分发
+  - 消息事件监听 (`im.message.receive_v1`)
+  - 卡片回调处理 (`cardAction`)
+  - 自动重连支持
+  - `createFeishuClient()` 便捷函数
+
+### 技术细节
+
+| 文件 | 说明 |
+|------|------|
+| `src/main.ts` | 应用程序入口，集成配置加载 |
+| `src/core/config.ts` | 配置管理模块，单例模式 |
+| `src/core/types/config.ts` | 配置类型定义（Feishu、Session、CLI、Security 等） |
+| `src/core/types/stream.ts` | 流式数据类型（StreamChunk, TokenStats） |
+| `src/platform/types.ts` | 飞书平台层类型定义 |
+| `src/platform/feishu-api.ts` | HTTP API 封装 |
+| `src/platform/feishu-client.ts` | WebSocket 客户端 |
+| `src/platform/index.ts` | 平台层入口 |
+
+### 验收状态
+
+- [x] `npm install` 成功
+- [x] `npm run typecheck` 通过（0 errors）
+- [x] `npm run dev` 正常启动
+- [x] `npm run build` 编译成功
+- [x] 配置加载和验证工作正常
+- [x] 飞书类型定义完成
+- [x] FeishuAPI 封装完成
+- [x] FeishuClient WebSocket 封装完成
+
+---
+
 ## [v0.1.11] - 2026-03-26  【Issue #54 修复：会话自动命名】
 
 **开发人**: ERROR403
