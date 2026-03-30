@@ -103,19 +103,24 @@ export interface CardCallbackEvent {
 
 /**
  * 卡片回调响应
+ * 使用 CardActionHandler 时，需要返回卡片对象或空字符串
  */
 export interface CardCallbackResponse {
-  /** 响应配置 */
+  /** 响应配置（旧格式，用于 EventDispatcher） */
   config?: {
     /** 是否禁用快捷操作 */
     disable_quick_action?: boolean;
     /** 是否更新卡片 */
     update_multi?: boolean;
   };
-  /** 响应数据 */
+  /** 响应数据（旧格式） */
   response?: Record<string, unknown>;
-  /** 输入表单值 */
+  /** 输入表单值（旧格式） */
   input?: Record<string, unknown>;
+  /** 新卡片内容（CardActionHandler 格式）
+   * 如果有值，会用于更新原卡片
+   */
+  card?: object;
 }
 
 /**
@@ -141,8 +146,8 @@ export interface RawMessageEvent {
   chat_id: string;
   /** 聊天类型 */
   chat_type: string;
-  /** 发送者信息 */
-  sender: {
+  /** 发送者信息（可能在 event.sender 中） */
+  sender?: {
     sender_id: {
       open_id: string;
       union_id?: string;
@@ -156,11 +161,15 @@ export interface RawMessageEvent {
     content: string;
   };
   /** 消息类型 */
-  msg_type: string;
+  message_type?: string;
+  /** 消息类型（兼容字段） */
+  msg_type?: string;
   /** 话题 ID */
   thread_id?: string;
   /** 父消息 ID */
   parent_id?: string;
+  /** 根消息 ID */
+  root_id?: string;
   /** 提及信息 */
   mentions?: Array<{
     key: string;
@@ -170,27 +179,72 @@ export interface RawMessageEvent {
     name: string;
   }>;
   /** 创建时间 */
-  create_time: string;
+  create_time?: string;
   /** 更新时间 */
   update_time?: string;
 }
 
 /**
  * 飞书原始卡片回调事件数据结构
+ * Node.js SDK 格式: { operator: { open_id }, action: { value }, context: { open_message_id, open_chat_id }, host }
  */
 export interface RawCardCallbackEvent {
-  /** 用户 Open ID */
-  open_id: string;
-  /** 聊天 ID */
-  chat_id: string;
-  /** 消息 ID */
-  message_id: string;
-  /** 操作值 */
+  /** Schema 版本 */
+  schema?: string;
+  /** 事件 ID */
+  event_id?: string;
+  /** 验证令牌 */
+  token?: string;
+  /** 创建时间 */
+  create_time?: string;
+  /** 事件类型 */
+  event_type?: string;
+  /** 租户标识 */
+  tenant_key?: string;
+  /** 应用 ID */
+  app_id?: string;
+  /** 用户信息 (实际格式) */
+  operator?: {
+    open_id?: string;
+    user_id?: string;
+  };
+  /** 操作数据 */
   action?: {
     value?: Record<string, unknown>;
     form_value?: Record<string, unknown>;
     tag?: string;
     option?: string;
+  };
+  /** 上下文信息 (实际格式) */
+  context?: {
+    open_message_id?: string;
+    open_chat_id?: string;
+  };
+  /** Host 信息 */
+  host?: string;
+  /** 用户 Open ID (向后兼容) */
+  open_id?: string;
+  /** 聊天 ID (向后兼容) */
+  chat_id?: string;
+  /** 消息 ID (向后兼容) */
+  message_id?: string;
+  /** 嵌套事件数据 (向后兼容) */
+  event?: {
+    operator?: {
+      open_id?: string;
+      user_id?: string;
+    };
+    action?: {
+      value?: Record<string, unknown>;
+      form_value?: Record<string, unknown>;
+      tag?: string;
+      option?: string;
+    };
+    context?: {
+      open_message_id?: string;
+      open_chat_id?: string;
+    };
+    token?: string;
   };
   /** 原始数据 */
   data?: Record<string, unknown>;

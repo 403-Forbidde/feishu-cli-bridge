@@ -7,11 +7,15 @@ export enum StreamChunkType {
   REASONING = 'reasoning',
   ERROR = 'error',
   DONE = 'done',
+  STATS = 'stats',
+  /** 完整内容传递（用于最终卡片构建） */
+  DELIVER = 'deliver',
 }
 
 export interface StreamChunk {
   type: StreamChunkType;
   data: string;
+  stats?: TokenStats;
 }
 
 export interface TokenStats {
@@ -21,4 +25,5 @@ export interface TokenStats {
   contextUsed: number;
   contextWindow: number;
   contextPercent: number;
+  model?: string;
 }

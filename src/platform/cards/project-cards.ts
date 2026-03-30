@@ -20,6 +20,20 @@ export interface ProjectInfo {
 }
 
 /**
+ * 创建按钮组（使用 column_set 布局）
+ * Schema V2 不支持 action 标签，使用 column_set 替代
+ */
+function createButtonGroup(buttons: object[]): object {
+  return {
+    tag: 'column_set',
+    columns: buttons.map((btn) => ({
+      tag: 'column',
+      elements: [btn],
+    })),
+  };
+}
+
+/**
  * 构建项目列表卡片
  *
  * @param projects - 项目列表
@@ -33,22 +47,16 @@ export function buildProjectListCard(
 
   // 标题
   elements.push({
-    tag: 'div',
-    text: {
-      tag: 'plain_text',
-      content: '📁 项目列表',
-    },
+    tag: 'markdown',
+    content: '📁 **项目列表**',
   });
   elements.push(createNoteBlock(`共 ${projects.length} 个项目`));
   elements.push(createDivider());
 
   if (projects.length === 0) {
     elements.push({
-      tag: 'div',
-      text: {
-        tag: 'plain_text',
-        content: '暂无项目，使用 /project add <路径> 添加',
-      },
+      tag: 'markdown',
+      content: '暂无项目，使用 `/project add <路径>` 添加',
     });
   } else {
     // 项目列表
@@ -57,16 +65,13 @@ export function buildProjectListCard(
       const timeStr = formatTime(project.updatedAt || project.createdAt);
 
       elements.push({
-        tag: 'div',
-        text: {
-          tag: 'plain_text',
-          content: `${isActive ? '🟢 ' : '⚪ '}${project.name}`,
-        },
+        tag: 'markdown',
+        content: `${isActive ? '🟢 ' : '⚪ '}${project.name}`,
       });
       elements.push(createNoteBlock(`📂 ${truncateText(project.path, 30)} · ${timeStr}`));
 
-      // 操作按钮
-      const actions: object[] = [
+      // 操作按钮 - 使用 column_set 布局
+      const buttons = [
         {
           tag: 'button',
           text: {
@@ -94,11 +99,7 @@ export function buildProjectListCard(
         },
       ];
 
-      elements.push({
-        tag: 'action',
-        actions,
-      });
-
+      elements.push(createButtonGroup(buttons));
       elements.push(createDivider());
     }
   }
@@ -107,7 +108,6 @@ export function buildProjectListCard(
   elements.push(createNoteBlock('快捷命令: /project add <路径> - 添加项目 | /project switch <id> - 切换项目'));
 
   return {
-    schema: '2.0',
     config: createCardConfig(),
     header: {
       title: {
@@ -116,9 +116,7 @@ export function buildProjectListCard(
       },
       template: CardColors.DEFAULT,
     },
-    body: {
-      elements,
-    },
+    elements,
   };
 }
 
@@ -127,7 +125,6 @@ export function buildProjectListCard(
  */
 export function buildProjectAddedCard(project: ProjectInfo): object {
   return {
-    schema: '2.0',
     config: createCardConfig(),
     header: {
       title: {
@@ -136,26 +133,18 @@ export function buildProjectAddedCard(project: ProjectInfo): object {
       },
       template: CardColors.SUCCESS,
     },
-    body: {
-      elements: [
-        {
-          tag: 'div',
-          text: {
-            tag: 'plain_text',
-            content: `名称: ${project.name}`,
-          },
-        },
-        createNoteBlock(`路径: ${project.path}`),
-        createDivider(),
-        {
-          tag: 'div',
-          text: {
-            tag: 'plain_text',
-            content: '💡 使用 /project switch ' + project.id.slice(0, 8) + ' 切换到该项目',
-          },
-        },
-      ],
-    },
+    elements: [
+      {
+        tag: 'markdown',
+        content: `**名称:** ${project.name}`,
+      },
+      createNoteBlock(`路径: ${project.path}`),
+      createDivider(),
+      {
+        tag: 'markdown',
+        content: `💡 使用 \`/project switch ${project.id.slice(0, 8)}\` 切换到该项目`,
+      },
+    ],
   };
 }
 
@@ -164,7 +153,6 @@ export function buildProjectAddedCard(project: ProjectInfo): object {
  */
 export function buildProjectSwitchedCard(project: ProjectInfo): object {
   return {
-    schema: '2.0',
     config: createCardConfig(),
     header: {
       title: {
@@ -173,18 +161,13 @@ export function buildProjectSwitchedCard(project: ProjectInfo): object {
       },
       template: CardColors.SUCCESS,
     },
-    body: {
-      elements: [
-        {
-          tag: 'div',
-          text: {
-            tag: 'plain_text',
-            content: `当前项目: ${project.name}`,
-          },
-        },
-        createNoteBlock(`工作目录: ${project.path}`),
-      ],
-    },
+    elements: [
+      {
+        tag: 'markdown',
+        content: `**当前项目:** ${project.name}`,
+      },
+      createNoteBlock(`工作目录: ${project.path}`),
+    ],
   };
 }
 
@@ -193,7 +176,6 @@ export function buildProjectSwitchedCard(project: ProjectInfo): object {
  */
 export function buildProjectDeletedCard(projectId: string): object {
   return {
-    schema: '2.0',
     config: createCardConfig(),
     header: {
       title: {
@@ -202,17 +184,12 @@ export function buildProjectDeletedCard(projectId: string): object {
       },
       template: CardColors.WARNING,
     },
-    body: {
-      elements: [
-        {
-          tag: 'div',
-          text: {
-            tag: 'plain_text',
-            content: `项目 ${projectId.slice(0, 8)}... 已被删除`,
-          },
-        },
-      ],
-    },
+    elements: [
+      {
+        tag: 'markdown',
+        content: `项目 \`${projectId.slice(0, 8)}...\` 已被删除`,
+      },
+    ],
   };
 }
 
@@ -221,7 +198,6 @@ export function buildProjectDeletedCard(projectId: string): object {
  */
 export function buildProjectInfoCard(project: ProjectInfo): object {
   return {
-    schema: '2.0',
     config: createCardConfig(),
     header: {
       title: {
@@ -230,21 +206,16 @@ export function buildProjectInfoCard(project: ProjectInfo): object {
       },
       template: CardColors.DEFAULT,
     },
-    body: {
-      elements: [
-        {
-          tag: 'div',
-          text: {
-            tag: 'plain_text',
-            content: `名称: ${project.name}`,
-          },
-        },
-        createNoteBlock(`ID: ${project.id}`),
-        createNoteBlock(`路径: ${project.path}`),
-        createDivider(),
-        createNoteBlock(`创建时间: ${new Date(project.createdAt).toLocaleString('zh-CN')}`),
-      ],
-    },
+    elements: [
+      {
+        tag: 'markdown',
+        content: `**名称:** ${project.name}`,
+      },
+      createNoteBlock(`ID: ${project.id}`),
+      createNoteBlock(`路径: ${project.path}`),
+      createDivider(),
+      createNoteBlock(`创建时间: ${new Date(project.createdAt).toLocaleString('zh-CN')}`),
+    ],
   };
 }
 function formatTime(timestamp: number): string {

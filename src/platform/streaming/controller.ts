@@ -11,13 +11,49 @@
  * 2. 卡片协调 - 创建、更新、完成卡片
  * 3. 内容聚合 - 管理文本和推理内容的累积
  * 4. 刷新调度 - 通过 FlushController 控制更新频率
+ *
+ * 参考 OpenClaw 实现，支持 CardKit 2.0 流式 API
  */
 
-import { FlushController } from './flush-controller.js';
+import { FlushController, THROTTLE_CONSTANTS } from './flush-controller.js';
 import type { StreamingPhase, StreamingConfig } from './types.js';
 import type { TokenStats } from '../../core/types/stream.js';
-import { buildStreamingCard, buildStreamingCompleteCard, buildStoppedCard } from '../cards/streaming.js';
+import { buildStreamingCompleteCard, buildStoppedCard } from '../cards/streaming.js';
 import { buildErrorCard } from '../cards/error.js';
+import { optimizeMarkdownStyle, stripReasoningTags } from '../cards/utils.js';
+
+/**
+ * CardKit 2.0 流式卡片初始结构
+ */
+const STREAMING_THINKING_CARD = {
+  schema: '2.0',
+  config: {
+    streaming_mode: true,
+    summary: { content: '思考中...' },
+  },
+  body: {
+    elements: [
+      {
+        tag: 'markdown',
+        content: '',
+        text_align: 'left',
+        text_size: 'normal_v2',
+        margin: '0px 0px 0px 0px',
+        element_id: 'streaming_content',
+      },
+      {
+        tag: 'markdown',
+        content: ' ',
+        icon: {
+          tag: 'custom_icon',
+          img_key: 'img_v3_02vb_496bec09-4b43-4773-ad6b-0cdd103cd2bg',
+          size: '16px 16px',
+        },
+        element_id: 'loading_icon',
+      },
+    ],
+  },
+};
 
 /**
  * 流式卡片控制器选项
@@ -41,33 +77,62 @@ export interface StreamingCardControllerOptions {
  * Feishu API 卡片方法接口（最小化依赖）
  */
 export interface FeishuAPICardMethods {
-  sendCard: (chatId: string, card: object, replyTo?: string) => Promise<{ message_id: string }>;
-  updateCard: (messageId: string, card: object) => Promise<void>;
+  /** 创建 CardKit 卡片实体 */
+  createCardEntity(card: unknown): Promise<string | null>;
+  /** 通过 card_id 发送卡片消息 */
+  sendCardByCardId(chatId: string, cardId: string, replyTo?: string): Promise<{ messageId: string }>;
+  /** 流式更新卡片内容（CardKit API） */
+  streamCardContent(cardId: string, elementId: string, content: string, sequence: number): Promise<boolean>;
+  /** 更新 CardKit 卡片（终态） */
+  updateCardKitCard(cardId: string, card: unknown, sequence: number): Promise<boolean>;
+  /** 关闭卡片流式模式 */
+  setCardStreamingMode(cardId: string, streamingMode: boolean, sequence: number): Promise<boolean>;
+  /** IM Patch 方式更新卡片（降级方案） */
+  updateCardMessage(messageId: string, card: unknown): Promise<boolean>;
+  /** IM 方式发送卡片（降级方案） */
+  sendCardMessage(chatId: string, card: unknown, replyTo?: string): Promise<string>;
 }
 
 /**
  * 文本状态
  */
 interface TextState {
-  content: string;
-  length: number;
-  lastUpdateLength: number;
+  /** 累积的流式文本 */
+  accumulatedText: string;
+  /** 最终完成的文本（包含多轮） */
+  completedText: string;
+  /** 历史回复前缀（用于多轮对话） */
+  streamingPrefix: string;
+  /** 上一帧的部分文本（用于检测新回复开始） */
+  lastPartialText: string;
 }
 
 /**
  * 推理状态
  */
 interface ReasoningState {
-  content: string;
-  length: number;
+  /** 累积的推理文本 */
+  accumulatedText: string;
+  /** 推理开始时间 */
+  startTime: number | null;
+  /** 推理耗时（毫秒） */
+  elapsedMs: number;
+  /** 是否处于推理阶段 */
+  isReasoningPhase: boolean;
 }
 
 /**
  * CardKit 状态
  */
 interface CardKitState {
-  messageId: string | null;
+  /** CardKit 卡片 ID */
   cardId: string | null;
+  /** 原始 CardKit 卡片 ID（用于终态更新） */
+  originalCardId: string | null;
+  /** 序列号（用于 CardKit API） */
+  sequence: number;
+  /** IM 消息 ID */
+  messageId: string | null;
 }
 
 /**
@@ -97,6 +162,7 @@ export class StreamingCardController {
   private model: string = '';
   private error: string | null = null;
   private abortReason: 'user' | 'error' | null = null;
+  private dispatchFullyComplete = false;
 
   constructor(options: StreamingCardControllerOptions) {
     this.api = options.feishuAPI;
@@ -108,26 +174,28 @@ export class StreamingCardController {
 
     // 初始化状态
     this.textState = {
-      content: '',
-      length: 0,
-      lastUpdateLength: 0,
+      accumulatedText: '',
+      completedText: '',
+      streamingPrefix: '',
+      lastPartialText: '',
     };
 
     this.reasoningState = {
-      content: '',
-      length: 0,
+      accumulatedText: '',
+      startTime: null,
+      elapsedMs: 0,
+      isReasoningPhase: false,
     };
 
     this.cardKitState = {
-      messageId: null,
       cardId: null,
+      originalCardId: null,
+      sequence: 0,
+      messageId: null,
     };
 
     // 初始化 FlushController
-    this.flushController = new FlushController(
-      () => this.performFlush(),
-      this.config.longGapThreshold
-    );
+    this.flushController = new FlushController(() => this.performFlush());
   }
 
   // ==================== Public API ====================
@@ -147,59 +215,84 @@ export class StreamingCardController {
   }
 
   /**
-   * 接收内容块
+   * 接收内容块（来自 AI 生成的增量文本）
    */
   async onContent(text: string): Promise<void> {
-    if (this.phase === 'idle') {
-      await this.transition('creating');
+    if (!this.shouldProceed()) return;
+
+    // 确保卡片已创建
+    await this.ensureCardCreated();
+    if (!this.shouldProceed()) return;
+
+    // 累积文本（增量追加）
+    // 注意：这里接收的是 SSE 解析器返回的增量内容，不是完整内容
+    // 关键修复：剥离可能嵌入的推理标签，避免推理内容泄漏到主输出
+    this.textState.accumulatedText += stripReasoningTags(text);
+    this.textState.lastPartialText = text;
+
+    // 退出推理阶段（如果有内容生成）
+    if (this.reasoningState.isReasoningPhase) {
+      this.reasoningState.isReasoningPhase = false;
+      if (this.reasoningState.startTime) {
+        this.reasoningState.elapsedMs = Date.now() - this.reasoningState.startTime;
+      }
     }
 
-    if (this.phase !== 'creating' && this.phase !== 'streaming') {
-      return;
-    }
-
-    if (this.phase === 'creating') {
-      await this.transition('streaming');
-    }
-
-    // 追加内容
-    this.textState.content += text;
-    this.textState.length += text.length;
-
-    // 触发节流更新
-    const interval = this.useCardKit
-      ? this.config.cardKitInterval
-      : this.config.imPatchInterval;
-
-    await this.flushController.throttledUpdate(interval);
+    await this.throttledCardUpdate();
   }
 
   /**
    * 接收推理内容
    */
   async onReasoning(text: string): Promise<void> {
-    if (this.phase === 'idle') {
-      await this.transition('creating');
+    if (!this.shouldProceed()) return;
+
+    // 确保卡片已创建
+    await this.ensureCardCreated();
+    if (!this.shouldProceed()) return;
+
+    if (!this.reasoningState.startTime) {
+      this.reasoningState.startTime = Date.now();
     }
 
-    if (this.phase !== 'creating' && this.phase !== 'streaming') {
+    this.reasoningState.isReasoningPhase = true;
+    this.reasoningState.accumulatedText += text;
+
+    await this.throttledCardUpdate();
+  }
+
+  /**
+   * 接收 deliver 回调文本（来自 SDK 的完整文本）
+   * 用于构建权威的 completedText
+   */
+  async onDeliver(text: string): Promise<void> {
+    if (!this.shouldProceed()) return;
+    if (!text.trim()) return;
+
+    await this.ensureCardCreated();
+    if (!this.shouldProceed()) return;
+
+    // 纯推理内容（没有答案文本）
+    if (this.reasoningState.isReasoningPhase && !this.textState.accumulatedText) {
+      this.reasoningState.elapsedMs = this.reasoningState.startTime
+        ? Date.now() - this.reasoningState.startTime
+        : 0;
+      await this.throttledCardUpdate();
       return;
     }
 
-    if (this.phase === 'creating') {
-      await this.transition('streaming');
+    // 答案内容（可能包含内联推理标签）
+    this.reasoningState.isReasoningPhase = false;
+
+    // 累积 deliver 文本用于最终卡片（同样需要剥离推理标签）
+    this.textState.completedText += (this.textState.completedText ? '\n\n' : '') + stripReasoningTags(text);
+
+    // 没有流式数据时，用 deliver 文本显示在卡片上
+    if (!this.textState.lastPartialText && !this.textState.streamingPrefix) {
+      this.textState.accumulatedText += (this.textState.accumulatedText ? '\n\n' : '') + text;
+      this.textState.streamingPrefix = this.textState.accumulatedText;
+      await this.throttledCardUpdate();
     }
-
-    // 追加推理内容
-    this.reasoningState.content += text;
-    this.reasoningState.length += text.length;
-
-    // 触发节流更新
-    const interval = this.useCardKit
-      ? this.config.cardKitInterval
-      : this.config.imPatchInterval;
-
-    await this.flushController.throttledUpdate(interval);
   }
 
   /**
@@ -211,6 +304,7 @@ export class StreamingCardController {
     }
 
     this.model = model;
+    this.dispatchFullyComplete = true;
 
     // 等待所有待刷新内容
     await this.flushController.waitForFlush();
@@ -237,6 +331,9 @@ export class StreamingCardController {
     this.flushController.cancelPendingFlush();
     this.flushController.complete();
 
+    // 等待当前刷新完成
+    await this.flushController.waitForFlush();
+
     // 发送错误卡片
     await this.sendErrorCard(errorMessage);
 
@@ -252,6 +349,7 @@ export class StreamingCardController {
     }
 
     this.abortReason = 'user';
+    this.dispatchFullyComplete = true;
 
     // 等待所有待刷新内容
     await this.flushController.waitForFlush();
@@ -264,6 +362,13 @@ export class StreamingCardController {
   }
 
   /**
+   * 标记完全完成（由外部调用，表示生成任务结束）
+   */
+  markFullyComplete(): void {
+    this.dispatchFullyComplete = true;
+  }
+
+  /**
    * 强制刷新（用于长间隔检测）
    */
   async forceFlush(): Promise<void> {
@@ -272,49 +377,62 @@ export class StreamingCardController {
     }
   }
 
+  // ==================== Internal Helpers ====================
+
+  /**
+   * 检查是否应该继续处理
+   */
+  private shouldProceed(): boolean {
+    return !this.isFinished();
+  }
+
+  /**
+   * 节流卡片更新
+   */
+  private async throttledCardUpdate(): Promise<void> {
+    if (!this.cardKitState.messageId) return;
+
+    const throttleMs = this.cardKitState.cardId
+      ? THROTTLE_CONSTANTS.CARDKIT_MS
+      : THROTTLE_CONSTANTS.PATCH_MS;
+
+    await this.flushController.throttledUpdate(throttleMs);
+  }
+
   // ==================== State Machine ====================
 
   /**
    * 状态转换
    */
-  private async transition(to: StreamingPhase): Promise<void> {
+  private async transition(to: StreamingPhase): Promise<boolean> {
     const from = this.phase;
 
+    if (from === to) return false;
+
     // 验证转换是否有效
-    if (!this.isValidTransition(from, to)) {
-      throw new Error(`Invalid state transition: ${from} -> ${to}`);
+    const validTransitions: Record<StreamingPhase, StreamingPhase[]> = {
+      idle: ['creating', 'completed', 'aborted'],
+      creating: ['streaming', 'completed', 'aborted', 'creation_failed'],
+      streaming: ['completed', 'aborted'],
+      completed: [],
+      aborted: [],
+      creation_failed: [],
+    };
+
+    if (!validTransitions[from].includes(to)) {
+      console.warn(`Invalid state transition: ${from} -> ${to}`);
+      return false;
     }
 
     this.phase = to;
 
-    // 执行进入状态的动作
-    switch (to) {
-      case 'creating':
-        await this.ensureCardCreated();
-        break;
-      case 'streaming':
-        // 已在 onContent/onReasoning 中处理
-        break;
-      case 'completed':
-      case 'aborted':
-        // 清理工作
-        break;
+    // 进入终态时的清理工作
+    if (to === 'completed' || to === 'aborted' || to === 'creation_failed') {
+      this.flushController.cancelPendingFlush();
+      this.flushController.complete();
     }
-  }
 
-  /**
-   * 验证状态转换
-   */
-  private isValidTransition(from: StreamingPhase, to: StreamingPhase): boolean {
-    const validTransitions: Record<StreamingPhase, StreamingPhase[]> = {
-      idle: ['creating', 'aborted'],
-      creating: ['streaming', 'completed', 'aborted'],
-      streaming: ['completed', 'aborted'],
-      completed: [],
-      aborted: [],
-    };
-
-    return validTransitions[from].includes(to);
+    return true;
   }
 
   // ==================== Card Operations ====================
@@ -323,16 +441,64 @@ export class StreamingCardController {
    * 确保卡片已创建
    */
   private async ensureCardCreated(): Promise<void> {
-    if (this.cardKitState.messageId) {
+    if (this.cardKitState.messageId || this.phase === 'creation_failed' || this.isFinished()) {
+      return;
+    }
+
+    if (!await this.transition('creating')) {
       return;
     }
 
     try {
-      const card = buildStreamingCard('', '', 'generating');
-      const result = await this.api.sendCard(this.chatId, card, this.replyToMessageId);
-      this.cardKitState.messageId = result.message_id;
+      if (this.useCardKit) {
+        // CardKit 2.0 流程
+        // Step 1: 创建卡片实体
+        const cardId = await this.api.createCardEntity(STREAMING_THINKING_CARD);
+
+        if (cardId) {
+          this.cardKitState.cardId = cardId;
+          this.cardKitState.originalCardId = cardId;
+          this.cardKitState.sequence = 1;
+
+          // Step 2: 通过 card_id 发送消息
+          const result = await this.api.sendCardByCardId(this.chatId, cardId, this.replyToMessageId);
+          this.cardKitState.messageId = result.messageId;
+
+          // 标记卡片已准备好接收更新
+          this.flushController.setCardMessageReady(true);
+
+          await this.transition('streaming');
+        } else {
+          throw new Error('Failed to create CardKit entity');
+        }
+      } else {
+        // IM Patch 降级流程
+        const { buildStreamingCard } = await import('../cards/streaming.js');
+        const card = buildStreamingCard('', '', 0, 'generating');
+        const messageId = await this.api.sendCardMessage(this.chatId, card, this.replyToMessageId);
+
+        this.cardKitState.messageId = messageId;
+        this.flushController.setCardMessageReady(true);
+
+        await this.transition('streaming');
+      }
     } catch (error) {
-      throw new Error(`Failed to create card: ${error}`);
+      console.warn('Failed to create streaming card, falling back to IM:', error);
+
+      // 降级到 IM Patch
+      try {
+        const { buildStreamingCard } = await import('../cards/streaming.js');
+        const card = buildStreamingCard('', '', 0, 'generating');
+        const messageId = await this.api.sendCardMessage(this.chatId, card, this.replyToMessageId);
+
+        this.cardKitState.messageId = messageId;
+        this.flushController.setCardMessageReady(true);
+
+        await this.transition('streaming');
+      } catch (fallbackError) {
+        console.error('IM fallback also failed:', fallbackError);
+        await this.transition('creation_failed');
+      }
     }
   }
 
@@ -340,29 +506,89 @@ export class StreamingCardController {
    * 执行刷新（由 FlushController 调用）
    */
   private async performFlush(): Promise<void> {
-    if (!this.cardKitState.messageId) {
+    if (!this.cardKitState.messageId || this.isFinished()) {
       return;
     }
 
-    // 检查是否有新内容需要更新
-    if (this.textState.length === this.textState.lastUpdateLength &&
-        this.phase !== 'creating') {
+    // CardKit 流式模式已禁用但原始卡片 ID 仍在，跳过中间态更新
+    if (!this.cardKitState.cardId && this.cardKitState.originalCardId) {
       return;
     }
-
-    const card = buildStreamingCard(
-      this.textState.content,
-      this.reasoningState.content,
-      'generating'
-    );
 
     try {
-      await this.api.updateCard(this.cardKitState.messageId, card);
-      this.textState.lastUpdateLength = this.textState.length;
+      const displayText = this.buildDisplayText();
+
+      // 如果内容为空，跳过本次更新
+      if (!displayText || displayText.trim().length === 0) {
+        return;
+      }
+
+      if (this.cardKitState.cardId) {
+        // CardKit 流式更新（真正的打字机效果）
+        // 注意：sequence 在调用成功后递增，避免失败时跳过编号
+        const nextSequence = this.cardKitState.sequence + 1;
+        const success = await this.api.streamCardContent(
+          this.cardKitState.cardId,
+          'streaming_content',
+          displayText,
+          nextSequence
+        );
+
+        if (success) {
+          this.cardKitState.sequence = nextSequence;
+        } else {
+          // API 调用失败，记录错误但不立即降级（可能是限流）
+          console.warn(`CardKit stream update failed, sequence: ${nextSequence}`);
+        }
+      } else {
+        // IM Patch 降级方案
+        const { buildStreamingCard } = await import('../cards/streaming.js');
+        const card = buildStreamingCard(
+          this.reasoningState.isReasoningPhase ? '' : displayText,
+          this.reasoningState.isReasoningPhase ? this.reasoningState.accumulatedText : '',
+          this.reasoningState.elapsedMs,
+          'generating'
+        );
+        await this.api.updateCardMessage(this.cardKitState.messageId, card);
+      }
     } catch (error) {
-      // 更新失败，下次重试
-      throw error;
+      // 处理限流错误
+      const errorStr = String(error);
+      if (errorStr.includes('230020')) {
+        console.info('Rate limited (230020), skipping this update');
+        return;
+      }
+
+      // body is nil 错误通常是内容为空导致
+      if (errorStr.includes('body is nil')) {
+        console.warn('CardKit update failed: content is empty or invalid');
+        return;
+      }
+
+      console.error('Card stream update failed:', error);
+
+      // 禁用 CardKit 流式模式，降级到 IM Patch
+      if (this.cardKitState.cardId) {
+        console.warn('Disabling CardKit streaming, falling back to IM patch');
+        this.cardKitState.cardId = null;
+      }
     }
+  }
+
+  /**
+   * 构建显示文本
+   * 参考 OpenClaw 实现：
+   * - 推理阶段：只显示推理内容，不应用 optimizeMarkdownStyle
+   * - 答案阶段：只显示答案内容，应用 optimizeMarkdownStyle
+   */
+  private buildDisplayText(): string {
+    if (this.reasoningState.isReasoningPhase && this.reasoningState.accumulatedText) {
+      // 推理阶段：直接返回原始格式，不对推理内容应用 optimizeMarkdownStyle
+      // 这与 OpenClaw 的 buildStreamingCard 中推理阶段处理方式一致
+      return `💭 **Thinking...**\n\n${this.reasoningState.accumulatedText}`;
+    }
+    // 答案阶段：应用 optimizeMarkdownStyle 优化 Markdown 渲染
+    return optimizeMarkdownStyle(this.textState.accumulatedText);
   }
 
   /**
@@ -370,19 +596,49 @@ export class StreamingCardController {
    */
   private async sendCompleteCard(stats: TokenStats): Promise<void> {
     const elapsedMs = Date.now() - this.startTime;
+
+    // 关闭 CardKit 流式模式
+    if (this.cardKitState.originalCardId) {
+      this.cardKitState.sequence += 1;
+      await this.api.setCardStreamingMode(
+        this.cardKitState.originalCardId,
+        false,
+        this.cardKitState.sequence
+      );
+    }
+
+    const displayText = this.textState.completedText || this.textState.accumulatedText;
+
+    // 诊断日志：检查内容是否正确
+    console.log('[sendCompleteCard] completedText length:', this.textState.completedText.length);
+    console.log('[sendCompleteCard] accumulatedText length:', this.textState.accumulatedText.length);
+    console.log('[sendCompleteCard] reasoningText length:', this.reasoningState.accumulatedText.length);
+    console.log('[sendCompleteCard] displayText preview:', displayText.substring(0, 200));
+    if (this.reasoningState.accumulatedText) {
+      console.log('[sendCompleteCard] reasoning preview:', this.reasoningState.accumulatedText.substring(0, 200));
+    }
+
     const card = buildStreamingCompleteCard(
-      this.textState.content,
-      this.reasoningState.content,
+      displayText,
+      this.reasoningState.accumulatedText,
+      this.reasoningState.elapsedMs,
+      elapsedMs,
       stats,
       this.model,
-      elapsedMs
+      { status: true, elapsed: true, tokens: true, model: true }
     );
 
-    if (this.cardKitState.messageId) {
-      await this.api.updateCard(this.cardKitState.messageId, card);
-    } else {
-      // 如果没有卡片（快速完成），新建一个
-      await this.api.sendCard(this.chatId, card, this.replyToMessageId);
+    if (this.cardKitState.originalCardId) {
+      // CardKit 终态更新
+      this.cardKitState.sequence += 1;
+      await this.api.updateCardKitCard(
+        this.cardKitState.originalCardId,
+        card,
+        this.cardKitState.sequence
+      );
+    } else if (this.cardKitState.messageId) {
+      // IM Patch 更新
+      await this.api.updateCardMessage(this.cardKitState.messageId, card);
     }
   }
 
@@ -390,15 +646,39 @@ export class StreamingCardController {
    * 发送停止卡片
    */
   private async sendStoppedCard(): Promise<void> {
+    const elapsedMs = Date.now() - this.startTime;
+
+    // 关闭 CardKit 流式模式
+    if (this.cardKitState.originalCardId) {
+      this.cardKitState.sequence += 1;
+      await this.api.setCardStreamingMode(
+        this.cardKitState.originalCardId,
+        false,
+        this.cardKitState.sequence
+      );
+    }
+
     const card = buildStoppedCard(
-      this.textState.content,
-      this.reasoningState.content
+      this.textState.accumulatedText,
+      this.reasoningState.accumulatedText,
+      this.reasoningState.elapsedMs,
+      elapsedMs,
+      undefined, // 停止时没有完整 stats
+      this.model || undefined,
+      { status: true, elapsed: true, tokens: false, model: true }
     );
 
-    if (this.cardKitState.messageId) {
-      await this.api.updateCard(this.cardKitState.messageId, card);
-    } else {
-      await this.api.sendCard(this.chatId, card, this.replyToMessageId);
+    if (this.cardKitState.originalCardId) {
+      // CardKit 终态更新
+      this.cardKitState.sequence += 1;
+      await this.api.updateCardKitCard(
+        this.cardKitState.originalCardId,
+        card,
+        this.cardKitState.sequence
+      );
+    } else if (this.cardKitState.messageId) {
+      // IM Patch 更新
+      await this.api.updateCardMessage(this.cardKitState.messageId, card);
     }
   }
 
@@ -406,12 +686,39 @@ export class StreamingCardController {
    * 发送错误卡片
    */
   private async sendErrorCard(message: string): Promise<void> {
+    // 关闭 CardKit 流式模式
+    if (this.cardKitState.originalCardId) {
+      try {
+        this.cardKitState.sequence += 1;
+        await this.api.setCardStreamingMode(
+          this.cardKitState.originalCardId,
+          false,
+          this.cardKitState.sequence
+        );
+      } catch {
+        // 忽略关闭流式模式的错误
+      }
+    }
+
     const card = buildErrorCard(message, 'default');
 
-    if (this.cardKitState.messageId) {
-      await this.api.updateCard(this.cardKitState.messageId, card);
-    } else {
-      await this.api.sendCard(this.chatId, card, this.replyToMessageId);
+    if (this.cardKitState.originalCardId) {
+      try {
+        this.cardKitState.sequence += 1;
+        await this.api.updateCardKitCard(
+          this.cardKitState.originalCardId,
+          card,
+          this.cardKitState.sequence
+        );
+      } catch {
+        // 忽略更新失败
+      }
+    } else if (this.cardKitState.messageId) {
+      try {
+        await this.api.updateCardMessage(this.cardKitState.messageId, card);
+      } catch {
+        // 忽略更新失败
+      }
     }
   }
 
@@ -425,13 +732,15 @@ export class StreamingCardController {
     contentLength: number;
     reasoningLength: number;
     hasMessageId: boolean;
+    hasCardId: boolean;
     elapsedMs: number;
   } {
     return {
       phase: this.phase,
-      contentLength: this.textState.length,
-      reasoningLength: this.reasoningState.length,
+      contentLength: this.textState.accumulatedText.length,
+      reasoningLength: this.reasoningState.accumulatedText.length,
       hasMessageId: !!this.cardKitState.messageId,
+      hasCardId: !!this.cardKitState.cardId,
       elapsedMs: Date.now() - this.startTime,
     };
   }

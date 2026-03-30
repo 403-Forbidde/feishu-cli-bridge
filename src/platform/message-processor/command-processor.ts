@@ -250,11 +250,28 @@ export class CommandProcessor {
       return;
     }
 
-    // 列出会话
-    const sessions = await adapter.listSessions(10, context.workingDir);
-    const currentSession = this.sessionManager.getSession(context.userId);
+    // 列出当前工作目录的会话（最多10条，支持分页）
+    const allSessions = await adapter.listSessions(10, context.workingDir);
 
-    const card = buildSessionListCard(sessions, currentSession ? undefined : undefined);
+    // 分页：每页5条，最多2页（10条）
+    const pageSize = 5;
+    const totalPages = Math.ceil(allSessions.length / pageSize) || 1;
+    const currentPage = 1; // 默认显示第一页
+    const sessions = allSessions.slice(0, pageSize);
+
+    // 获取当前会话 ID
+    const currentSessionId = adapter.getSessionId(context.workingDir);
+
+    const card = buildSessionListCard(
+      sessions,
+      currentSessionId,
+      currentPage,
+      totalPages,
+      context.adapterType,
+      context.workingDir,
+      undefined,
+      allSessions.length
+    );
     await this.feishuAPI.sendCardMessage(context.chatId, card);
   }
 

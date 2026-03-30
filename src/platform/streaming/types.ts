@@ -11,7 +11,8 @@ export type StreamingPhase =
   | 'creating' // 正在创建卡片
   | 'streaming' // 正在流式更新
   | 'completed' // 正常完成
-  | 'aborted'; // 被中断
+  | 'aborted' // 被中断
+  | 'creation_failed'; // 卡片创建失败
 
 /**
  * 流式卡片配置

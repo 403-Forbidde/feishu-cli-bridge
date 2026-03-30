@@ -9,7 +9,7 @@ export { OpenCodeAdapter } from './adapter.js';
 export { OpenCodeHTTPClient } from './http-client.js';
 export { OpenCodeServerManager } from './server-manager.js';
 export { OpenCodeSessionManager } from './session-manager.js';
-export { SSEParser, SSEParserV2, createSSEIterator } from './sse-parser.js';
+export { OpenCodeEventParser, createOpenCodeEventIterator } from './sse-parser.js';
 
 export type {
   OpenCodeSession,

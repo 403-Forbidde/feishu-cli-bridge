@@ -24,7 +24,7 @@ export interface StreamState {
   seenAssistantMessage: boolean;
   /** 是否已跳过用户文本 */
   userTextSkipped: boolean;
-  /** 已发出的文本长度 */
+  /** 已发出的文本长度（content） */
   emittedTextLength: number;
   /** 提示词哈希（用于去重检测） */
   promptHash?: number;
@@ -131,6 +131,29 @@ export interface OpenCodeConfig {
 }
 
 /**
+ * 消息部件（用于 prompt_async）
+ */
+export interface MessagePart {
+  type: 'text' | 'file';
+  text?: string;
+  mime?: string;
+  url?: string;
+  filename?: string;
+}
+
+/**
+ * prompt_async 请求体
+ */
+export interface PromptAsyncRequest {
+  parts: MessagePart[];
+  model: {
+    providerID: string;
+    modelID: string;
+  };
+  agent: string;
+}
+
+/**
  * 服务器健康状态
  */
 export interface ServerHealth {
@@ -140,4 +163,59 @@ export interface ServerHealth {
   responseTime?: number;
   /** 错误信息 */
   error?: string;
+}
+
+/**
+ * Provider 信息（从 /provider API 获取）
+ */
+export interface ProviderInfo {
+  /** Provider ID */
+  id: string;
+  /** Provider 名称 */
+  name?: string;
+  /** 模型列表 */
+  models?: Record<string, ModelLimitInfo>;
+}
+
+/**
+ * 模型限制信息
+ */
+export interface ModelLimitInfo {
+  /** 限制信息 */
+  limit?: {
+    /** 上下文窗口大小 */
+    context?: number;
+  };
+}
+
+/**
+ * OpenCode SSE 事件（从 /event 端点接收）
+ */
+export interface OpenCodeSSEEvent {
+  /** 事件类型 */
+  type: string;
+  /** 事件属性 */
+  properties?: {
+    /** 字段名（用于 message.part.delta） */
+    field?: string;
+    /** 增量文本 */
+    delta?: string;
+    /** 部件信息（用于 message.part.updated） */
+    part?: {
+      type: string;
+      text?: string;
+      tokens?: {
+        total?: number;
+        total_tokens?: number;
+        input?: number;
+        input_tokens?: number;
+        prompt_tokens?: number;
+        output?: number;
+        output_tokens?: number;
+        completion_tokens?: number;
+      };
+    };
+    /** 错误消息 */
+    message?: string;
+  };
 }

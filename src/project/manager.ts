@@ -8,9 +8,10 @@
 
 import { homedir } from 'os';
 import path from 'path';
-import { realpath, access, constants } from 'fs/promises';
-import type { Project, ProjectConfig, ProjectStorage, ProjectErrorCode } from './types.js';
-import { ProjectError } from './types.js';
+import { realpath, access, constants, readFile, writeFile, mkdir, stat } from 'fs/promises';
+import { existsSync } from 'fs';
+import type { Project, ProjectConfig, ProjectStorage } from './types.js';
+import { ProjectError, ProjectErrorCode } from './types.js';
 import { logger } from '../core/logger.js';
 
 const DEFAULT_ALLOWED_ROOT = homedir();
@@ -49,11 +50,19 @@ export async function sanitizePath(
   if (relative.startsWith('..') || path.isAbsolute(relative)) {
     throw new ProjectError(
       `路径 "${inputPath}" 超出允许的范围`,
-      'PATH_TRAVERSAL' as ProjectErrorCode
+      ProjectErrorCode.PATH_TRAVERSAL
     );
   }
 
   return realPath;
+}
+
+/**
+ * 获取默认项目存储路径
+ */
+function getDefaultStoragePath(): string {
+  const configDir = process.env.XDG_CONFIG_HOME || path.join(homedir(), '.config');
+  return path.join(configDir, 'cli-feishu-bridge', 'projects.json');
 }
 
 /**
@@ -64,21 +73,73 @@ export class ProjectManager {
   private currentProjectId: string | null = null;
   private allowedRoot: string;
   private maxProjects: number;
+  private storagePath: string;
+  private loaded = false;
 
   constructor(private config: ProjectConfig) {
     this.allowedRoot = config.allowedRoot || DEFAULT_ALLOWED_ROOT;
     this.maxProjects = config.maxProjects || 10;
+    this.storagePath = config.storagePath || getDefaultStoragePath();
   }
 
   /**
    * 加载项目列表
    */
   async load(): Promise<void> {
+    if (this.loaded) {
+      return;
+    }
+
     try {
-      // TODO: 从配置文件加载
-      logger.info('加载项目配置');
+      // 确保存储目录存在
+      const storageDir = path.dirname(this.storagePath);
+      await mkdir(storageDir, { recursive: true });
+
+      // 如果存储文件存在，读取它
+      if (existsSync(this.storagePath)) {
+        const data = await readFile(this.storagePath, 'utf-8');
+        const storage: ProjectStorage = JSON.parse(data);
+
+        // 验证版本
+        if (storage.version !== STORAGE_VERSION) {
+          logger.warn({ version: storage.version, expected: STORAGE_VERSION }, '项目存储版本不匹配');
+          // 尝试迁移或重置
+          await this.migrateStorage(storage);
+          return;
+        }
+
+        // 加载项目
+        this.projects.clear();
+        for (const project of storage.projects) {
+          // 验证路径仍然有效
+          const isValid = await this.validateProjectPath(project.path);
+          if (isValid) {
+            this.projects.set(project.id, project);
+          } else {
+            logger.warn({ projectId: project.id, path: project.path }, '项目路径无效，跳过加载');
+          }
+        }
+
+        // 恢复当前项目
+        if (storage.currentProjectId && this.projects.has(storage.currentProjectId)) {
+          this.currentProjectId = storage.currentProjectId;
+        }
+
+        logger.info(
+          { count: this.projects.size, storagePath: this.storagePath },
+          '项目配置加载成功'
+        );
+      } else {
+        logger.info({ storagePath: this.storagePath }, '项目存储文件不存在，使用空配置');
+      }
+
+      this.loaded = true;
     } catch (error) {
-      logger.warn({ error }, '项目配置加载失败，使用默认配置');
+      logger.error({ error, storagePath: this.storagePath }, '项目配置加载失败');
+      // 失败时使用空配置
+      this.projects.clear();
+      this.currentProjectId = null;
+      this.loaded = true;
     }
   }
 
@@ -86,8 +147,59 @@ export class ProjectManager {
    * 保存项目列表
    */
   async save(): Promise<void> {
-    // TODO: 保存到配置文件
-    logger.debug('保存项目配置');
+    try {
+      const storage: ProjectStorage = {
+        projects: Array.from(this.projects.values()),
+        currentProjectId: this.currentProjectId,
+        version: STORAGE_VERSION,
+      };
+
+      // 确保存储目录存在
+      const storageDir = path.dirname(this.storagePath);
+      await mkdir(storageDir, { recursive: true });
+
+      // 写入文件
+      await writeFile(this.storagePath, JSON.stringify(storage, null, 2), 'utf-8');
+
+      logger.debug({ storagePath: this.storagePath, count: this.projects.size }, '项目配置已保存');
+    } catch (error) {
+      logger.error({ error, storagePath: this.storagePath }, '项目配置保存失败');
+      throw new ProjectError(
+        '无法保存项目配置',
+        ProjectErrorCode.STORAGE_ERROR,
+        error
+      );
+    }
+  }
+
+  /**
+   * 迁移存储格式
+   */
+  private async migrateStorage(storage: Partial<ProjectStorage>): Promise<void> {
+    // 目前只有一个版本，未来可以在这里添加迁移逻辑
+    logger.info('执行存储格式迁移');
+    this.projects.clear();
+    this.currentProjectId = null;
+    await this.save();
+  }
+
+  /**
+   * 验证项目路径是否有效
+   */
+  private async validateProjectPath(projectPath: string): Promise<boolean> {
+    try {
+      // 检查路径遍历
+      await sanitizePath(projectPath, this.allowedRoot);
+
+      // 检查路径是否存在且可访问
+      await access(projectPath, constants.R_OK | constants.X_OK);
+
+      // 检查是否为目录
+      const stats = await stat(projectPath);
+      return stats.isDirectory();
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -102,11 +214,19 @@ export class ProjectManager {
 
     // 验证路径存在且为目录
     try {
+      const stats = await stat(resolvedPath);
+      if (!stats.isDirectory()) {
+        throw new ProjectError(
+          `路径不是目录: ${inputPath}`,
+          ProjectErrorCode.PATH_NOT_DIRECTORY
+        );
+      }
       await access(resolvedPath, constants.R_OK | constants.X_OK);
-    } catch {
+    } catch (error) {
+      if (error instanceof ProjectError) throw error;
       throw new ProjectError(
         `路径不存在或无法访问: ${inputPath}`,
-        'PATH_NOT_EXIST' as ProjectErrorCode
+        ProjectErrorCode.PATH_NOT_EXIST
       );
     }
 
@@ -115,7 +235,7 @@ export class ProjectManager {
       if (project.path === resolvedPath) {
         throw new ProjectError(
           `项目已存在: ${project.name}`,
-          'PROJECT_EXISTS' as ProjectErrorCode
+          ProjectErrorCode.PROJECT_EXISTS
         );
       }
     }
@@ -124,7 +244,7 @@ export class ProjectManager {
     if (this.projects.size >= this.maxProjects) {
       throw new ProjectError(
         `已达到最大项目数限制 (${this.maxProjects})`,
-        'MAX_PROJECTS_REACHED' as ProjectErrorCode
+        ProjectErrorCode.MAX_PROJECTS_REACHED
       );
     }
 
@@ -171,7 +291,18 @@ export class ProjectManager {
       return false;
     }
 
+    // 验证项目路径仍然有效
+    const isValid = await this.validateProjectPath(project.path);
+    if (!isValid) {
+      logger.warn({ projectId: project.id, path: project.path }, '项目路径已无效');
+      throw new ProjectError(
+        `项目路径已无效: ${project.path}`,
+        ProjectErrorCode.PATH_NOT_EXIST
+      );
+    }
+
     this.currentProjectId = project.id;
+    project.updatedAt = Date.now();
     await this.save();
 
     logger.info({ projectId: project.id, name: project.name }, '切换到项目');
@@ -203,6 +334,25 @@ export class ProjectManager {
     return Array.from(this.projects.values()).sort(
       (a, b) => b.updatedAt - a.updatedAt
     );
+  }
+
+  /**
+   * 获取项目
+   * @param identifier - 项目 ID 或名称
+   */
+  async getProject(identifier: string): Promise<Project | null> {
+    // 按 ID 查找
+    const byId = this.projects.get(identifier);
+    if (byId) return byId;
+
+    // 按名称查找
+    for (const p of this.projects.values()) {
+      if (p.name === identifier) {
+        return p;
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -241,9 +391,44 @@ export class ProjectManager {
   }
 
   /**
+   * 重命名项目
+   * @param identifier - 项目 ID 或名称
+   * @param newName - 新名称
+   * @returns 是否成功
+   */
+  async renameProject(identifier: string, newName: string): Promise<boolean> {
+    const project = await this.getProject(identifier);
+    if (!project) {
+      return false;
+    }
+
+    project.name = newName;
+    project.displayName = newName;
+    project.updatedAt = Date.now();
+
+    await this.save();
+    logger.info({ projectId: project.id, newName }, '项目已重命名');
+    return true;
+  }
+
+  /**
    * 获取项目数量
    */
   getProjectCount(): number {
     return this.projects.size;
   }
+
+  /**
+   * 获取当前项目 ID
+   */
+  getCurrentProjectId(): string | null {
+    return this.currentProjectId;
+  }
+}
+
+/**
+ * 创建项目管理器实例
+ */
+export function createProjectManager(config: ProjectConfig): ProjectManager {
+  return new ProjectManager(config);
 }

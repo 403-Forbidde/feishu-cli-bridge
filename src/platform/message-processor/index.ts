@@ -70,6 +70,9 @@ export class MessageProcessor {
   private processedMessages: Set<string> = new Set();
   private readonly maxDedupSize = 1000;
 
+  // 待处理的重命名会话（用户点击改名按钮后等待输入新名称）
+  private pendingRenameSession: { userId: string; sessionId: string; currentTitle?: string } | null = null;
+
   constructor(options: MessageProcessorOptions) {
     this.feishuAPI = options.feishuAPI;
     this.sessionManager = options.sessionManager;
@@ -114,7 +117,16 @@ export class MessageProcessor {
     }
     this.markProcessed(message.messageId);
 
-    // 2. 日志记录
+    // 2. 检查是否有待处理的重命名操作
+    if (this.pendingRenameSession && this.pendingRenameSession.userId === message.senderId) {
+      const newTitle = message.content.trim();
+      if (newTitle) {
+        await this.handleRenameInput(message);
+        return;
+      }
+    }
+
+    // 3. 日志记录
     logger.info(
       {
         messageId: message.messageId,
@@ -125,10 +137,10 @@ export class MessageProcessor {
       '收到消息'
     );
 
-    // 3. 路由消息
+    // 4. 路由消息
     const route = this.router.route(message.content);
 
-    // 4. 根据路由结果分发处理
+    // 5. 根据路由结果分发处理
     try {
       await this.dispatch(message, route);
     } catch (error) {
@@ -142,39 +154,58 @@ export class MessageProcessor {
    * @param event - 卡片回调事件
    */
   async processCardCallback(event: CardCallbackEvent): Promise<CardCallbackResponse> {
+    // 从 raw 中获取完整的 action value（包含按钮点击的所有数据）
+    const rawEvent = event.raw as {
+      action?: { value?: Record<string, unknown> };
+    } | undefined;
+    const actionValue = rawEvent?.action?.value || {};
+    const action = event.data.action as string | undefined;
+
     logger.info(
       {
         userId: event.openId,
-        action: event.data.action,
-        targetElementId: event.data.targetElementId,
+        action,
+        actionValue,
+        rawKeys: Object.keys(event.raw || {}),
       },
       '收到卡片回调'
     );
 
-    // 处理卡片交互（会话选择、项目切换等）
-    const action = event.data.action;
-
     switch (action) {
       case 'switch_session':
-        return this.handleSwitchSessionCallback(event);
+        return this.handleSwitchSessionCallback(event, actionValue);
+
+      case 'rename_session':
+      case 'rename_session_prompt':
+        return this.handleRenameSessionCallback(event, actionValue);
+
+      case 'delete_session':
+      case 'delete_session_confirmed':
+        return this.handleDeleteSessionCallback(event, actionValue);
+
+      case 'delete_session_confirm':
+        // 进入删除确认状态 - 刷新卡片显示确认按钮
+        return this.handleDeleteSessionConfirmCallback(event, actionValue);
+
+      case 'delete_session_cancel':
+        // 取消删除 - 刷新卡片
+        return this.handleSessionPageCallback(event, { page: 1 });
+
+      case 'create_new_session':
+        return this.handleCreateNewSessionCallback(event, actionValue);
+
+      case 'session_page':
+        return this.handleSessionPageCallback(event, actionValue);
 
       case 'switch_project':
         return this.handleSwitchProjectCallback(event);
-
-      case 'delete_session':
-        return this.handleDeleteSessionCallback(event);
 
       case 'delete_project':
         return this.handleDeleteProjectCallback(event);
 
       default:
         logger.warn({ action }, '未知的卡片回调动作');
-        return {
-          config: {
-            disable_quick_action: false,
-            update_multi: true,
-          },
-        };
+        return {};
     }
   }
 
@@ -246,6 +277,38 @@ export class MessageProcessor {
 
       default:
         logger.error({ route }, '未知的路由类型');
+    }
+  }
+
+  /**
+   * 处理重命名输入
+   */
+  private async handleRenameInput(message: FeishuMessage): Promise<void> {
+    if (!this.pendingRenameSession) return;
+
+    const { sessionId } = this.pendingRenameSession;
+    const newTitle = message.content.trim();
+
+    // 清除待处理状态
+    this.pendingRenameSession = null;
+
+    if (!newTitle) {
+      await this.feishuAPI.sendText(message.chatId, '❌ 名称不能为空');
+      return;
+    }
+
+    // 获取适配器并执行重命名
+    const adapter = this.getAdapter(this.defaultAdapterType);
+    if (!adapter) {
+      await this.feishuAPI.sendText(message.chatId, '❌ 适配器不可用');
+      return;
+    }
+
+    const success = await adapter.renameSession(sessionId, newTitle);
+    if (success) {
+      await this.feishuAPI.sendText(message.chatId, `✅ 已重命名为: **${newTitle}**`);
+    } else {
+      await this.feishuAPI.sendText(message.chatId, '❌ 重命名失败');
     }
   }
 
@@ -363,11 +426,14 @@ export class MessageProcessor {
    * 处理切换会话回调
    */
   private async handleSwitchSessionCallback(
-    event: CardCallbackEvent
+    event: CardCallbackEvent,
+    actionValue: Record<string, unknown>
   ): Promise<CardCallbackResponse> {
-    const sessionId = event.data.selected?.[0];
+    // 支持 sessionId (旧) 和 session_id (新卡片格式)
+    const sessionId = (actionValue.sessionId ?? actionValue.session_id) as string | undefined;
     if (!sessionId) {
-      return { config: { disable_quick_action: false } };
+      logger.warn('切换会话失败: 缺少 sessionId');
+      return {};
     }
 
     // 获取适配器
@@ -383,21 +449,261 @@ export class MessageProcessor {
       const success = await adapter.switchSession(sessionId, workingDir);
       if (success) {
         this.sessionManager.clearHistory(event.openId);
+        // 返回刷新后的会话列表卡片
+        return await this.buildSessionListCardResponse(event.chatId, 1);
       }
     }
 
-    return {
-      config: {
-        disable_quick_action: false,
-        update_multi: true,
-      },
-      response: {
-        toast: {
-          type: 'success',
-          content: '会话已切换',
+    return {};
+  }
+
+  /**
+   * 处理重命名会话回调
+   */
+  private async handleRenameSessionCallback(
+    event: CardCallbackEvent,
+    actionValue: Record<string, unknown>
+  ): Promise<CardCallbackResponse> {
+    const sessionId = (actionValue.session_id ?? actionValue.sessionId) as string | undefined;
+    const currentTitle = (actionValue.session_title ?? actionValue.title) as string | undefined;
+
+    if (!sessionId) {
+      logger.warn('重命名会话失败: 缺少 session_id');
+      return {};
+    }
+
+    // 返回一个提示用户输入新名称的卡片
+    const { buildSessionListCard } = await import('../cards/session-cards.js');
+
+    // 获取当前会话列表
+    const workingDir = await this.projectManager.getCurrentWorkingDir();
+    const adapter = this.getAdapter(this.defaultAdapterType);
+    if (!adapter) {
+      return {};
+    }
+
+    const allSessions = await adapter.listSessions(10, workingDir);
+    const pageSize = 5;
+    const totalPages = Math.ceil(allSessions.length / pageSize) || 1;
+    const sessions = allSessions.slice(0, pageSize);
+
+    // 构建带有重命名提示的卡片
+    const card = buildSessionListCard(
+      sessions,
+      undefined,
+      1,
+      totalPages,
+      this.defaultAdapterType,
+      workingDir,
+      undefined,
+      allSessions.length
+    ) as { schema: string; header: object; body: { elements: object[] } };
+
+    // 添加重命名提示到卡片
+    if (card.body && Array.isArray(card.body.elements)) {
+      card.body.elements.unshift(
+        {
+          tag: 'markdown',
+          content: `📝 **重命名会话**\n\n当前名称: **${currentTitle || '未命名'}**\n\n请直接回复此消息，输入新名称：`,
         },
-      },
-    };
+        { tag: 'hr' }
+      );
+    }
+
+    // TODO: 需要设置某种状态来跟踪用户正在重命名哪个会话
+    // 暂时将重命名目标存储在内存中（实际应该用更可靠的方式）
+    this.pendingRenameSession = { userId: event.openId, sessionId, currentTitle };
+
+    return { card };
+  }
+
+  /**
+   * 处理删除会话回调
+   */
+  private async handleDeleteSessionCallback(
+    event: CardCallbackEvent,
+    actionValue: Record<string, unknown>
+  ): Promise<CardCallbackResponse> {
+    // 支持 sessionId (旧) 和 session_id (新卡片格式)
+    const sessionId = (actionValue.sessionId ?? actionValue.session_id) as string | undefined;
+    if (!sessionId) {
+      logger.warn('删除会话失败: 缺少 sessionId');
+      return {};
+    }
+
+    // 获取适配器
+    const workingDir = await this.projectManager.getCurrentWorkingDir();
+    const session = this.sessionManager.getOrCreate(
+      event.openId,
+      this.defaultAdapterType,
+      workingDir
+    );
+
+    const adapter = this.getAdapter(session.cliType);
+    if (adapter) {
+      const success = await adapter.deleteSession(sessionId);
+      if (success) {
+        // 返回刷新后的会话列表卡片
+        return await this.buildSessionListCardResponse(event.chatId, 1);
+      }
+    }
+
+    return {};
+  }
+
+  /**
+   * 处理删除会话确认回调（进入确认状态）
+   */
+  private async handleDeleteSessionConfirmCallback(
+    event: CardCallbackEvent,
+    actionValue: Record<string, unknown>
+  ): Promise<CardCallbackResponse> {
+    const sessionId = (actionValue.session_id) as string | undefined;
+    if (!sessionId) {
+      logger.warn('删除会话确认失败: 缺少 session_id');
+      return {};
+    }
+
+    // 返回进入删除确认状态的会话列表卡片
+    return await this.buildSessionListCardResponse(event.chatId, 1, sessionId);
+  }
+
+  /**
+   * 处理新建会话回调
+   */
+  private async handleCreateNewSessionCallback(
+    event: CardCallbackEvent,
+    actionValue: Record<string, unknown>
+  ): Promise<CardCallbackResponse> {
+    const workingDir = (actionValue.working_dir ?? await this.projectManager.getCurrentWorkingDir()) as string;
+    const adapter = this.getAdapter(this.defaultAdapterType);
+
+    if (adapter) {
+      const sessionInfo = await adapter.createNewSession(workingDir);
+      if (sessionInfo) {
+        // 清空本地会话历史
+        this.sessionManager.clearHistory(event.openId);
+        // 返回刷新后的会话列表卡片
+        return await this.buildSessionListCardResponse(event.chatId, 1);
+      }
+    }
+
+    return {};
+  }
+
+  /**
+   * 处理会话分页回调
+   */
+  private async handleSessionPageCallback(
+    event: CardCallbackEvent,
+    actionValue: Record<string, unknown>
+  ): Promise<CardCallbackResponse> {
+    const page = (actionValue.page as number) || 1;
+
+    // 返回刷新后的会话列表卡片
+    return await this.buildSessionListCardResponse(event.chatId, page);
+  }
+
+  /**
+   * 构建会话列表卡片响应（用于回调返回）
+   */
+  private async buildSessionListCardResponse(
+    chatId: string,
+    page: number,
+    deletingSessionId?: string
+  ): Promise<CardCallbackResponse> {
+    try {
+      logger.info({ chatId, page }, '构建会话列表卡片响应');
+
+      const workingDir = await this.projectManager.getCurrentWorkingDir();
+      const adapter = this.getAdapter(this.defaultAdapterType);
+      if (!adapter) {
+        return {};
+      }
+
+      // 获取当前会话 ID
+      const currentSessionId = adapter.getSessionId(workingDir);
+
+      // 获取当前工作目录的会话（最多10条）
+      const allSessions = await adapter.listSessions(10, workingDir);
+
+      // 分页：每页5条
+      const pageSize = 5;
+      const totalPages = Math.ceil(allSessions.length / pageSize) || 1;
+      const currentPage = Math.max(1, Math.min(page, totalPages));
+      const startIndex = (currentPage - 1) * pageSize;
+      const sessions = allSessions.slice(startIndex, startIndex + pageSize);
+
+      // 构建新卡片
+      const { buildSessionListCard } = await import('../cards/session-cards.js');
+      const card = buildSessionListCard(
+        sessions,
+        currentSessionId,
+        currentPage,
+        totalPages,
+        this.defaultAdapterType,
+        workingDir,
+        deletingSessionId,
+        allSessions.length
+      );
+
+      // 返回卡片数据作为回调响应
+      return { card };
+    } catch (error) {
+      logger.error({ error, chatId, page }, '构建会话列表卡片响应失败');
+      return {};
+    }
+  }
+
+  /**
+   * 刷新会话列表卡片
+   */
+  private async refreshSessionListCard(
+    chatId: string,
+    messageId: string,
+    page: number,
+    deletingSessionId?: string
+  ): Promise<void> {
+    try {
+      logger.info({ chatId, messageId: messageId.slice(0, 8), page }, '刷新会话列表卡片');
+
+      const workingDir = await this.projectManager.getCurrentWorkingDir();
+      const adapter = this.getAdapter(this.defaultAdapterType);
+      if (!adapter) return;
+
+      // 获取当前会话 ID
+      const currentSessionId = adapter.getSessionId(workingDir);
+
+      // 获取当前工作目录的会话（最多10条）
+      const allSessions = await adapter.listSessions(10, workingDir);
+
+      // 分页：每页5条
+      const pageSize = 5;
+      const totalPages = Math.ceil(allSessions.length / pageSize) || 1;
+      const currentPage = Math.max(1, Math.min(page, totalPages));
+      const startIndex = (currentPage - 1) * pageSize;
+      const sessions = allSessions.slice(startIndex, startIndex + pageSize);
+
+      // 构建新卡片
+      const { buildSessionListCard } = await import('../cards/session-cards.js');
+      const card = buildSessionListCard(
+        sessions,
+        currentSessionId,
+        currentPage,
+        totalPages,
+        this.defaultAdapterType,
+        workingDir,
+        deletingSessionId,
+        allSessions.length
+      );
+
+      // 更新卡片
+      const success = await this.feishuAPI.updateCardMessage(messageId, card);
+      logger.info({ success }, '卡片更新结果');
+    } catch (error) {
+      logger.error({ error, messageId: messageId.slice(0, 8) }, '刷新会话列表卡片失败');
+      throw error;
+    }
   }
 
   /**
@@ -408,59 +714,21 @@ export class MessageProcessor {
   ): Promise<CardCallbackResponse> {
     const projectId = event.data.selected?.[0];
     if (!projectId) {
-      return { config: { disable_quick_action: false } };
+      return {};
     }
 
     await this.projectManager.switchProject(projectId);
 
-    return {
-      config: {
-        disable_quick_action: false,
-        update_multi: true,
-      },
-      response: {
-        toast: {
-          type: 'success',
-          content: '项目已切换',
-        },
-      },
-    };
-  }
-
-  /**
-   * 处理删除会话回调
-   */
-  private async handleDeleteSessionCallback(
-    event: CardCallbackEvent
-  ): Promise<CardCallbackResponse> {
-    // TODO: 实现删除会话逻辑
-    return {
-      config: { disable_quick_action: false },
-      response: {
-        toast: {
-          type: 'info',
-          content: '删除会话功能开发中',
-        },
-      },
-    };
+    return {};
   }
 
   /**
    * 处理删除项目回调
    */
   private async handleDeleteProjectCallback(
-    event: CardCallbackEvent
+    _event: CardCallbackEvent
   ): Promise<CardCallbackResponse> {
-    // TODO: 实现删除项目逻辑
-    return {
-      config: { disable_quick_action: false },
-      response: {
-        toast: {
-          type: 'info',
-          content: '删除项目功能开发中',
-        },
-      },
-    };
+    return {};
   }
 }
 

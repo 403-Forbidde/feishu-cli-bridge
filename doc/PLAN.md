@@ -757,15 +757,76 @@ main().catch(console.error);
 ```
 
 **验收标准:**
-- [ ] 程序能启动
-- [ ] 配置加载正常
-- [ ] WebSocket 连接成功
+- [x] 程序能启动
+- [x] 配置加载正常
+- [x] WebSocket 连接成功
+
+**已完成:**
+- 实现了完整的 `ProjectManager` 持久化存储功能：`src/project/manager.ts`
+  - 从 JSON 文件加载/保存项目配置
+  - 路径安全验证（路径遍历防护）
+  - 项目 CRUD 操作（增删改查）
+  - 自动验证项目路径有效性
+  - 存储版本迁移支持
+- 实现了完整的入口文件 `src/main.ts`：
+  - 配置加载和验证
+  - 初始化所有组件（FeishuClient、FeishuAPI、SessionManager、ProjectManager、MessageProcessor）
+  - 适配器工厂集成
+  - 信号处理和优雅退出
+  - 错误处理和日志记录
+- 所有模块类型检查通过
 
 ---
 
 #### Day 13: 集成测试 + Bug 修复
 
-**任务 13.1: 集成测试场景**
+**任务 13.1: 完成卡片 Footer 样式修复**
+
+**问题**: 完成卡片的 footer 只显示 `已完成 · 耗时 5.8s`，缺少 token 统计和模型信息。
+
+**期望样式**: `✅ 已完成 · ⏱️ 13.0s · 📊 15.6K (7.4%) · 🤖 mimo-v2-pro-free`
+
+**修改内容:**
+1. `src/platform/cards/streaming.ts`:
+   - `buildStreamingCompleteCard`: 添加 `stats` 和 `model` 参数
+   - `buildStoppedCard`: 添加可选的 `stats` 和 `model` 参数
+   - Footer 格式改为: `✅ 已完成 · ⏱️ Xs · 📊 XK (X%) · 🤖 model-name`
+
+2. `src/platform/streaming/controller.ts`:
+   - `sendCompleteCard`: 传递 `stats` 和 `this.model` 给卡片构建函数
+   - `sendStoppedCard`: 传递 `this.model` 给卡片构建函数（stats 为 undefined）
+
+**状态**: 已完成
+
+---
+
+**任务 13.2: 推理内容泄漏到正式回复卡片 Bug 修复**
+
+**问题**: 在飞书卡片中，AI 的推理/思考过程（reasoning）错误地显示在了正式回复中，同时 `completedText` 为空导致内容重复。
+
+**日志表现**:
+```
+[sendCompleteCard] completedText length: 0          ← 空的 completedText
+[sendCompleteCard] accumulatedText length: 1771     ← 包含 reasoning
+[sendCompleteCard] displayText preview: 用户想让我...  ← 与 reasoning 相同
+```
+
+**根因**:
+1. `StreamingCardController.onDeliver()` 从未被调用
+2. OpenCode 适配器没有发出 `DELIVER` 类型的 chunk
+3. 流结束时需要直接调用 `onDeliver` 设置 `completedText`
+
+**修复内容**:
+1. 添加 `StreamChunkType.DELIVER` 类型 (`src/core/types/stream.ts`)
+2. AI 处理器处理 `DELIVER` chunk (`src/platform/message-processor/ai-processor.ts`)
+3. SSE 解析器在流结束时发出 `DELIVER` (`src/adapters/opencode/sse-parser.ts`)
+4. 流结束时直接调用 `onDeliver` 并清理推理标签
+
+**状态**: 已完成
+
+---
+
+**任务 13.3: 集成测试场景**
 
 | 场景 | 步骤 |
 |------|------|
@@ -870,7 +931,7 @@ describe('FlushController', () => {
 
 | Python 文件 | TypeScript 文件 | 状态 | 复杂度 |
 |------------|----------------|------|--------|
-| `src/main.py` | `src/main.ts` | 待迁移 | 低 |
+| `src/main.py` | `src/main.ts` | **已完成** | 低 |
 | `src/config.py` | `src/core/config.ts` | 已完成 | 低 |
 | `src/__init__.py` | `src/index.ts` | 待迁移 | 低 |
 | `src/feishu/__init__.py` | `src/platform/index.ts` | 已完成 | 低 |
@@ -1181,6 +1242,6 @@ describe('StreamingCardController', () => {
 
 **文档版本**: 1.0
 **创建日期**: 2026-03-27
-**最后更新**: 2026-03-28
+**最后更新**: 2026-03-29
 **迁移负责人**: [待指定]
 **技术负责人**: [待指定]

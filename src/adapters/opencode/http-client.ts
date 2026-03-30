@@ -11,7 +11,7 @@ import https from 'node:https';
 import { logger } from '../../core/logger.js';
 import { AdapterError, AdapterErrorCode } from '../interface/types.js';
 import type { ModelInfo, AgentInfo } from '../interface/types.js';
-import type { OpenCodeConfig, ServerHealth, CreateSessionResponse, ListSessionsResponse, ChatRequest } from './types.js';
+import type { OpenCodeConfig, ServerHealth, CreateSessionResponse, ListSessionsResponse, PromptAsyncRequest, ProviderInfo } from './types.js';
 
 /**
  * HTTP 客户端管理器
@@ -107,13 +107,16 @@ export class OpenCodeHTTPClient {
 
   /**
    * 创建新会话
+   * Python 参考: client.post("/session", json={"title": title}, params={"directory": working_dir})
    */
-  async createSession(workingDir?: string): Promise<CreateSessionResponse> {
+  async createSession(workingDir?: string, title?: string): Promise<CreateSessionResponse> {
     this.ensureInitialized();
 
     try {
-      const response = await this.client!.post<CreateSessionResponse>('/sessions', {
-        directory: workingDir,
+      const response = await this.client!.post<CreateSessionResponse>('/session', {
+        title: title || 'Feishu Bridge Session',
+      }, {
+        params: workingDir ? { directory: workingDir } : undefined,
       });
       return response.data;
     } catch (error) {
@@ -123,16 +126,41 @@ export class OpenCodeHTTPClient {
 
   /**
    * 列出所有会话
+   * Python 参考: client.get("/session") - 可选传递 directory 参数
+   * 注意：OpenCode API 的 directory 参数行为可能不一致，需要在客户端过滤
    */
-  async listSessions(limit?: number): Promise<ListSessionsResponse> {
+  async listSessions(directory?: string): Promise<ListSessionsResponse> {
     this.ensureInitialized();
 
     try {
-      const params = limit ? { limit } : undefined;
-      const response = await this.client!.get<ListSessionsResponse>('/sessions', {
-        params,
-      });
-      return response.data;
+      interface SessionItem {
+        id?: string;
+        title?: string;
+        created_at?: number;
+        time?: { created?: number; updated?: number };
+        slug?: string;
+        directory?: string;
+      }
+
+      // 响应可能是数组或 {items: [...]}
+      const params = directory ? { directory } : undefined;
+      logger.debug(`listSessions API call with directory=${directory}`);
+      const response = await this.client!.get<SessionItem[] | { items?: SessionItem[] }>('/session', { params });
+      const data = response.data;
+      const sessions = Array.isArray(data) ? data : (data?.items || []);
+
+      logger.debug(`listSessions API returned ${sessions.length} sessions`);
+
+      return {
+        sessions: sessions.map((s) => ({
+          id: String(s.id || ''),
+          title: String(s.title || '未命名会话'),
+          created_at: Number(s.created_at || s.time?.created || 0) / 1000,
+          updated_at: s.time?.updated ? Number(s.time.updated) / 1000 : undefined,
+          slug: String(s.slug || ''),
+          directory: s.directory ? String(s.directory) : undefined,
+        })),
+      };
     } catch (error) {
       throw this.wrapError('Failed to list sessions', error);
     }
@@ -145,9 +173,29 @@ export class OpenCodeHTTPClient {
     this.ensureInitialized();
 
     try {
-      await this.client!.post(`/sessions/${sessionId}/switch`);
+      await this.client!.post(`/session/${sessionId}/switch`);
     } catch (error) {
       throw this.wrapError(`Failed to switch to session ${sessionId}`, error);
+    }
+  }
+
+  /**
+   * 获取会话详情
+   * Python 参考: client.get(f"/session/{session_id}")
+   */
+  async getSessionDetail(sessionId: string): Promise<CreateSessionResponse | null> {
+    this.ensureInitialized();
+
+    try {
+      const response = await this.client!.get<CreateSessionResponse>(`/session/${sessionId}`);
+      return response.data;
+    } catch (error) {
+      // 404 表示会话不存在，返回 null
+      const axiosError = error as AxiosError;
+      if (axiosError.response?.status === 404) {
+        return null;
+      }
+      throw this.wrapError(`Failed to get session detail ${sessionId}`, error);
     }
   }
 
@@ -158,7 +206,7 @@ export class OpenCodeHTTPClient {
     this.ensureInitialized();
 
     try {
-      await this.client!.patch(`/sessions/${sessionId}`, { title });
+      await this.client!.patch(`/session/${sessionId}`, { title });
     } catch (error) {
       throw this.wrapError(`Failed to rename session ${sessionId}`, error);
     }
@@ -171,7 +219,7 @@ export class OpenCodeHTTPClient {
     this.ensureInitialized();
 
     try {
-      await this.client!.delete(`/sessions/${sessionId}`);
+      await this.client!.delete(`/session/${sessionId}`);
     } catch (error) {
       throw this.wrapError(`Failed to delete session ${sessionId}`, error);
     }
@@ -184,7 +232,7 @@ export class OpenCodeHTTPClient {
     this.ensureInitialized();
 
     try {
-      await this.client!.post('/sessions/reset');
+      await this.client!.post('/session/reset');
     } catch (error) {
       throw this.wrapError('Failed to reset session', error);
     }
@@ -246,21 +294,47 @@ export class OpenCodeHTTPClient {
   }
 
   /**
-   * 发送聊天请求（流式）
+   * 发送消息到会话（prompt_async）
+   * Python 参考: client.post(f"/session/{session_id}/prompt_async", json=body, params=params)
    */
-  async chatStream(request: ChatRequest): Promise<NodeJS.ReadableStream> {
+  async sendPromptAsync(
+    sessionId: string,
+    request: PromptAsyncRequest,
+    workingDir?: string
+  ): Promise<boolean> {
     this.ensureInitialized();
 
     try {
-      const response = await this.client!.post('/chat', request, {
+      const params = workingDir ? { directory: workingDir } : undefined;
+      const response = await this.client!.post(
+        `/session/${sessionId}/prompt_async`,
+        request,
+        { params }
+      );
+      return response.status >= 200 && response.status < 300;
+    } catch (error) {
+      throw this.wrapError('Failed to send message', error);
+    }
+  }
+
+  /**
+   * 监听 SSE 事件流（从 /event 端点）
+   * Python 参考: client.stream("GET", "/event", params=params)
+   *
+   * 返回的流中每行以 "data: " 开头，后面是 JSON 格式的事件数据
+   */
+  async listenEvents(workingDir?: string): Promise<NodeJS.ReadableStream> {
+    this.ensureInitialized();
+
+    try {
+      const params = workingDir ? { directory: workingDir } : undefined;
+      const response = await this.client!.get('/event', {
         responseType: 'stream',
-        headers: {
-          'Accept': 'text/event-stream',
-        },
+        params,
       });
       return response.data as NodeJS.ReadableStream;
     } catch (error) {
-      throw this.wrapError('Failed to start chat stream', error);
+      throw this.wrapError('Failed to listen to events', error);
     }
   }
 
@@ -284,10 +358,22 @@ export class OpenCodeHTTPClient {
   }
 
   /**
-   * 获取 base URL
+   * 获取 Provider 列表（包含模型的 context window 信息）
+   * Python 参考: client.get("/provider")
    */
-  getBaseURL(): string {
-    return this.baseURL;
+  async getProviders(): Promise<ProviderInfo[]> {
+    this.ensureInitialized();
+
+    try {
+      const response = await this.client!.get<ProviderInfo[] | { all: ProviderInfo[] }>('/provider');
+      const data = response.data;
+
+      // 处理 { all: [...] } 或 [...] 两种格式
+      const providers = Array.isArray(data) ? data : (data.all || []);
+      return providers;
+    } catch (error) {
+      throw this.wrapError('Failed to get providers', error);
+    }
   }
 
   /**

@@ -5,39 +5,57 @@
  * 构建 AI 生成完成后的最终展示卡片
  */
 
-import { CardColors, createCardConfig, createMarkdownBlock, createNoteBlock, createDivider, buildTokenStatsText, buildFooterText } from './utils.js';
-import type { TokenStats } from '../../core/types/stream.js';
+import { CardColors, createCardConfig, createMarkdownBlock, createNoteBlock, createDivider, formatReasoningDuration, formatElapsed, optimizeMarkdownStyle } from './utils.js';
 
 /**
  * 构建完成卡片
  *
  * @param content - 完整回复内容
  * @param reasoning - 推理内容（如果有）
- * @param stats - Token 统计信息
- * @param model - 使用的模型名称
+ * @param reasoningElapsedMs - 推理耗时（毫秒）
  * @param elapsedMs - 生成耗时（毫秒）
- * @param sessionName - 会话名称（可选）
+ * @param footerConfig - 页脚配置（可选）
  */
 export function buildCompleteCard(
   content: string,
   reasoning: string,
-  stats: TokenStats,
-  model: string,
+  reasoningElapsedMs: number,
   elapsedMs: number,
-  sessionName?: string
+  footerConfig?: { status?: boolean; elapsed?: boolean }
 ): object {
   const elements: object[] = [];
 
-  // 推理过程（如果有）- 默认折叠
+  // Collapsible reasoning panel (before main content)
   if (reasoning) {
+    const durationLabel = reasoningElapsedMs > 0
+      ? formatReasoningDuration(reasoningElapsedMs)
+      : 'Thought';
     elements.push({
-      tag: 'collapse',
+      tag: 'collapsible_panel',
+      expanded: false,
       header: {
-        tag: 'plain_text',
-        content: '🔍 推理过程',
+        title: {
+          tag: 'markdown',
+          content: `💭 ${durationLabel}`,
+        },
+        vertical_align: 'center',
+        icon: {
+          tag: 'standard_icon',
+          token: 'down-small-ccm_outlined',
+          size: '16px 16px',
+        },
+        icon_position: 'follow_text',
+        icon_expanded_angle: -180,
       },
+      border: { color: 'grey', corner_radius: '5px' },
+      vertical_spacing: '8px',
+      padding: '8px 8px 8px 8px',
       elements: [
-        createMarkdownBlock(formatReasoningContent(reasoning)),
+        {
+          tag: 'markdown',
+          content: formatReasoningContent(reasoning),
+          text_size: 'notation',
+        },
       ],
     });
     elements.push(createDivider());
@@ -47,42 +65,27 @@ export function buildCompleteCard(
   elements.push(createMarkdownBlock(content));
   elements.push(createDivider());
 
-  // 页脚元信息
-  const footerParts: string[] = [];
-  footerParts.push(buildTokenStatsText(stats));
-  footerParts.push(`🤖 ${model}`);
-  if (sessionName) {
-    footerParts.push(`💬 ${sessionName}`);
+  // Footer meta-info: only status and elapsed (not token stats)
+  const parts: string[] = [];
+  if (footerConfig?.status) {
+    parts.push('已完成');
   }
-  footerParts.push(buildFooterText(elapsedMs));
-
-  elements.push(createNoteBlock(footerParts.join(' · ')));
+  if (footerConfig?.elapsed && elapsedMs != null) {
+    parts.push(`耗时 ${formatElapsed(elapsedMs)}`);
+  }
+  if (parts.length > 0) {
+    elements.push(createNoteBlock(parts.join(' · ')));
+  }
 
   return {
-    schema: '2.0',
     config: createCardConfig(),
-    card_link: undefined,
-    header: {
-      title: {
-        tag: 'plain_text',
-        content: 'AI 助手',
-      },
-      subtitle: sessionName
-        ? {
-            tag: 'plain_text',
-            content: sessionName,
-          }
-        : undefined,
-      template: CardColors.SUCCESS,
-    },
-    body: {
-      elements,
-    },
+    elements,
   };
 }
 
 /**
- * 格式化推理内容
+ * 格式化推理内容（添加引用标记）
+ * 注意：推理内容不经过 optimizeMarkdownStyle，保持原始格式
  */
 function formatReasoningContent(reasoning: string): string {
   return reasoning
@@ -107,7 +110,6 @@ export function buildCompactCard(
   const preview = content.length > 200 ? content.slice(0, 200) + '...' : content;
 
   return {
-    schema: '2.0',
     config: createCardConfig(),
     header: {
       title: {
@@ -120,11 +122,9 @@ export function buildCompactCard(
       },
       template: CardColors.DEFAULT,
     },
-    body: {
-      elements: [
-        createMarkdownBlock(preview),
-        createNoteBlock(`🤖 ${model} · ${timeStr}`),
-      ],
-    },
+    elements: [
+      createMarkdownBlock(preview),
+      createNoteBlock(`🤖 ${model} · ${timeStr}`),
+    ],
   };
 }

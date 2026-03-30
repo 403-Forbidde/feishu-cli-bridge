@@ -180,12 +180,29 @@ export class AIProcessor {
     // 创建流式卡片控制器
     const streamingController = new StreamingControllerImpl({
       feishuAPI: {
-        sendCard: async (chatId: string, card: object, replyTo?: string) => {
-          const result = await this.feishuAPI.sendCardMessage(chatId, card, replyTo);
-          return { message_id: result };
+        // CardKit 2.0 API
+        createCardEntity: async (card: unknown) => {
+          return await this.feishuAPI.createCardEntity(card);
         },
-        updateCard: async (messageId: string, card: object) => {
-          await this.feishuAPI.updateCardMessage(messageId, card);
+        sendCardByCardId: async (chatId: string, cardId: string, replyTo?: string) => {
+          const result = await this.feishuAPI.sendCardByCardId(chatId, cardId, replyTo);
+          return { messageId: result.messageId };
+        },
+        streamCardContent: async (cardId: string, elementId: string, content: string, sequence: number) => {
+          return await this.feishuAPI.streamCardContent(cardId, elementId, content, sequence);
+        },
+        updateCardKitCard: async (cardId: string, card: unknown, sequence: number) => {
+          return await this.feishuAPI.updateCardKitCard(cardId, card, sequence);
+        },
+        setCardStreamingMode: async (cardId: string, streamingMode: boolean, sequence: number) => {
+          return await this.feishuAPI.setCardStreamingMode(cardId, streamingMode, sequence);
+        },
+        // IM Patch 降级 API
+        updateCardMessage: async (messageId: string, card: unknown) => {
+          return await this.feishuAPI.updateCardMessage(messageId, card);
+        },
+        sendCardMessage: async (chatId: string, card: unknown, replyTo?: string) => {
+          return await this.feishuAPI.sendCardMessage(chatId, card, replyTo);
         },
       },
       chatId: context.chatId,
@@ -232,11 +249,27 @@ export class AIProcessor {
         }
       }
 
+      // 标记流已完全完成
+      streamingController.markFullyComplete();
+
+      // 诊断日志：记录最终的 fullContent
+      logger.debug({
+        fullContentLength: fullContent.length,
+        fullContentPreview: fullContent.substring(0, 200).replace(/\n/g, '\\n'),
+      }, 'Stream ended, fullContent captured');
+
       // 标记完成
       if (isStopped) {
         await streamingController.markStopped();
       } else {
-        // 正常完成
+        // 正常完成 - 使用 fullContent 作为最终文本（清理推理标签）
+        const { stripReasoningTags } = await import('../cards/utils.js');
+        const cleanedContent = stripReasoningTags(fullContent);
+
+        // 先调用 onDeliver 设置 completedText
+        await streamingController.onDeliver(cleanedContent);
+
+        // 然后调用 onComplete
         await streamingController.onComplete(
           adapter.getStats(context.history, fullContent),
           adapter.getCurrentModel()
@@ -244,18 +277,16 @@ export class AIProcessor {
 
         // 保存到会话历史
         this.sessionManager.addMessage(context.userId, 'user', context.prompt);
-        this.sessionManager.addMessage(context.userId, 'assistant', fullContent);
+        this.sessionManager.addMessage(context.userId, 'assistant', cleanedContent);
       }
 
     } catch (error) {
       logger.error({ error, userId: context.userId }, '流式生成出错');
 
-      // 发送错误卡片
-      const errorCard = buildErrorCard(
-        error instanceof Error ? error.message : '生成过程中发生错误',
-        'generation_error'
+      // 通知控制器出错（将状态从 idle/creating/streaming 转为 aborted）
+      await streamingController.onError(
+        error instanceof Error ? error.message : '生成过程中发生错误'
       );
-      await this.feishuAPI.sendCardMessage(context.chatId, errorCard);
 
       throw error;
     }
@@ -268,6 +299,12 @@ export class AIProcessor {
     chunk: StreamChunk,
     controller: StreamingCardController
   ): Promise<void> {
+    // 诊断日志：记录每个 chunk 的类型和内容预览
+    if (chunk.type === StreamChunkType.CONTENT || chunk.type === StreamChunkType.REASONING || chunk.type === StreamChunkType.DELIVER) {
+      const preview = chunk.data.substring(0, 100).replace(/\n/g, '\\n');
+      logger.debug({ type: chunk.type, preview, length: chunk.data.length }, 'Processing stream chunk');
+    }
+
     switch (chunk.type) {
       case StreamChunkType.CONTENT:
         await controller.onContent(chunk.data);
@@ -275,6 +312,11 @@ export class AIProcessor {
 
       case StreamChunkType.REASONING:
         await controller.onReasoning(chunk.data);
+        break;
+
+      case StreamChunkType.DELIVER:
+        // 完整内容传递，用于构建最终卡片
+        await controller.onDeliver(chunk.data);
         break;
 
       case StreamChunkType.ERROR:

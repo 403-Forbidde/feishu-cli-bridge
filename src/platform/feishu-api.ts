@@ -14,12 +14,13 @@ import { createWriteStream } from 'fs';
 import { mkdir } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { randomUUID } from 'crypto';
 import type {
   FeishuMessage,
   MessageResult,
   FileDownloadResult,
 } from './types.js';
-import type { StreamChunk, TokenStats } from '../core/types/stream.js';
+import type { TokenStats } from '../core/types/stream.js';
 
 /**
  * 统计信息提供器
@@ -145,42 +146,193 @@ export class FeishuAPI {
     return response.data?.message_id ?? '';
   }
 
+  // ==================== CardKit 2.0 流式 API ====================
+
   /**
-   * 通过卡片模板 ID 发送卡片
+   * 创建 CardKit 卡片实体
+   * @returns card_id 或 null
+   */
+  async createCardEntity(card: unknown): Promise<string | null> {
+    try {
+      const response = await this.client.cardkit.v1.card.create({
+        data: {
+          type: 'card_json',
+          data: JSON.stringify(card),
+        },
+      });
+
+      if (response.code !== 0) {
+        console.warn(`Failed to create CardKit entity: ${response.msg}`);
+        return null;
+      }
+
+      // 兼容不同 SDK 包装层
+      return (response.data?.card_id ?? (response as unknown as { card_id?: string }).card_id) || null;
+    } catch (error) {
+      console.warn('Failed to create CardKit entity:', error);
+      return null;
+    }
+  }
+
+  /**
+   * 通过 card_id 发送卡片消息
    */
   async sendCardByCardId(
     to: string,
     cardId: string,
     replyToMessageId?: string
-  ): Promise<Record<string, string>> {
-    // 使用 CardKit 发送卡片
-    const response = await this.client.cardkit.v1.card.create({
+  ): Promise<{ messageId: string; chatId: string }> {
+    const contentPayload = JSON.stringify({
+      type: 'card',
+      data: { card_id: cardId },
+    });
+
+    if (replyToMessageId) {
+      // 回复模式
+      const response = await this.client.im.v1.message.reply({
+        path: { message_id: replyToMessageId },
+        data: {
+          content: contentPayload,
+          msg_type: 'interactive',
+        },
+      });
+
+      if (response.code !== 0) {
+        throw new Error(`Failed to send CardKit reply: ${response.msg}`);
+      }
+
+      return {
+        messageId: response.data?.message_id ?? '',
+        chatId: response.data?.chat_id ?? '',
+      };
+    }
+
+    // 直接发送
+    const response = await this.client.im.v1.message.create({
+      params: { receive_id_type: 'chat_id' },
       data: {
-        type: 'card_json',
-        data: JSON.stringify({
-          type: 'template',
-          data: {
-            template_id: cardId,
-            template_version: '1.0.0',
-          },
-        }),
+        receive_id: to,
+        msg_type: 'interactive',
+        content: contentPayload,
       },
     });
 
     if (response.code !== 0) {
-      throw new Error(
-        `Failed to send card by ID: ${response.msg} (code: ${response.code})`
-      );
+      throw new Error(`Failed to send CardKit message: ${response.msg}`);
     }
 
     return {
-      messageId: response.data?.card_id ?? '',
-      cardId: response.data?.card_id ?? '',
+      messageId: response.data?.message_id ?? '',
+      chatId: response.data?.chat_id ?? '',
     };
   }
 
   /**
-   * 更新已发送的卡片消息
+   * 流式更新卡片元素内容（CardKit 2.0 打字机效果）
+   * 使用 cardElement.content 实现流式更新
+   */
+  async streamCardContent(
+    cardId: string,
+    elementId: string,
+    content: string,
+    sequence: number
+  ): Promise<boolean> {
+    try {
+      // 确保 content 不为空
+      if (!content || content.trim().length === 0) {
+        console.warn('streamCardContent: content is empty, skipping');
+        return false;
+      }
+
+      // 使用 cardElement.content 实现流式更新（匹配 OpenClaw 实现）
+      const response = await (this.client as unknown as {
+        cardkit: {
+          v1: {
+            cardElement: {
+              content: (params: {
+                data: { content: string; sequence: number };
+                path: { card_id: string; element_id: string };
+              }) => Promise<{ code: number; msg: string }>;
+            };
+          };
+        };
+      }).cardkit.v1.cardElement.content({
+        data: { content, sequence },
+        path: { card_id: cardId, element_id: elementId },
+      });
+
+      if (response.code !== 0) {
+        console.warn(`CardKit stream update failed: ${response.msg} (code: ${response.code})`);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.warn('CardKit stream update error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * 更新 CardKit 卡片（用于终态更新）
+   */
+  async updateCardKitCard(
+    cardId: string,
+    card: unknown,
+    sequence: number
+  ): Promise<boolean> {
+    try {
+      const response = await this.client.cardkit.v1.card.update({
+        data: {
+          card: { type: 'card_json', data: JSON.stringify(card) },
+          sequence,
+        },
+        path: { card_id: cardId },
+      });
+
+      if (response.code !== 0) {
+        console.warn(`CardKit update failed: ${response.msg}`);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.warn('CardKit update error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * 设置卡片流式模式（开启/关闭打字机效果）
+   */
+  async setCardStreamingMode(
+    cardId: string,
+    streamingMode: boolean,
+    sequence: number
+  ): Promise<boolean> {
+    try {
+      const response = await this.client.cardkit.v1.card.settings({
+        data: {
+          settings: JSON.stringify({ streaming_mode: streamingMode }),
+          sequence,
+        },
+        path: { card_id: cardId },
+      });
+
+      if (response.code !== 0) {
+        console.warn(`CardKit settings failed: ${response.msg}`);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.warn('CardKit settings error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * 更新已发送的卡片消息（IM Patch 降级方案）
    */
   async updateCardMessage(
     messageId: string,
@@ -199,35 +351,6 @@ export class FeishuAPI {
   }
 
   /**
-   * 使用 CardKit 更新卡片内容
-   */
-  async updateCardKitContent(
-    cardId: string,
-    elementId: string,
-    content: string,
-    sequence: number
-  ): Promise<boolean> {
-    const response = await this.client.cardkit.v1.card.batchUpdate({
-      path: {
-        card_id: cardId,
-      },
-      data: {
-        sequence,
-        uuid: crypto.randomUUID(),
-        actions: JSON.stringify([
-          {
-            action: 'update',
-            target_element_id: elementId,
-            content,
-          },
-        ]),
-      },
-    });
-
-    return response.code === 0;
-  }
-
-  /**
    * 添加"正在输入"表情回应
    */
   async addTypingReaction(messageId: string): Promise<string | null> {
@@ -238,7 +361,7 @@ export class FeishuAPI {
         },
         data: {
           reaction_type: {
-            emoji_type: 'Pencil',
+            emoji_type: 'Typing',
           },
         },
       });

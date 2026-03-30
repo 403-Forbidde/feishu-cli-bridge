@@ -72,24 +72,41 @@ export function buildErrorCard(
 
   // 错误图标和消息
   elements.push({
-    tag: 'div',
-    text: {
-      tag: 'plain_text',
-      content: `${config.icon} ${message}`,
-    },
+    tag: 'markdown',
+    content: `${config.icon} **${message}**`,
   });
 
-  // 详细信息（如果有）
+  // 详细信息（如果有）- 使用 collapsible_panel 折叠显示
   if (details) {
     elements.push(createDivider());
     elements.push({
-      tag: 'collapse',
+      tag: 'collapsible_panel',
+      expanded: false,
       header: {
-        tag: 'plain_text',
-        content: '🔍 详细信息',
+        title: {
+          tag: 'markdown',
+          content: '🔍 详细信息',
+        },
+        vertical_align: 'center',
+        icon: {
+          tag: 'standard_icon',
+          token: 'down-small-ccm_outlined',
+          size: '16px 16px',
+        },
+        icon_position: 'follow_text',
+        icon_expanded_angle: -180,
       },
+      border: { color: 'grey', corner_radius: '5px' },
+      vertical_spacing: '8px',
+      padding: '8px 8px 8px 8px',
       elements: [
-        createMarkdownBlock(`\`\`\`\n${details}\n\`\`\``),
+        {
+          tag: 'markdown',
+          content: `
+${details}
+`,
+          text_size: 'notation',
+        },
       ],
     });
   }
@@ -98,19 +115,19 @@ export function buildErrorCard(
   if (suggestion) {
     elements.push(createDivider());
     elements.push({
-      tag: 'div',
-      text: {
-        tag: 'plain_text',
-        content: '💡 建议',
-      },
+      tag: 'markdown',
+      content: '💡 **建议**',
     });
     elements.push(createNoteBlock(suggestion));
   }
 
+  // CardKit 2.0 格式
   return {
     schema: '2.0',
-    config: createCardConfig(),
-    card_link: undefined,
+    config: {
+      ...createCardConfig(),
+      summary: { content: config.title },
+    },
     header: {
       title: {
         tag: 'plain_text',

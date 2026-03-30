@@ -3,6 +3,7 @@
  * OpenCode Adapter Main Implementation
  *
  * 实现 ICLIAdapter 接口，连接 OpenCode CLI
+ * 完全参考 Python 实现: core.py
  */
 
 import type { Attachment, Message, ModelInfo, SessionInfo } from '../interface/types.js';
@@ -14,8 +15,14 @@ import type { AdapterConfig } from '../interface/types.js';
 import { OpenCodeHTTPClient } from './http-client.js';
 import { OpenCodeServerManager } from './server-manager.js';
 import { OpenCodeSessionManager } from './session-manager.js';
-import { createSSEIterator, SSEParserV2 } from './sse-parser.js';
-import type { OpenCodeConfig, OpenCodeSession, ContextWindowCacheEntry, OpenCodeMessage } from './types.js';
+import { OpenCodeEventParser, createOpenCodeEventIterator } from './sse-parser.js';
+import type {
+  OpenCodeConfig,
+  OpenCodeSession,
+  ContextWindowCacheEntry,
+  PromptAsyncRequest,
+  MessagePart,
+} from './types.js';
 
 /**
  * OpenCode 适配器
@@ -33,8 +40,14 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
   private contextWindowCache: Map<string, ContextWindowCacheEntry> = new Map();
   private readonly CACHE_TTL = 600000; // 10 分钟
 
-  // 取消信号
-  private abortController: AbortController | null = null;
+  // Issue #52: 取消事件
+  private cancelEvent: boolean = false;
+
+  // Issue #40: 当前统计信息（从 SSE 获取）
+  private currentStats: TokenStats | null = null;
+
+  // 活跃的会话状态
+  private activeWorkingDir: string = '';
 
   constructor(config: AdapterConfig) {
     super(config);
@@ -72,6 +85,13 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
 
   /**
    * 执行流式对话
+   *
+   * 对应 Python: execute_stream 方法
+   * 流程：
+   * 1. 确保服务器运行
+   * 2. 获取或创建会话
+   * 3. 发送消息（prompt_async）
+   * 4. 监听事件流（/event）
    */
   async *executeStream(
     prompt: string,
@@ -82,66 +102,65 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
     // 确保服务器运行
     const started = await this.ensureServer();
     if (!started) {
-      throw new AdapterError(
-        'OpenCode server failed to start',
-        AdapterErrorCode.SERVER_NOT_RUNNING
-      );
+      yield {
+        type: StreamChunkType.ERROR,
+        data: 'Failed to start OpenCode Server',
+      };
+      return;
     }
+
+    this.activeWorkingDir = workingDir;
+
+    // Issue #52: 初始化取消标志
+    this.cancelEvent = false;
 
     // 获取或创建会话
     const session = await this.sessionManager.getOrCreateSession(workingDir);
+    if (!session) {
+      yield {
+        type: StreamChunkType.ERROR,
+        data: 'Failed to create session',
+      };
+      return;
+    }
 
-    // 准备请求
-    const messages = this.buildMessages(context, prompt);
-    const requestAttachments = this.buildAttachments(attachments);
+    // 创建事件解析器并初始化状态
+    const parser = new OpenCodeEventParser();
+    parser.resetState(this.hashString(prompt.trim()));
 
-    // 创建 AbortController 用于取消
-    this.abortController = new AbortController();
+    // 构建消息部件
+    const parts = this.buildMessageParts(prompt, attachments);
+
+    // 解析模型 provider 和 ID
+    const [providerId, modelId] = this.parseModelId(this.opencodeConfig.defaultModel);
+
+    // 发送消息
+    const request: PromptAsyncRequest = {
+      parts,
+      model: {
+        providerID: providerId,
+        modelID: modelId,
+      },
+      agent: this.opencodeConfig.defaultAgent,
+    };
 
     try {
-      // 发送请求获取流
-      const stream = await this.httpClient.chatStream({
-        messages,
-        session: session.id,
-        stream: true,
-        attachments: requestAttachments,
-      });
+      const sent = await this.httpClient.sendPromptAsync(session.id, request, workingDir);
+      if (!sent) {
+        yield {
+          type: StreamChunkType.ERROR,
+          data: 'Failed to send message to OpenCode',
+        };
+        return;
+      }
 
-      // 使用 SSE 解析器
-      let buffer = '';
-      let done = false;
+      // 监听事件流
+      const eventStream = await this.httpClient.listenEvents(workingDir);
 
-      stream.on('data', (chunk: Buffer) => {
-        buffer += chunk.toString();
-      });
-
-      stream.on('end', () => {
-        done = true;
-      });
-
-      stream.on('error', (error: Error) => {
-        logger.error({ err: error }, 'Stream error');
-        done = true;
-      });
-
-      // 创建 SSE 解析器
-      const chunks: StreamChunk[] = [];
-      let resolveNext: ((chunk: StreamChunk | null) => void) | null = null;
-
-      const parser = new SSEParserV2((chunk) => {
-        if (resolveNext) {
-          resolveNext(chunk);
-          resolveNext = null;
-        } else {
-          chunks.push(chunk);
-        }
-      });
-
-      // 处理流数据
-      while (!done || buffer.length > 0) {
-        // 检查是否被取消
-        if (this.abortController.signal.aborted) {
-          await this.stopGeneration();
+      for await (const chunk of createOpenCodeEventIterator(eventStream, parser)) {
+        // Issue #52: 检查取消信号
+        if (this.cancelEvent) {
+          logger.info('executeStream: cancellation detected, breaking stream');
           yield {
             type: StreamChunkType.DONE,
             data: '',
@@ -149,36 +168,45 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
           return;
         }
 
-        if (buffer.length > 0) {
-          const data = buffer;
-          buffer = '';
-          parser.parse(data);
+        // 保存 token 统计信息
+        if (chunk.type === StreamChunkType.STATS && chunk.stats) {
+          // 从 API 获取准确的 context window（异步）
+          const contextWindow = await this.refreshContextWindowCache();
+          const totalTokens = chunk.stats.totalTokens;
+          const contextPercent = contextWindow > 0
+            ? Math.min(100, Math.round((totalTokens / contextWindow) * 100 * 10) / 10)
+            : 0;
+
+          this.currentStats = {
+            ...chunk.stats,
+            contextWindow,
+            contextUsed: totalTokens,
+            contextPercent,
+            model: this.getCurrentModel(),
+          };
+
+          logger.info(
+            `executeStream: received stats - total=${totalTokens}, window=${contextWindow}, context=${contextPercent}%`
+          );
+          continue; // 不将 stats chunk 传递给下游
         }
 
-        if (chunks.length > 0) {
-          yield chunks.shift()!;
-        } else if (!done) {
-          // 等待更多数据
-          const chunk = await new Promise<StreamChunk | null>((resolve) => {
-            resolveNext = resolve;
-            setTimeout(() => resolve(null), 100);
-          });
-          if (chunk) {
-            yield chunk;
-          }
+        yield chunk;
+
+        // 如果收到 DONE 或 ERROR，结束
+        if (chunk.type === StreamChunkType.DONE || chunk.type === StreamChunkType.ERROR) {
+          return;
         }
       }
-
-      // 发送完成信号
-      yield {
-        type: StreamChunkType.DONE,
-        data: '',
-      };
     } catch (error) {
       logger.error({ err: error }, 'Error in executeStream');
-      throw error;
+      yield {
+        type: StreamChunkType.ERROR,
+        data: error instanceof Error ? error.message : String(error),
+      };
     } finally {
-      this.abortController = null;
+      // Issue #52: 重置取消标志
+      this.cancelEvent = false;
     }
   }
 
@@ -189,8 +217,15 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
     await this.ensureServer();
 
     const dir = workingDir || process.cwd();
-    const session = await this.sessionManager.getOrCreateSession(dir);
-    return session;
+    try {
+      const session = await this.sessionManager.createNewSession(dir);
+      // 重置 token 统计
+      this.currentStats = null;
+      return session;
+    } catch (error) {
+      logger.error({ err: error }, 'Failed to create new session');
+      return null;
+    }
   }
 
   /**
@@ -199,12 +234,8 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
   async listSessions(limit?: number, directory?: string): Promise<SessionInfo[]> {
     await this.ensureServer();
 
-    const sessions = await this.sessionManager.listSessions();
-
-    if (limit) {
-      return sessions.slice(0, limit);
-    }
-
+    // 传递 limit 和 directory 参数给 sessionManager
+    const sessions = await this.sessionManager.listSessions(limit, directory);
     return sessions;
   }
 
@@ -290,13 +321,16 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
 
   /**
    * 停止生成
+   *
+   * Issue #52: 用于实现 /stop 命令
    */
   async stopGeneration(): Promise<boolean> {
-    if (this.abortController) {
-      this.abortController.abort();
-    }
+    // 设置取消标志
+    this.cancelEvent = true;
+    logger.info('stopGeneration: triggered cancellation');
 
     try {
+      // 同时调用服务器的停止接口
       await this.httpClient.stopGeneration();
       return true;
     } catch (error) {
@@ -307,15 +341,28 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
 
   /**
    * 计算 Token 统计
+   *
+   * Issue #40: 优先使用从 SSE 获取的准确统计
    */
   getStats(context: Message[], completionText: string): TokenStats {
+    // 如果有从 SSE 获取的统计，直接使用
+    if (this.currentStats) {
+      return this.currentStats;
+    }
+
+    // 否则使用估算
+    return this.estimateStats(context, completionText);
+  }
+
+  /**
+   * 估算 Token 统计（后备方案）
+   */
+  private estimateStats(context: Message[], completionText: string): TokenStats {
     // 简化的 token 估算：
     // - 英文：约 4 字符/token
     // - 中文：约 1 字符/token
-    // 这里使用保守估计
 
     const estimateTokens = (text: string): number => {
-      // 粗略估计：中文字符算 1 token，其他按 4 字符/token
       let tokens = 0;
       for (const char of text) {
         if (/[\u4e00-\u9fa5]/.test(char)) {
@@ -363,6 +410,9 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
     // 初始化 HTTP 客户端
     this.httpClient.initialize();
 
+    // 加载会话缓存
+    await this.sessionManager.load();
+
     // 启动或检查服务器
     return await this.serverManager.start();
   }
@@ -372,7 +422,6 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
    */
   private parseServerConfig(config: AdapterConfig): void {
     // 尝试从命令行参数解析端口
-    // 例如：opencode serve --port 4096
     const portMatch = config.command.match(/--port\s+(\d+)/);
     if (portMatch) {
       this.opencodeConfig.serverPort = parseInt(portMatch[1], 10);
@@ -385,47 +434,52 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
   }
 
   /**
-   * 构建消息列表
+   * 构建消息部件
    */
-  private buildMessages(context: Message[], prompt: string): OpenCodeMessage[] {
-    const messages: OpenCodeMessage[] = [];
+  private buildMessageParts(prompt: string, attachments?: Attachment[]): MessagePart[] {
+    const parts: MessagePart[] = [
+      { type: 'text', text: prompt },
+    ];
 
-    // 添加上下文消息
-    for (const msg of context) {
-      messages.push({
-        role: msg.role,
-        content: msg.content,
-      });
+    if (attachments) {
+      for (const att of attachments) {
+        if (att.data) {
+          parts.push({
+            type: 'file',
+            mime: att.mimeType,
+            url: `data:${att.mimeType};base64,${att.data.toString('base64')}`,
+            filename: att.filename,
+          });
+        }
+      }
     }
 
-    // 添加当前提示
-    messages.push({
-      role: 'user',
-      content: prompt,
-    });
-
-    return messages;
+    return parts;
   }
 
   /**
-   * 构建附件列表
+   * 解析模型 ID
+   * 格式: "provider/model" 或 "model"
    */
-  private buildAttachments(attachments?: Attachment[]): Array<{
-    type: 'image' | 'file';
-    data: string;
-    mime_type: string;
-    filename: string;
-  }> | undefined {
-    if (!attachments || attachments.length === 0) {
-      return undefined;
+  private parseModelId(modelId: string): [string, string] {
+    const parts = modelId.split('/', 2);
+    if (parts.length === 2) {
+      return [parts[0], parts[1]];
     }
+    return ['opencode', modelId];
+  }
 
-    return attachments.map((att) => ({
-      type: att.resourceType === 'image' ? 'image' : 'file',
-      data: att.data?.toString('base64') || '',
-      mime_type: att.mimeType,
-      filename: att.filename,
-    }));
+  /**
+   * 计算字符串哈希（用于去重）
+   */
+  private hashString(str: string): number {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    return hash;
   }
 
   /**
@@ -454,6 +508,76 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
     }
 
     return window;
+  }
+
+  /**
+   * 从 OpenCode API 获取指定模型的 context window
+   * Python 参考: _fetch_context_window_from_api
+   */
+  private async fetchContextWindowFromAPI(providerId: string, modelId: string): Promise<number | null> {
+    try {
+      const providers = await this.httpClient.getProviders();
+
+      // 找到指定的 provider
+      for (const provider of providers) {
+        if (provider.id === providerId) {
+          const models = provider.models || {};
+          const modelInfo = models[modelId];
+          if (modelInfo?.limit?.context && modelInfo.limit.context > 0) {
+            logger.info(
+              `fetchContextWindowFromAPI: ${providerId}/${modelId} = ${modelInfo.limit.context}`
+            );
+            return modelInfo.limit.context;
+          }
+        }
+      }
+
+      logger.warn(`fetchContextWindowFromAPI: context not found for ${providerId}/${modelId}`);
+      return null;
+    } catch (error) {
+      logger.error({ err: error }, 'fetchContextWindowFromAPI: error');
+      return null;
+    }
+  }
+
+  /**
+   * 刷新指定模型或当前模型的 context window 缓存
+   * Python 参考: refresh_context_window_cache
+   */
+  private async refreshContextWindowCache(model?: string): Promise<number> {
+    const targetModel = model || this.opencodeConfig.defaultModel;
+
+    // 解析 provider 和 model
+    const [providerId, modelId] = this.parseModelId(targetModel);
+
+    // 尝试从 API 获取
+    const contextWindow = await this.fetchContextWindowFromAPI(providerId, modelId);
+
+    if (contextWindow && contextWindow > 0) {
+      // 更新缓存
+      this.contextWindowCache.set(targetModel, {
+        window: contextWindow,
+        timestamp: Date.now(),
+      });
+      logger.info(`refreshContextWindowCache: cached ${targetModel} = ${contextWindow}`);
+      return contextWindow;
+    }
+
+    // API 获取失败，使用硬编码值作为缓存
+    const modelLower = targetModel.toLowerCase();
+    let fallback = 128000;
+    if (modelLower.includes('kimi') || modelLower.includes('claude')) {
+      fallback = 200000;
+    } else if (modelLower.includes('gpt-4') || modelLower.includes('gpt4')) {
+      fallback = 8192;
+    }
+
+    this.contextWindowCache.set(targetModel, {
+      window: fallback,
+      timestamp: Date.now(),
+    });
+    logger.info(`refreshContextWindowCache: using fallback for ${targetModel} = ${fallback}`);
+    return fallback;
   }
 
   /**
