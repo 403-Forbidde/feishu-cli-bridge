@@ -298,6 +298,7 @@ export class MessageProcessor {
     }
 
     // 获取适配器并执行重命名
+    const workingDir = await this.projectManager.getCurrentWorkingDir();
     const adapter = this.getAdapter(this.defaultAdapterType);
     if (!adapter) {
       await this.feishuAPI.sendText(message.chatId, '❌ 适配器不可用');
@@ -306,7 +307,36 @@ export class MessageProcessor {
 
     const success = await adapter.renameSession(sessionId, newTitle);
     if (success) {
-      await this.feishuAPI.sendText(message.chatId, `✅ 已重命名为: **${newTitle}**`);
+      // 1. 切换到该会话
+      const switchSuccess = await adapter.switchSession(sessionId, workingDir);
+      if (switchSuccess) {
+        this.sessionManager.clearHistory(message.senderId);
+      }
+
+      // 2. 发送成功提示（使用卡片格式）
+      const { buildSessionSwitchedCard } = await import('../cards/index.js');
+      const successCard = {
+        schema: '2.0',
+        header: {
+          title: { tag: 'plain_text', content: '✅ 重命名成功' },
+          template: 'green',
+        },
+        body: {
+          elements: [
+            {
+              tag: 'markdown',
+              content: `**会话已重命名**\n\n📋 新名称: **${newTitle}**\n🆔 会话ID: \`${sessionId.slice(-8)}\``
+            }
+          ]
+        }
+      };
+      await this.feishuAPI.sendCardMessage(message.chatId, successCard);
+
+      // 3. 显示更新后的会话列表卡片
+      const cardResponse = await this.buildSessionListCardResponse(message.chatId, 1);
+      if (cardResponse.card) {
+        await this.feishuAPI.sendCardMessage(message.chatId, cardResponse.card);
+      }
     } else {
       await this.feishuAPI.sendText(message.chatId, '❌ 重命名失败');
     }
@@ -472,47 +502,32 @@ export class MessageProcessor {
       return {};
     }
 
-    // 返回一个提示用户输入新名称的卡片
-    const { buildSessionListCard } = await import('../cards/session-cards.js');
-
-    // 获取当前会话列表
+    // 获取适配器
     const workingDir = await this.projectManager.getCurrentWorkingDir();
     const adapter = this.getAdapter(this.defaultAdapterType);
     if (!adapter) {
       return {};
     }
 
+    // 获取会话信息
     const allSessions = await adapter.listSessions(10, workingDir);
-    const pageSize = 5;
-    const totalPages = Math.ceil(allSessions.length / pageSize) || 1;
-    const sessions = allSessions.slice(0, pageSize);
+    const targetSession = allSessions.find(s => s.id === sessionId);
 
-    // 构建带有重命名提示的卡片
-    const card = buildSessionListCard(
-      sessions,
-      undefined,
-      1,
-      totalPages,
-      this.defaultAdapterType,
-      workingDir,
-      undefined,
-      allSessions.length
-    ) as { schema: string; header: object; body: { elements: object[] } };
-
-    // 添加重命名提示到卡片
-    if (card.body && Array.isArray(card.body.elements)) {
-      card.body.elements.unshift(
-        {
-          tag: 'markdown',
-          content: `📝 **重命名会话**\n\n当前名称: **${currentTitle || '未命名'}**\n\n请直接回复此消息，输入新名称：`,
-        },
-        { tag: 'hr' }
-      );
+    if (!targetSession) {
+      await this.feishuAPI.sendText(event.chatId, '❌ 会话不存在或已删除');
+      return {};
     }
 
-    // TODO: 需要设置某种状态来跟踪用户正在重命名哪个会话
-    // 暂时将重命名目标存储在内存中（实际应该用更可靠的方式）
-    this.pendingRenameSession = { userId: event.openId, sessionId, currentTitle };
+    // 使用新的改名提示卡片
+    const { buildRenamePromptCard } = await import('../cards/index.js');
+    const card = buildRenamePromptCard(targetSession, this.defaultAdapterType, workingDir);
+
+    // 存储待重命名会话状态
+    this.pendingRenameSession = {
+      userId: event.openId,
+      sessionId,
+      currentTitle: targetSession.title
+    };
 
     return { card };
   }
@@ -621,8 +636,8 @@ export class MessageProcessor {
         return {};
       }
 
-      // 获取当前会话 ID
-      const currentSessionId = adapter.getSessionId(workingDir);
+      // 获取当前会话 ID（适配器可能未实现此方法）
+      const currentSessionId = adapter.getSessionId?.(workingDir) ?? undefined;
 
       // 获取当前工作目录的会话（最多10条）
       const allSessions = await adapter.listSessions(10, workingDir);
@@ -635,7 +650,7 @@ export class MessageProcessor {
       const sessions = allSessions.slice(startIndex, startIndex + pageSize);
 
       // 构建新卡片
-      const { buildSessionListCard } = await import('../cards/session-cards.js');
+      const { buildSessionListCard } = await import('../cards/index.js');
       const card = buildSessionListCard(
         sessions,
         currentSessionId,
@@ -671,8 +686,8 @@ export class MessageProcessor {
       const adapter = this.getAdapter(this.defaultAdapterType);
       if (!adapter) return;
 
-      // 获取当前会话 ID
-      const currentSessionId = adapter.getSessionId(workingDir);
+      // 获取当前会话 ID（适配器可能未实现此方法）
+      const currentSessionId = adapter.getSessionId?.(workingDir) ?? undefined;
 
       // 获取当前工作目录的会话（最多10条）
       const allSessions = await adapter.listSessions(10, workingDir);
@@ -685,7 +700,7 @@ export class MessageProcessor {
       const sessions = allSessions.slice(startIndex, startIndex + pageSize);
 
       // 构建新卡片
-      const { buildSessionListCard } = await import('../cards/session-cards.js');
+      const { buildSessionListCard } = await import('../cards/index.js');
       const card = buildSessionListCard(
         sessions,
         currentSessionId,

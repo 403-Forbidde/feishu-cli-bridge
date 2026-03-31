@@ -20,6 +20,10 @@ wheels/
 .installed.cfg
 *.egg
 
+# Node.js
+node_modules/
+*.tsbuildinfo
+
 # Virtual environments
 venv/
 env/

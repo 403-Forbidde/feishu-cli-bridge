@@ -170,6 +170,13 @@ export interface ICLIAdapter {
    * @returns Token 统计信息
    */
   getStats(context: Message[], completionText: string): TokenStats;
+
+  /**
+   * 获取当前工作目录的会话 ID（可选实现）
+   * @param workingDir - 工作目录
+   * @returns 会话 ID 或 null
+   */
+  getSessionId?(workingDir: string): string | null;
 }
 
 /**

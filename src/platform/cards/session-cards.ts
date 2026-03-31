@@ -312,12 +312,6 @@ export function buildSessionListCard(
     });
   }
 
-  elements.push({
-    tag: 'markdown',
-    content: `<font color='grey'>💡 点击「📝 改名」后直接回复新名称即可完成重命名</font>`,
-    text_size: 'notation',
-  });
-
   // Schema 2.0 格式
   return {
     schema: '2.0',
@@ -453,8 +447,58 @@ export function buildSessionSwitchedCard(sessionId: string, title: string): obje
 }
 
 /**
- * 构建会话删除确认卡片
+ * 构建重命名提示卡片
+ *
+ * 显示需要改名的会话信息，并提示用户直接回复新名称
+ *
+ * @param session - 需要改名的会话
+ * @param cliType - CLI 类型
+ * @param workingDir - 当前工作目录
  */
+export function buildRenamePromptCard(
+  session: SessionInfo,
+  cliType: string = 'opencode',
+  workingDir: string = ''
+): object {
+  const title = session.title || '未命名会话';
+  const sessionId = session.id;
+  const displayId = sessionId.length >= 8 ? sessionId.slice(-8) : sessionId;
+
+  // 格式化时间
+  const createdTimestamp = session.createdAt ? session.createdAt * 1000 : 0;
+  let createdStr = '';
+  if (createdTimestamp) {
+    const date = new Date(createdTimestamp);
+    createdStr = `${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+  }
+
+  const elements: object[] = [
+    {
+      tag: 'markdown',
+      content: `\ud83d\udcdd **重命名会话**`,
+    },
+    { tag: 'hr' },
+    {
+      tag: 'markdown',
+      content: `\ud83d\udccb **当前名称：** ${title}\n\ud83d\udce6 **会话ID：** \`${displayId}\`${createdStr ? `\n\ud83d\udcc5 **创建时间：** ${createdStr}` : ''}`,
+    },
+    { tag: 'hr' },
+    {
+      tag: 'markdown',
+      content: `<font color='orange'>\u26a0\ufe0f **请直接回复此消息，输入新的会话名称**</font>\n\n输入后系统将自动完成重命名并切换至该会话`,
+    },
+  ];
+
+  return {
+    schema: '2.0',
+    header: {
+      title: { tag: 'plain_text', content: '\ud83d\udcdd 重命名会话' },
+      template: 'orange',
+    },
+    body: { elements },
+  };
+}
+
 export function buildSessionDeletedCard(sessionId: string): object {
   const displayId = sessionId.length >= 8 ? sessionId.slice(-8) : sessionId;
 

@@ -259,8 +259,8 @@ export class CommandProcessor {
     const currentPage = 1; // 默认显示第一页
     const sessions = allSessions.slice(0, pageSize);
 
-    // 获取当前会话 ID
-    const currentSessionId = adapter.getSessionId(context.workingDir);
+    // 获取当前会话 ID（适配器可能未实现此方法）
+    const currentSessionId = adapter.getSessionId?.(context.workingDir) ?? undefined;
 
     const card = buildSessionListCard(
       sessions,

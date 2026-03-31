@@ -190,12 +190,116 @@ const totalPages = Math.min(Math.ceil(totalCount / PAGE_SIZE), 2);
 'card.action.trigger'
 ```
 
+**9. 会话改名交互流程** (`src/platform/message-processor/index.ts`)
+
+两阶段交互设计：点击改名按钮 → 显示改名提示卡片 → 用户回复新名称 → 完成重命名
+
+```typescript
+// 第一阶段：显示改名提示卡片
+private async handleRenameSessionCallback(event, actionValue) {
+  const targetSession = await this.findSessionById(sessionId);
+
+  // 使用专门的改名提示卡片
+  const { buildRenamePromptCard } = await import('../cards/index.js');
+  const card = buildRenamePromptCard(targetSession, cliType, workingDir);
+
+  // 存储待处理状态
+  this.pendingRenameSession = { userId: event.openId, sessionId, currentTitle };
+
+  return { card };
+}
+
+// 第二阶段：处理用户输入的新名称
+private async handleRenameInput(message) {
+  const { sessionId } = this.pendingRenameSession;
+  const newTitle = message.content.trim();
+
+  // 执行重命名
+  const success = await adapter.renameSession(sessionId, newTitle);
+
+  if (success) {
+    // 1. 自动切换到该会话
+    await adapter.switchSession(sessionId, workingDir);
+    this.sessionManager.clearHistory(message.senderId);
+
+    // 2. 发送成功卡片（显示会话ID和新名称）
+    await this.sendRenameSuccessCard(message.chatId, sessionId, newTitle);
+
+    // 3. 显示更新后的会话列表
+    const cardResponse = await this.buildSessionListCardResponse(message.chatId, 1);
+    await this.feishuAPI.sendCardMessage(message.chatId, cardResponse.card);
+  }
+}
+```
+
+**10. 改名提示卡片设计** (`src/platform/cards/session-cards.ts`)
+
+橙色主题卡片，突出显示操作提示：
+
+```typescript
+export function buildRenamePromptCard(session, cliType, workingDir): object {
+  return {
+    schema: '2.0',
+    header: {
+      title: { tag: 'plain_text', content: '📝 重命名会话' },
+      template: 'orange',  // 橙色头部提示重要操作
+    },
+    body: {
+      elements: [
+        { tag: 'markdown', content: '📝 **重命名会话**' },
+        { tag: 'hr' },
+        {
+          tag: 'markdown',
+          content: `📋 **当前名称：** ${title}\n🆔 **会话ID：** \`${displayId}\`\n📅 **创建时间：** ${createdStr}`
+        },
+        { tag: 'hr' },
+        {
+          tag: 'markdown',
+          content: `<font color='orange'>⚠️ **请直接回复此消息，输入新的会话名称**</font>\n\n输入后系统将自动完成重命名并切换至该会话`
+        },
+      ]
+    }
+  };
+}
+```
+
+**11. 模块导入路径修正**
+
+开发模式（tsx）使用 `.ts` 扩展名：
+
+```typescript
+// 错误 - 在 tsx 开发模式下找不到模块
+const { buildSessionListCard } = await import('../cards/session-cards.js');
+
+// 正确 - 通过 index.ts 统一导出
+const { buildSessionListCard } = await import('../cards/index.js');
+```
+
+**12. 适配器接口扩展** (`src/adapters/interface/types.ts`)
+
+添加可选的 `getSessionId` 方法用于获取当前工作目录的会话ID：
+
+```typescript
+export interface ICLIAdapter {
+  // ... 其他方法
+
+  /**
+   * 获取当前工作目录的会话 ID（可选实现）
+   */
+  getSessionId?(workingDir: string): string | null;
+}
+
+// 调用时使用可选链
+const currentSessionId = adapter.getSessionId?.(workingDir) ?? undefined;
+```
+
 #### 相关代码位置
 
-- `src/platform/cards/session-cards.ts` - 会话列表卡片构建
+- `src/platform/cards/session-cards.ts` - 会话列表卡片构建、改名提示卡片
 - `src/platform/message-processor/command-processor.ts` - /session 命令处理
-- `src/platform/message-processor/index.ts` - 卡片按钮事件处理
+- `src/platform/message-processor/index.ts` - 卡片按钮事件处理、改名交互流程
 - `src/adapters/opencode/session-manager.ts` - 会话管理逻辑
+- `src/adapters/interface/types.ts` - 适配器接口定义
 - `src/platform/feishu-client.ts` - WebSocket 事件注册
 
 ---
