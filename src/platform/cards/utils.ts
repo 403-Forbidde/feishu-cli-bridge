@@ -94,18 +94,21 @@ function _optimizeMarkdownStyle(text: string, cardVersion: number = 2): string {
     r = r.replace(/^([^|\n].*)\n(\|.+\|)/gm, '$1\n\n$2');
     // 4b. 表格前：在空行之前插入 <br>（即 \n\n| → \n<br>\n\n| ）
     r = r.replace(/\n\n((?:\|.+\|[^\S\n]*\n?)+)/g, '\n\n<br>\n\n$1');
-    // 4c. 表格后：只在表格真正结束后（下一行不是表格行时）添加 <br>
-    // 使用负向前瞻确保下一行不是以 | 开头的表格行
-    r = r.replace(/((?:^\|.+\|[^\S\n]*\n)+)(?!\|)/gm, '$1<br>\n');
+    // 4c. 表格后：在表格块末尾追加 <br>（跳过后接分隔线/标题/加粗/文末的情况）
+    r = r.replace(/((?:^\|.+\|[^\S\n]*\n?)+)/gm, (m, _table, offset) => {
+      const after = r.slice(offset + m.length).replace(/^\n+/, '');
+      if (!after || /^(---|#{4,5} |\*\*)/.test(after)) return m;
+      return m + '\n<br>\n';
+    });
     // 4d. 表格前是普通文本（非标题、非加粗行）时，只需 <br>，去掉多余空行
     //     "text\n\n<br>\n\n|" → "text\n<br>\n|"
     r = r.replace(/^((?!#{4,5} )(?!\*\*).+)\n\n(<br>)\n\n(\|)/gm, '$1\n$2\n$3');
     // 4d2. 表格前是加粗行时，<br> 紧贴加粗行，空行保留在后面
     //     "**bold**\n\n<br>\n\n|" → "**bold**\n<br>\n\n|"
     r = r.replace(/^(\*\*.+)\n\n(<br>)\n\n(\|)/gm, '$1\n$2\n\n$3');
-    // 4e. 表格后是普通文本（非标题、非加粗行）时，去掉 <br> 后的空行
-    //     "| row |\n<br>\n\ntext" → "| row |\n<br>\ntext"
-    r = r.replace(/(\|[^\n]*\n)<br>\n\n((?!#{4,5} )(?!\*\*))/gm, '$1<br>\n$2');
+    // 4e. 表格后是普通文本（非标题、非加粗行）时，只需 <br>，去掉多余空行
+    //     "| row |\n\n<br>\ntext" → "| row |\n<br>\ntext"
+    r = r.replace(/(\|[^\n]*\n)\n(<br>\n)((?!#{4,5} )(?!\*\*))/gm, '$1$2$3');
 
     // ── 5. 还原代码块，并在前后追加 <br> ──────────────────────────────
     codeBlocks.forEach((block, i) => {
@@ -132,7 +135,11 @@ const IMAGE_RE = /!\[([^\]]*)\]\(([^)\s]+)\)/g;
 
 /**
  * Strip `![alt](value)` where value is not a valid Feishu image key
- * (`img_xxx`) or remote URL. Prevents CardKit error 200570.
+ * (`img_xxx`). Prevents CardKit error 200570.
+ *
+ * HTTP URLs are stripped as well — ImageResolver should have already
+ * replaced them with `img_xxx` keys before this point. This serves
+ * as a safety net for any unresolved URLs.
  */
 function stripInvalidImageKeys(text: string): string {
   if (!text.includes('!['))
@@ -140,11 +147,7 @@ function stripInvalidImageKeys(text: string): string {
   return text.replace(IMAGE_RE, (fullMatch, _alt, value) => {
     if (value.startsWith('img_'))
       return fullMatch;
-    if (value.startsWith('http://'))
-      return fullMatch;
-    if (value.startsWith('https://'))
-      return fullMatch;
-    return value;
+    return ''; // strip all non-img_ image references (URLs, local paths, etc.)
   });
 }
 
