@@ -2,9 +2,9 @@
 
 程序员专属：用飞书私聊向本地 CLI AI 工具下达指令，享受流式打字机输出体验。当前已接入 **OpenCode**，Codex 与 Kimi CLI 支持规划中。
 
-**版本**: v0.1.10
-**开发**: ERROR403
-**更新日期**: 2026-03-25
+**版本**: v0.2.0  
+**开发**: ERROR403  
+**更新日期**: 2026-04-01
 
 ## 使用场景
 
@@ -31,7 +31,7 @@
 - 📁 **项目管理** — `/pl` 交互式卡片管理多个工作目录，点击「切换」按钮直接切换，带删除二次确认
 - 🔄 **工作目录隔离** — 每个项目对应独立 OpenCode session（通过 `directory` 参数），工具调用 CWD 精确隔离
 - ⚡ **智能节流** — 长间隙后先批处理再刷新，避免首次更新内容过少
-- 🌐 **跨平台支持** — Windows / Linux / macOS，Linux 含 systemd 用户服务一键安装
+- 🌐 **跨平台支持** — Windows / Linux / macOS
 
 ## Roadmap
 
@@ -41,27 +41,31 @@
 
 | 里程碑 | 核心交付 | 状态 |
 |--------|---------|------|
-| **v0.1.x** | OpenCode 接入 · CardKit 流式输出 · TUI 命令 · 多平台支持 | ✅ 已完成 |
-| **v0.2.0** | Kimi CLI 适配器（Wire 协议） | 🔜 规划中 |
+| **v0.2.0** | TypeScript 重写 · 架构优化 · 性能提升 | ✅ 已完成 |
+| **v0.3.0** | Kimi CLI 适配器（Wire 协议） | 🔜 规划中 |
 | **v1.0.0** | Codex CLI 适配器 | 🔜 规划中 |
 
 ---
 
-### ✅ v0.1.x — 已完成
+### ✅ v0.2.0 — TypeScript 重写完成
 
-- [x] **OpenCode 适配器**（HTTP/SSE）：自动启动 `opencode serve`，`POST /session` 会话管理（v0.1.7+ 单 Server 多目录隔离），SSE 事件流接收
+- [x] 全面迁移至 TypeScript/Node.js 技术栈
+- [x] 分层架构：Core → Platform → Adapter
+- [x] 类型安全：严格的 TypeScript 类型定义
+- [x] 性能优化：HTTP 连接池复用、智能节流
+- [x] 安全加固：路径遍历防护、输入验证
 - [x] CardKit 流式输出（打字机效果 + loading 动画，100ms 节流）
 - [x] IM Patch 降级回退（CardKit 不可用时自动切换，1500ms 节流）
 - [x] 可折叠思考面板（Reasoning 过程实时展示）
 - [x] 图片 / 文件输入（base64 FilePart，视觉模型识别）
 - [x] 多项目管理（`/pl` 交互式卡片切换工作目录）
 - [x] TUI 命令（`/new` `/session` `/model` `/mode` `/reset` `/help` `/stop`）
-- [x] OpenCode Server 会话管理（v0.1.7+ 完全委托给 OpenCode 服务器，本地零持久化）
+- [x] OpenCode Server 会话管理（完全委托给 OpenCode 服务器，本地零持久化）
 - [x] 跨平台支持：Windows / Linux / macOS
 
 ---
 
-### 🔜 v0.2.0 — Kimi CLI 适配器（Wire 协议）
+### 🔜 v0.3.0 — Kimi CLI 适配器（Wire 协议）
 
 **目标**：将 [Kimi CLI](https://kimi.moonshot.cn) 以 Wire 协议接入，通过 `@kimi` 前缀调用。
 
@@ -72,8 +76,6 @@
 | 思维链流式展示 | `--thinking` 模式下推理过程实时显示在可折叠面板 |
 | `--yolo` 全自动模式 | 工具调用无需人工确认，配置开关控制 |
 | 与 OpenCode 并行启用 | `@kimi` / `@opencode` 自由切换，无默认冲突 |
-
-**实现路径**：新增 `src/adapters/kimicode.py`，预计约 400 行。
 
 ---
 
@@ -88,22 +90,17 @@
 | 与 OpenCode / Kimi 并行启用 | `@opencode` / `@kimi` / `@codex` 三路自由切换 |
 | 图片输入支持 | 与 OpenCode 路径对齐，附件统一预处理 |
 
-**实现路径**：完善 `src/adapters/codex.py`，预计新增约 150 行。
-
 ---
 
 ## 快速开始
 
 ### 第一步：安装前置依赖
 
-所有平台均需要 **Python 3.12+**、**Node.js 18+ LTS** 和 **opencode CLI**。
+需要 **Node.js 20+ LTS** 和 **opencode CLI**。
 
 **Linux（Ubuntu/Debian）：**
 
 ```bash
-# Python venv 支持
-sudo apt update && sudo apt install -y python3-venv python3-pip
-
 # Node.js LTS
 curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
 sudo apt-get install -y nodejs
@@ -115,59 +112,39 @@ npm install -g opencode-ai
 **macOS：**
 
 ```bash
-brew install python3 node    # 需先安装 Homebrew: https://brew.sh
+brew install node    # 需先安装 Homebrew: https://brew.sh
 npm install -g opencode-ai
 ```
 
-> macOS 系统自带的 `python3` 版本可能较旧，务必用 Homebrew 安装。
-
 **Windows（CMD）：**
 
-- [Python 3.12+](https://www.python.org/downloads/windows/) — 安装时勾选「**Add Python to PATH**」
 - [Node.js LTS](https://nodejs.org/) — 安装时勾选「**Add to PATH**」
 - 安装完成后：`npm install -g opencode-ai`
 
 **验证：**
 
 ```bash
-python3 --version   # Windows: python --version，需 3.12+
-node --version      # 需 18+
+node --version      # 需 20+
+npm --version
 opencode --version
 ```
 
 ---
 
-### 第二步：克隆项目 & 安装 Python 依赖
+### 第二步：克隆项目 & 安装依赖
 
 ```bash
 git clone <repo_url>
 cd feishu-cli-bridge
+npm install
 ```
-
-**Linux / macOS：**
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-**Windows（CMD）：**
-
-```cmd
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-激活后命令行前缀出现 `(.venv)` 即为成功。`start.sh` / `start.bat` 会自动激活虚拟环境，后续无需手动激活。
 
 ---
 
 ### 第三步：创建飞书自建应用
 
 1. 进入[飞书开发者控制台](https://open.feishu.cn/app)，创建**企业自建应用**
-2. **权限管理** — 推荐批量导入：将 [`doc/BOTAUTH.md`](doc/BOTAUTH.md) 的 JSON 粘贴到「导入权限」；或手动开启下表权限：
+2. **权限管理** — 手动开启下表权限：
 
    | 权限 scope | 用途 |
    |-----------|------|
@@ -220,15 +197,26 @@ set FEISHU_APP_SECRET=xxx
 
 ### 第五步：启动
 
-| 平台 | 命令 |
-|------|------|
-| Linux / macOS | `./start.sh` |
-| Linux / macOS（IM Patch 降级） | `./start.sh --legacy` |
-| Windows | `start.bat` |
-| Windows（IM Patch 降级） | `start.bat --legacy` |
-| 任意平台（直接 Python） | `python3 -m src.main`（Windows: `python`） |
+**开发模式（热重载）：**
 
-启动成功后日志会显示 `✅ CLI 工具可用: opencode` 和 `🚀 正在连接飞书...`。收到第一条飞书消息时，桥接程序会自动启动 `opencode serve`，无需手动操作。
+```bash
+npm run dev
+```
+
+**开发模式（IM Patch 降级）：**
+
+```bash
+npm run dev:legacy
+```
+
+**生产模式：**
+
+```bash
+npm run build
+npm start
+```
+
+启动成功后日志会显示 `🚀 Feishu CLI Bridge 启动成功！`。收到第一条飞书消息时，桥接程序会自动启动 `opencode serve`，无需手动操作。
 
 ---
 
@@ -237,26 +225,35 @@ set FEISHU_APP_SECRET=xxx
 **Linux — systemd 用户服务（推荐，开机自启）：**
 
 ```bash
-bash scripts/install_service.sh   # 安装服务
+# 创建服务文件 ~/.config/systemd/user/cli-feishu-bridge.service
+# 内容参考 scripts/install_service.sh（需自行修改适配 npm 启动）
 
 systemctl --user enable --now cli-feishu-bridge   # 启动并设为自启
 systemctl --user status  cli-feishu-bridge        # 查看状态
 systemctl --user restart cli-feishu-bridge        # 重启
 journalctl --user -u cli-feishu-bridge -f         # 实时日志
-
-bash scripts/uninstall_service.sh  # 卸载
 ```
 
-**macOS — nohup（无 launchd 支持，推荐配合 tmux）：**
+**使用 PM2：**
 
 ```bash
-nohup ./start.sh > bridge.log 2>&1 &
+npm install -g pm2
+pm2 start npm --name "feishu-bridge" -- start
+pm2 save
+pm2 startup
+```
+
+**macOS — nohup（推荐配合 tmux）：**
+
+```bash
+npm run build
+nohup npm start > bridge.log 2>&1 &
 ```
 
 **Windows — 任务计划程序（开机自启）：**
 
 ```cmd
-schtasks /create /tn "FeiShuBridge" /tr "python -m src.main" /sc onlogon /ru %USERNAME% /sd C:\path\to\feishu-cli-bridge /f
+schtasks /create /tn "FeiShuBridge" /tr "npm start" /sc onlogon /ru %USERNAME% /sd C:\path\to\feishu-cli-bridge /f
 schtasks /end    /tn "FeiShuBridge"   & REM 停止
 schtasks /delete /tn "FeiShuBridge" /f  & REM 卸载
 ```
@@ -328,9 +325,8 @@ feishu:
 
 # 会话配置
 session:
-  max_sessions: 10          # 最大保留会话数（LRU，本地内存缓存）
+  max_sessions: 15          # 最大保留会话数（LRU，本地内存缓存）
   max_history: 20           # 单会话最大历史轮数
-  # storage_dir 已在 v0.1.7 移除，会话由 OpenCode 服务器管理
 
 # CLI 工具配置
 cli:
@@ -345,10 +341,23 @@ cli:
         name: "Kimi K2.5"
       - id: "opencode/mimo-v2-pro-free"
         name: "MiMo V2 Pro Free"
+
 # 项目管理
 project:
   storage_path: ""    # 留空使用默认 ~/.config/feishu-cli-bridge/projects.json
   max_projects: 50
+
+# 安全配置
+security:
+  allowed_project_root: ""    # 允许的项目根目录（留空使用用户主目录）
+  max_attachment_size: 52428800   # 最大附件大小（50MB）
+  max_prompt_length: 100000       # 最大提示词长度
+
+# 调试配置
+debug:
+  log_level: "info"       # debug | info | warn | error
+  save_logs: true         # 是否保存日志到文件
+  log_dir: ""            # 日志目录（留空使用默认）
 ```
 
 ## AI 回复卡片结构
@@ -371,70 +380,83 @@ project:
 ```
 feishu-cli-bridge/
 ├── src/
-│   ├── adapters/              # CLI 适配器
-│   │   ├── base.py            # 适配器抽象基类
-│   │   ├── opencode/          # OpenCode HTTP/SSE 适配器（包结构）
-│   │   │   ├── core.py        # 主适配器类
-│   │   │   ├── server_manager.py  # 服务器生命周期管理
-│   │   │   └── session_manager.py # 会话数据类
-│   │   └── codex.py           # Codex 子进程适配器
-│   ├── feishu/                # 飞书模块
-│   │   ├── client.py          # WebSocket 客户端（lark-oapi 封装）
-│   │   ├── handler.py         # 消息路由主编排器
-│   │   ├── message_parser.py  # 消息事件数据解析
-│   │   ├── command_router.py  # 命令路由
-│   │   ├── card_callback_handler.py  # 卡片回调处理
-│   │   ├── api.py             # Feishu API 调用 + stream_reply 编排
-│   │   ├── streaming_controller.py  # 流式状态机
-│   │   ├── flush_controller.py      # 节流/互斥调度
-│   │   ├── cardkit_client.py  # CardKit HTTP 客户端
-│   │   ├── card_builder/      # Schema 2.0 卡片 JSON 构建（包结构）
-│   │   │   ├── base.py        # 基础卡片构建
-│   │   │   ├── interactive_cards.py  # 交互式卡片
-│   │   │   ├── project_cards.py      # 项目相关卡片
-│   │   │   ├── session_cards.py      # 会话相关卡片
-│   │   │   └── utils.py       # 工具函数
-│   │   ├── formatter.py       # Markdown 后处理 + Emoji 图标
-│   │   └── dedup.py           # 消息去重
+│   ├── core/                  # 核心基础设施
+│   │   ├── config.ts          # 配置管理（YAML + 环境变量）
+│   │   ├── logger.ts          # Pino 日志
+│   │   ├── retry.ts           # 指数退避重试
+│   │   └── types/             # 共享类型定义
+│   │
+│   ├── adapters/              # CLI 适配器层
+│   │   ├── interface/         # 抽象接口
+│   │   │   ├── base-adapter.ts
+│   │   │   └── types.ts
+│   │   ├── opencode/          # OpenCode 适配器
+│   │   │   ├── adapter.ts     # 主适配器
+│   │   │   ├── http-client.ts # HTTP 客户端
+│   │   │   ├── sse-parser.ts  # SSE 流解析
+│   │   │   ├── server-manager.ts
+│   │   │   └── session-manager.ts
+│   │   └── factory.ts         # 适配器工厂
+│   │
+│   ├── platform/              # 飞书平台层
+│   │   ├── feishu-client.ts   # WebSocket 客户端
+│   │   ├── feishu-api.ts      # HTTP API 封装
+│   │   ├── message-processor/ # 消息处理
+│   │   │   ├── index.ts
+│   │   │   ├── router.ts
+│   │   │   ├── ai-processor.ts
+│   │   │   ├── command-processor.ts
+│   │   │   └── attachment-processor.ts
+│   │   ├── streaming/         # 流式系统
+│   │   │   ├── controller.ts
+│   │   │   └── flush-controller.ts
+│   │   └── cards/             # 卡片构建
+│   │       ├── streaming.ts
+│   │       ├── complete.ts
+│   │       ├── session-cards.ts
+│   │       ├── project-cards.ts
+│   │       └── utils.ts
+│   │
+│   ├── card-builder/          # TUI 卡片构建
+│   │   ├── base.ts
+│   │   ├── interactive-cards.ts
+│   │   ├── project-cards.ts
+│   │   ├── session-cards.ts
+│   │   └── utils.ts
+│   │
+│   ├── tui-commands/          # TUI 命令
+│   │   ├── index.ts
+│   │   ├── base.ts
+│   │   ├── opencode.ts
+│   │   └── project.ts
+│   │
 │   ├── project/               # 项目管理
-│   │   ├── manager.py         # 增删改查、JSON 持久化
-│   │   └── models.py          # 项目数据模型
+│   │   ├── manager.ts
+│   │   └── types.ts
+│   │
 │   ├── session/               # 会话管理
-│   │   └── manager.py         # v0.1.7+ 已废弃（空桩），会话由 OpenCode 服务器管理
-│   ├── tui_commands/          # TUI 斜杠命令
-│   │   ├── base.py            # 命令基类
-│   │   ├── opencode.py        # 会话/模型/模式命令
-│   │   ├── project.py         # 项目管理命令
-│   │   └── interactive.py     # 交互式回复跟踪
-│   ├── utils/
-│   │   ├── error_codes.py     # 错误代码枚举与异常类
-│   │   ├── retry.py           # 指数退避重试机制
-│   │   └── logger.py          # 日志工具
-│   ├── config.py              # 配置管理（YAML + 环境变量）
-│   └── main.py                # 入口
-├── scripts/
-│   ├── install_service.sh     # systemd 用户服务安装
-│   └── uninstall_service.sh   # systemd 用户服务卸载
-├── doc/
-│   ├── CHANGELOG.md           # 完整版本历史
-│   ├── ISSUES.md              # Bug 追踪
-│   ├── AIGUIDE.md             # AI 模型部署指南
-│   └── BOTAUTH.md             # 飞书机器人权限 JSON（批量导入用）
+│   │   ├── manager.ts
+│   │   └── types.ts
+│   │
+│   └── main.ts                # 入口
+│
+├── scripts/                   # 脚本工具
 ├── config.example.yaml        # 配置模板
-├── requirements.txt
-├── start.py                   # Python 入口（直接运行）
-├── start.sh                   # Linux/macOS 启动脚本（自动激活 .venv）
-└── start.bat                  # Windows 启动脚本（自动激活 .venv）
+├── package.json
+├── tsconfig.json
+└── README.md
 ```
 
 ## 更新日志
 
-### v0.1.10 (2026-03-25) — 卡片 Schema 2.0 统一
+### v0.2.0 (2026-04-01) — TypeScript 重写
 
-- 📝 **文档修正** — 修正 `build_new_session_card()` 和 `build_project_list_card()` 的错误注释，明确标注为 Schema 2.0（实际代码已是 2.0）
-- ✅ **Schema 统一** — 确认所有卡片构建函数均使用飞书 Schema 2.0 格式
-
-完整日志见 [doc/CHANGELOG.md](doc/CHANGELOG.md)
+- 🔧 **全面迁移** — 从 Python 迁移至 TypeScript/Node.js
+- 🏗️ **架构升级** — 分层架构：Core → Platform → Adapter
+- 🔒 **类型安全** — 严格的 TypeScript 类型定义
+- ⚡ **性能优化** — HTTP 连接池复用、智能节流
+- 🛡️ **安全加固** — 路径遍历防护、输入验证
+- 🎯 **功能完整** — 100% 功能对标 Python 版本
 
 ## 环境变量
 
@@ -443,9 +465,39 @@ feishu-cli-bridge/
 | `FEISHU_APP_ID` | 飞书 App ID |
 | `FEISHU_APP_SECRET` | 飞书 App Secret |
 | `CONFIG_FILE` | 显式指定配置文件路径（覆盖自动发现） |
-| `LOG_LEVEL` | 日志级别（默认 INFO） |
+| `LOG_LEVEL` | 日志级别（默认 info） |
 | `LOG_DIR` | 日志目录（留空则使用配置文件同级 `logs/`） |
 | `DISABLE_CARDKIT` | 设为 `1` 强制使用 IM Patch 模式 |
+
+## 开发命令
+
+```bash
+# 安装依赖
+npm install
+
+# 开发模式（热重载）
+npm run dev
+
+# 开发模式（IM Patch 降级）
+npm run dev:legacy
+
+# 类型检查
+npm run typecheck
+
+# 代码检查
+npm run lint
+
+# 构建
+npm run build
+
+# 生产运行
+npm start
+
+# 测试
+npm run test
+npm run test:unit
+npm run test:integration
+```
 
 ## 许可证
 
@@ -453,4 +505,5 @@ MIT License
 
 ## 致谢
 
-- [Lark OpenAPI SDK](https://github.com/larksuite/oapi-sdk-python)
+- [Feishu OpenAPI SDK](https://github.com/larksuite/oapi-sdk-nodejs) — 飞书 Node.js SDK
+- [OpenCode](https://opencode.ai) — AI 编程助手
