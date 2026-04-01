@@ -796,15 +796,18 @@ export class MessageProcessor {
         return {};
       }
 
-      // 转换为 ProjectInfo 格式
-      const projectInfos = projects.map(p => ({
-        id: p.id,
-        name: p.displayName || p.name,
-        path: p.path,
-        createdAt: p.createdAt,
-        updatedAt: p.updatedAt,
-        isActive: p.id === currentProject?.id,
-      }));
+      // 转换为 ProjectInfo 格式（并行获取每个项目的 VCS 信息）
+      const projectInfos = await Promise.all(
+        projects.map(async (p) => ({
+          id: p.id,
+          name: p.displayName || p.name,
+          path: p.path,
+          createdAt: p.createdAt,
+          updatedAt: p.updatedAt,
+          isActive: p.id === currentProject?.id,
+          vcs: await this.projectManager.getVCSInfo(p.path),
+        }))
+      );
 
       const { buildProjectListCard } = await import('../cards/index.js');
       const card = buildProjectListCard(projectInfos, currentProject?.id);

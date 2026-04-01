@@ -212,7 +212,7 @@ export class ProjectManager {
     // 路径安全验证
     const resolvedPath = await sanitizePath(inputPath, this.allowedRoot);
 
-    // 验证路径存在且为目录
+    // 验证路径存在或为文件，如果不存在则自动创建
     try {
       const stats = await stat(resolvedPath);
       if (!stats.isDirectory()) {
@@ -224,10 +224,18 @@ export class ProjectManager {
       await access(resolvedPath, constants.R_OK | constants.X_OK);
     } catch (error) {
       if (error instanceof ProjectError) throw error;
-      throw new ProjectError(
-        `路径不存在或无法访问: ${inputPath}`,
-        ProjectErrorCode.PATH_NOT_EXIST
-      );
+
+      // 路径不存在，尝试自动创建
+      try {
+        await mkdir(resolvedPath, { recursive: true });
+        logger.info({ path: resolvedPath }, '自动创建项目目录');
+      } catch (mkdirError) {
+        throw new ProjectError(
+          `无法创建目录: ${inputPath}，请检查权限`,
+          ProjectErrorCode.PATH_NOT_EXIST,
+          mkdirError
+        );
+      }
     }
 
     // 检查是否已存在

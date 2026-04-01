@@ -418,30 +418,17 @@ export class CommandProcessor {
     const projects = await this.projectManager.listProjects();
     const currentProject = await this.projectManager.getCurrentProject();
 
-    // 获取当前项目的 VCS 信息
-    let activeProjectVCS: string | undefined;
-    if (currentProject) {
-      activeProjectVCS = await this.projectManager.getVCSInfo(currentProject.path);
-    }
-
-    // 转换为 ProjectInfo 格式
+    // 转换为 ProjectInfo 格式（并行获取每个项目的 VCS 信息）
     const projectInfos = await Promise.all(
-      projects.map(async (p) => {
-        const isActive = p.id === currentProject?.id;
-        let vcs: string | undefined;
-        if (isActive) {
-          vcs = activeProjectVCS;
-        }
-        return {
-          id: p.id,
-          name: p.displayName || p.name,
-          path: p.path,
-          createdAt: p.createdAt,
-          updatedAt: p.updatedAt,
-          isActive,
-          vcs,
-        };
-      })
+      projects.map(async (p) => ({
+        id: p.id,
+        name: p.displayName || p.name,
+        path: p.path,
+        createdAt: p.createdAt,
+        updatedAt: p.updatedAt,
+        isActive: p.id === currentProject?.id,
+        vcs: await this.projectManager.getVCSInfo(p.path),
+      }))
     );
 
     const card = buildProjectListCard(projectInfos, currentProject?.id);
