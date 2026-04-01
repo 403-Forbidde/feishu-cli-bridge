@@ -185,7 +185,7 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
             model: this.getCurrentModel(),
           };
 
-          logger.info(
+          logger.debug(
             `executeStream: received stats - total=${totalTokens}, window=${contextWindow}, context=${contextPercent}%`
           );
           continue; // 不将 stats chunk 传递给下游
@@ -524,7 +524,7 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
           const models = provider.models || {};
           const modelInfo = models[modelId];
           if (modelInfo?.limit?.context && modelInfo.limit.context > 0) {
-            logger.info(
+            logger.debug(
               `fetchContextWindowFromAPI: ${providerId}/${modelId} = ${modelInfo.limit.context}`
             );
             return modelInfo.limit.context;
@@ -559,7 +559,7 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
         window: contextWindow,
         timestamp: Date.now(),
       });
-      logger.info(`refreshContextWindowCache: cached ${targetModel} = ${contextWindow}`);
+      logger.debug(`refreshContextWindowCache: cached ${targetModel} = ${contextWindow}`);
       return contextWindow;
     }
 
@@ -576,7 +576,7 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
       window: fallback,
       timestamp: Date.now(),
     });
-    logger.info(`refreshContextWindowCache: using fallback for ${targetModel} = ${fallback}`);
+    logger.debug(`refreshContextWindowCache: using fallback for ${targetModel} = ${fallback}`);
     return fallback;
   }
 

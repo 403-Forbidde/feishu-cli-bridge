@@ -284,11 +284,11 @@ export class AIProcessor {
       logger.error({ error, userId: context.userId }, '流式生成出错');
 
       // 通知控制器出错（将状态从 idle/creating/streaming 转为 aborted）
+      // 控制器会发送错误卡片，所以不要再次抛出错误以避免重复发送
       await streamingController.onError(
         error instanceof Error ? error.message : '生成过程中发生错误'
       );
-
-      throw error;
+      // 注意：不要 throw error，因为错误已经通过 onError 处理并发送了错误卡片
     }
   }
 

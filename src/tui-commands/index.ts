@@ -7,6 +7,7 @@
 
 import type { TUIResult, CommandContext } from './base.js';
 import { TUIResultType, createErrorResult } from './base.js';
+import { logger } from '../core/logger.js';
 
 /** 交互式消息记录 */
 interface InteractiveMessage {
@@ -151,7 +152,7 @@ export class TUICommandRouter {
   /** 注册 CLI 工具适配器 */
   registerAdapter(cliType: string, handler: TUICommandHandler): void {
     this.commandHandlers.set(cliType, handler);
-    console.log(`[TUI] Registered handler for: ${cliType}`);
+    logger.debug(`[TUI] Registered handler for: ${cliType}`);
   }
 
   /** 检查内容是否是 TUI 命令 */
@@ -219,7 +220,7 @@ export class TUICommandRouter {
       );
     }
 
-    console.log(`[TUI] Executing: ${cliType} /${command} (args=${args})`);
+    logger.debug(`[TUI] Executing: ${cliType} /${command} (args=${args})`);
 
     // 执行命令
     return await handler.execute(command, args, context);
@@ -261,7 +262,7 @@ export class TUICommandRouter {
       return null;
     }
 
-    console.log(
+    logger.debug(
       `[TUI] Handling interactive reply: target=${target.interactiveId}, reply=${replyContent}`
     );
 

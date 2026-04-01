@@ -21,6 +21,7 @@ import type { TokenStats } from '../../core/types/stream.js';
 import { buildStreamingCompleteCard, buildStoppedCard } from '../cards/streaming.js';
 import { buildErrorCard } from '../cards/error.js';
 import { optimizeMarkdownStyle, stripReasoningTags } from '../cards/utils.js';
+import { logger } from '../../core/logger.js';
 
 /**
  * CardKit 2.0 流式卡片初始结构
@@ -609,14 +610,14 @@ export class StreamingCardController {
 
     const displayText = this.textState.completedText || this.textState.accumulatedText;
 
-    // 诊断日志：检查内容是否正确
-    console.log('[sendCompleteCard] completedText length:', this.textState.completedText.length);
-    console.log('[sendCompleteCard] accumulatedText length:', this.textState.accumulatedText.length);
-    console.log('[sendCompleteCard] reasoningText length:', this.reasoningState.accumulatedText.length);
-    console.log('[sendCompleteCard] displayText preview:', displayText.substring(0, 200));
-    if (this.reasoningState.accumulatedText) {
-      console.log('[sendCompleteCard] reasoning preview:', this.reasoningState.accumulatedText.substring(0, 200));
-    }
+    // 诊断日志：检查内容是否正确（debug级别）
+    logger.debug({
+      completedTextLength: this.textState.completedText.length,
+      accumulatedTextLength: this.textState.accumulatedText.length,
+      reasoningTextLength: this.reasoningState.accumulatedText.length,
+      displayTextPreview: displayText.substring(0, 200),
+      reasoningPreview: this.reasoningState.accumulatedText.substring(0, 200),
+    }, '[sendCompleteCard] 内容诊断');
 
     const card = buildStreamingCompleteCard(
       displayText,

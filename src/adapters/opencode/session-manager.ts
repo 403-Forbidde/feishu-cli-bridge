@@ -203,29 +203,29 @@ export class OpenCodeSessionManager {
    */
   async getOrCreateSession(workingDir: string): Promise<OpenCodeSession | null> {
     const normalizedDir = normalizePath(workingDir);
-    logger.info(`getOrCreateSession called: workingDir="${workingDir}", normalizedDir="${normalizedDir}"`);
+    logger.debug(`getOrCreateSession called: workingDir="${workingDir}", normalizedDir="${normalizedDir}"`);
 
     // 首先检查本地缓存
     const existingSession = this.findSessionByWorkingDir(normalizedDir);
     if (existingSession) {
-      logger.info(`Found existing session for ${workingDir}: ${existingSession.id}`);
+      logger.debug(`Found existing session for ${workingDir}: ${existingSession.id}`);
       this.activeWorkingDir = normalizedDir;
       return existingSession;
     }
-    logger.info(`No existing session found in local cache for "${normalizedDir}"`);
+    logger.debug(`No existing session found in local cache for "${normalizedDir}"`);
 
     // 尝试从服务器获取该目录的会话列表
     try {
-      logger.info(`Calling listSessions to find sessions for "${normalizedDir}"`);
+      logger.debug(`Calling listSessions to find sessions for "${normalizedDir}"`);
       const sessions = await this.listSessions(undefined, normalizedDir);
-      logger.info(`listSessions returned ${sessions.length} sessions for "${normalizedDir}"`);
+      logger.debug(`listSessions returned ${sessions.length} sessions for "${normalizedDir}"`);
       if (sessions.length > 0) {
         // 按创建时间排序，返回最新的
         const sortedSessions = sessions.sort((a, b) => b.createdAt - a.createdAt);
         const session = sortedSessions[0];
         this.sessions.set(normalizedDir, session);
         this.activeWorkingDir = normalizedDir;
-        logger.info(`Recovered session from server: ${session.id}`);
+        logger.debug(`Recovered session from server: ${session.id}`);
         return session;
       }
     } catch (error) {
@@ -233,7 +233,7 @@ export class OpenCodeSessionManager {
     }
 
     // 没有找到现有会话，创建新的
-    logger.info(`No sessions found, creating new session for "${normalizedDir}"`);
+    logger.info(`Creating new session for "${workingDir}"`);
     return await this.createNewSession(workingDir);
   }
 
@@ -260,10 +260,10 @@ export class OpenCodeSessionManager {
   async listSessions(limit?: number, directory?: string): Promise<OpenCodeSession[]> {
     try {
       // DEBUG: Log input parameters
-      logger.info(`listSessions called: limit=${limit}, directory=${directory}`);
-      logger.info(`Local cache size: ${this.sessions.size}`);
+      logger.debug(`listSessions called: limit=${limit}, directory=${directory}`);
+      logger.debug(`Local cache size: ${this.sessions.size}`);
       for (const [dir, session] of this.sessions) {
-        logger.info(`  Local cache: dir="${dir}", session.id="${session.id?.slice(-8)}", title="${session.title}"`);
+        logger.debug(`  Local cache: dir="${dir}", session.id="${session.id?.slice(-8)}", title="${session.title}"`);
       }
 
       // 获取服务器会话列表（尝试传递 directory 参数）
@@ -273,9 +273,9 @@ export class OpenCodeSessionManager {
       const sessionsArray = response.sessions || [];
 
       // DEBUG: Log server response
-      logger.info(`Server returned ${sessionsArray.length} sessions`);
+      logger.debug(`Server returned ${sessionsArray.length} sessions`);
       for (const s of sessionsArray) {
-        logger.info(`  Server: id="${s.id?.slice(-8)}", title="${s.title}", directory="${s.directory}"`);
+        logger.debug(`  Server: id="${s.id?.slice(-8)}", title="${s.title}", directory="${s.directory}"`);
       }
 
       // 转换为内部格式
@@ -291,10 +291,10 @@ export class OpenCodeSessionManager {
       // 合并本地缓存中的会话（解决 OpenCode 列表不完整的问题）
       // 对于本地缓存的会话，尝试从服务器获取详情以补充 directory 字段
       const serverSessionIds = new Set(allSessions.map((s) => s.id));
-      logger.info(`Server session IDs: ${Array.from(serverSessionIds).map(id => id?.slice(-8)).join(', ')}`);
+      logger.debug(`Server session IDs: ${Array.from(serverSessionIds).map(id => id?.slice(-8)).join(', ')}`);
 
       for (const [dir, session] of this.sessions) {
-        logger.info(`Checking local session: dir="${dir}", id="${session.id?.slice(-8)}", inServer=${serverSessionIds.has(session.id)}`);
+        logger.debug(`Checking local session: dir="${dir}", id="${session.id?.slice(-8)}", inServer=${serverSessionIds.has(session.id)}`);
         if (!serverSessionIds.has(session.id)) {
           // 尝试从服务器获取详情
           try {
@@ -308,7 +308,7 @@ export class OpenCodeSessionManager {
                 workingDir: detail.directory || dir,
                 slug: detail.slug,
               });
-              logger.info(`  Added from server detail: id="${detail.id?.slice(-8)}", dir="${detail.directory || dir}"`);
+              logger.debug(`  Added from server detail: id="${detail.id?.slice(-8)}", dir="${detail.directory || dir}"`);
             } else {
               // 获取详情失败，使用本地缓存
               allSessions.push({
@@ -319,7 +319,7 @@ export class OpenCodeSessionManager {
                 workingDir: dir,
                 slug: session.slug,
               });
-              logger.info(`  Added from local cache (detail null): id="${session.id?.slice(-8)}", dir="${dir}"`);
+              logger.debug(`  Added from local cache (detail null): id="${session.id?.slice(-8)}", dir="${dir}"`);
             }
           } catch (e) {
             // 获取详情失败，使用本地缓存
@@ -331,15 +331,15 @@ export class OpenCodeSessionManager {
               workingDir: dir,
               slug: session.slug,
             });
-            logger.info(`  Added from local cache (detail error): id="${session.id?.slice(-8)}", dir="${dir}"`);
+            logger.debug(`  Added from local cache (detail error): id="${session.id?.slice(-8)}", dir="${dir}"`);
           }
         }
       }
 
       // DEBUG: Log all sessions before filtering
-      logger.info(`All sessions before filtering: ${allSessions.length}`);
+      logger.debug(`All sessions before filtering: ${allSessions.length}`);
       for (const s of allSessions) {
-        logger.info(`  Before filter: id="${s.id?.slice(-8)}", workingDir="${s.workingDir}", title="${s.title}"`);
+        logger.debug(`  Before filter: id="${s.id?.slice(-8)}", workingDir="${s.workingDir}", title="${s.title}"`);
       }
 
       // 如果指定了目录，进行规范化匹配（客户端过滤）
@@ -347,17 +347,17 @@ export class OpenCodeSessionManager {
       let filteredSessions = allSessions;
       if (directory) {
         const targetDir = normalizePath(directory);
-        logger.info(`Filtering by directory: targetDir="${targetDir}" (original="${directory}")`);
+        logger.debug(`Filtering by directory: targetDir="${targetDir}" (original="${directory}")`);
 
         // 只过滤：如果会话有 directory 且与目标目录不匹配，则排除
         // 如果会话没有 directory（未知），则保留（不过滤）
         filteredSessions = allSessions.filter((s) => {
           const shouldKeep = !s.workingDir || pathsEqual(s.workingDir, targetDir);
-          logger.info(`  Filter check: id="${s.id?.slice(-8)}", workingDir="${s.workingDir}", keep=${shouldKeep}`);
+          logger.debug(`  Filter check: id="${s.id?.slice(-8)}", workingDir="${s.workingDir}", keep=${shouldKeep}`);
           return shouldKeep;
         });
 
-        logger.info(`After filtering: ${filteredSessions.length} sessions remain`);
+        logger.debug(`After filtering: ${filteredSessions.length} sessions remain`);
       }
 
       // 应用限制
