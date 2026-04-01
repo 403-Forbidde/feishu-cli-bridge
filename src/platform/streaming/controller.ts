@@ -25,11 +25,28 @@ import { logger } from '../../core/logger.js';
 
 /**
  * CardKit 2.0 流式卡片初始结构
+ * 配置打字机效果参数以获得最佳流式体验
+ * 注意: print_frequency_ms 和 print_step 必须是对象格式，支持分端配置
  */
 const STREAMING_THINKING_CARD = {
   schema: '2.0',
   config: {
     streaming_mode: true,
+    streaming_config: {
+      print_frequency_ms: {
+        default: 70,  // 默认打字机速度 70ms/字符
+        android: 70,
+        ios: 70,
+        pc: 70,
+      },
+      print_step: {
+        default: 3,  // 每次显示 3 个字符（更流畅）
+        android: 3,
+        ios: 3,
+        pc: 3,
+      },
+      print_strategy: 'fast',  // 未完成的内容立即上屏
+    },
     summary: { content: '思考中...' },
   },
   body: {

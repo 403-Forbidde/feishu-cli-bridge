@@ -12,14 +12,14 @@
 
 /** 节流常量 */
 const THROTTLE_CONSTANTS = {
-  /** CardKit 流式模式节流间隔 */
-  CARDKIT_MS: 100,
+  /** CardKit 流式模式节流间隔 - 每次更新包含更多字符以获得更流畅的打字机效果 */
+  CARDKIT_MS: 300,
   /** IM Patch 模式节流间隔 */
   PATCH_MS: 1500,
   /** 长间隔阈值 - 超过此时间后的首次更新会先批量缓冲 */
   LONG_GAP_THRESHOLD_MS: 2000,
-  /** 长间隔后的批量缓冲时间 */
-  BATCH_AFTER_GAP_MS: 50,
+  /** 长间隔后的批量缓冲时间 - 避免长间隔后立刻刷新导致内容断断续续 */
+  BATCH_AFTER_GAP_MS: 200,
 };
 
 export { THROTTLE_CONSTANTS };
