@@ -1,6 +1,6 @@
 # Feishu CLI Bridge
 
-> [English](README.md) | [简体中文](#feishu-cli-bridge)
+> [English](../README.md) | [简体中文](#feishu-cli-bridge)
 
 程序员专属：用飞书私聊向本地 CLI AI 工具下达指令，享受流式打字机输出体验。当前已接入 **OpenCode**，Codex 与 Kimi CLI 支持规划中。
 
@@ -508,4 +508,5 @@ MIT License
 ## 致谢
 
 - [Feishu OpenAPI SDK](https://github.com/larksuite/oapi-sdk-nodejs) — 飞书 Node.js SDK
+- [OpenClaw Feishu Plugin](https://github.com/larksuite/openclaw-lark) — 飞书卡片交互参考实现
 - [OpenCode](https://opencode.ai) — AI 编程助手

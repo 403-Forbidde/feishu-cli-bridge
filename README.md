@@ -1,6 +1,6 @@
 # Feishu CLI Bridge
 
-> [English](#feishu-cli-bridge) | [简体中文](README_CN.md)
+> [English](#feishu-cli-bridge) | [简体中文](doc/README_CN.md)
 
 A Node.js/TypeScript bridge connecting Feishu (Lark) to OpenCode CLI, delivering a streaming "typewriter" chat experience inside Feishu.
 
@@ -459,8 +459,8 @@ feishu-cli-bridge/
 ├── tsconfig.json
 ├── vitest.config.ts
 ├── README.md                  # This file (English)
-├── README_CN.md               # Chinese version
 └── doc/                       # Documentation directory
+    └── README_CN.md           # Chinese version
 ```
 
 ---
@@ -530,4 +530,5 @@ MIT License
 ## Acknowledgements
 
 - [Feishu OpenAPI SDK](https://github.com/larksuite/oapi-sdk-nodejs) — Feishu Node.js SDK
+- [OpenClaw Feishu Plugin](https://github.com/larksuite/openclaw-lark) — Reference implementation for Feishu card interactions
 - [OpenCode](https://opencode.ai) — AI Programming Assistant
