@@ -22,3 +22,6 @@ export * from './session-cards.js';
 
 // 项目卡片
 export * from './project-cards.js';
+
+// 帮助卡片
+export * from './help-card.js';

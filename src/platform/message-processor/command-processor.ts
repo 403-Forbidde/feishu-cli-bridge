@@ -14,6 +14,7 @@ import type { SessionManager } from '../../session/manager.js';
 import type { ProjectManager } from '../../project/manager.js';
 import { buildSessionListCard } from '../cards/session-cards.js';
 import { buildProjectListCard, buildProjectInfoCard } from '../cards/project-cards.js';
+import { buildHelpCard } from '../cards/help-card.js';
 import { buildModeSelectCard } from '../../card-builder/interactive-cards.js';
 
 /**
@@ -167,36 +168,12 @@ export class CommandProcessor {
   async processHelp(message: FeishuMessage): Promise<void> {
     const context = await this.buildContext(message);
 
-    const helpText = `
-🤖 **Feishu CLI Bridge 帮助**
+    // 获取当前项目信息
+    const currentProject = await this.projectManager.getCurrentProject();
 
-**会话管理：**
-- \`/new\` - 创建新会话
-- \`/session\` - 查看会话列表
-- \`/reset\` 或 \`/clear\` - 重置当前会话
-- \`/rename <新名称>\` - 重命名当前会话
-- \`/delete <会话ID>\` - 删除指定会话
-
-**模型管理：**
-- \`/model\` - 查看可用模型列表
-- \`/model <模型ID>\` - 切换到指定模型
-
-**项目管理：**
-- \`/pa <路径> [名称]\` - 添加已有项目
-- \`/pc <路径> [名称]\` - 创建新项目
-- \`/pl\` - 列出所有项目
-- \`/ps <项目ID或名称>\` - 切换项目
-- \`/pi\` - 显示当前项目信息
-- \`/pd <项目ID或名称>\` - 删除项目
-
-**其他：**
-- \`/stop\` - 停止当前生成
-- \`/help\` - 显示此帮助
-
-发送任意消息开始与 AI 对话。
-    `.trim();
-
-    await this.sendText(context.chatId, helpText);
+    // 构建帮助卡片
+    const card = buildHelpCard(currentProject, context.adapterType);
+    await this.feishuAPI.sendCardMessage(context.chatId, card);
   }
 
   // ============ 会话命令处理 ============
