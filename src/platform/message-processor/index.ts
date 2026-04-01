@@ -73,6 +73,9 @@ export class MessageProcessor {
   // 待处理的重命名会话（用户点击改名按钮后等待输入新名称）
   private pendingRenameSession: { userId: string; sessionId: string; currentTitle?: string } | null = null;
 
+  // 待处理的重命名项目（用户点击改名按钮后等待输入新名称）
+  private pendingRenameProject: { userId: string; projectId: string; currentName?: string } | null = null;
+
   constructor(options: MessageProcessorOptions) {
     this.feishuAPI = options.feishuAPI;
     this.sessionManager = options.sessionManager;
@@ -117,11 +120,19 @@ export class MessageProcessor {
     }
     this.markProcessed(message.messageId);
 
-    // 2. 检查是否有待处理的重命名操作
+    // 2. 检查是否有待处理的重命名操作（会话或项目）
     if (this.pendingRenameSession && this.pendingRenameSession.userId === message.senderId) {
       const newTitle = message.content.trim();
       if (newTitle) {
         await this.handleRenameInput(message);
+        return;
+      }
+    }
+
+    if (this.pendingRenameProject && this.pendingRenameProject.userId === message.senderId) {
+      const newName = message.content.trim();
+      if (newName) {
+        await this.handleRenameProjectInput(message);
         return;
       }
     }
@@ -208,6 +219,9 @@ export class MessageProcessor {
 
       case 'switch_project':
         return this.handleSwitchProjectCallback(event, actionValue);
+
+      case 'rename_project_prompt':
+        return this.handleRenameProjectCallback(event, actionValue);
 
       case 'delete_project':
         return this.handleDeleteProjectCallback(event, actionValue);
@@ -404,7 +418,10 @@ export class MessageProcessor {
     const stopped = this.handleStop(message.senderId);
 
     if (stopped) {
-      await this.feishuAPI.addTypingReaction(message.messageId);
+      // 使用红色主题卡片发送停止确认
+      const { buildStopConfirmationCard } = await import('../cards/error.js');
+      const card = buildStopConfirmationCard();
+      await this.feishuAPI.sendCardMessage(message.chatId, card);
     } else {
       await this.feishuAPI.sendText(
         message.chatId,
@@ -776,6 +793,103 @@ export class MessageProcessor {
 
     // 删除成功，刷新项目列表卡片
     return await this.buildProjectListCardResponse(event.chatId);
+  }
+
+  /**
+   * 处理重命名项目回调
+   */
+  private async handleRenameProjectCallback(
+    event: CardCallbackEvent,
+    actionValue: Record<string, unknown>
+  ): Promise<CardCallbackResponse> {
+    const projectId = actionValue.projectId as string | undefined;
+    const projectName = actionValue.projectName as string | undefined;
+
+    if (!projectId) {
+      logger.warn('重命名项目失败: 缺少 projectId');
+      return {};
+    }
+
+    // 获取项目信息
+    const project = await this.projectManager.getProject(projectId);
+    if (!project) {
+      await this.feishuAPI.sendText(event.chatId, '❌ 项目不存在或已删除');
+      return {};
+    }
+
+    // 使用改名提示卡片
+    const { buildRenameProjectPromptCard } = await import('../cards/index.js');
+    const projectInfo = {
+      id: project.id,
+      name: project.displayName || project.name,
+      path: project.path,
+      createdAt: project.createdAt,
+      updatedAt: project.updatedAt,
+    };
+    const card = buildRenameProjectPromptCard(projectInfo);
+
+    // 存储待重命名项目状态
+    this.pendingRenameProject = {
+      userId: event.openId,
+      projectId,
+      currentName: project.displayName || project.name
+    };
+
+    return { card };
+  }
+
+  /**
+   * 处理项目重命名输入
+   */
+  private async handleRenameProjectInput(message: FeishuMessage): Promise<void> {
+    if (!this.pendingRenameProject) return;
+
+    const { projectId } = this.pendingRenameProject;
+    const newName = message.content.trim();
+
+    // 清除待处理状态
+    this.pendingRenameProject = null;
+
+    if (!newName) {
+      await this.feishuAPI.sendText(message.chatId, '❌ 名称不能为空');
+      return;
+    }
+
+    // 执行重命名
+    const success = await this.projectManager.renameProject(projectId, newName);
+    if (success) {
+      // 1. 切换到该项目
+      await this.projectManager.switchProject(projectId);
+
+      // 2. 清空会话历史（因为切换了项目）
+      this.sessionManager.clearHistory(message.senderId);
+
+      // 3. 发送成功提示卡片
+      const successCard = {
+        schema: '2.0',
+        header: {
+          title: { tag: 'plain_text', content: '✅ 重命名成功' },
+          template: 'green',
+        },
+        body: {
+          elements: [
+            {
+              tag: 'markdown',
+              content: `**项目已重命名**\n\n📁 新名称: **${newName}**\n🆔 项目ID: \`${projectId.slice(-12)}\``
+            }
+          ]
+        }
+      };
+      await this.feishuAPI.sendCardMessage(message.chatId, successCard);
+
+      // 4. 显示更新后的项目列表卡片
+      const cardResponse = await this.buildProjectListCardResponse(message.chatId);
+      if (cardResponse.card) {
+        await this.feishuAPI.sendCardMessage(message.chatId, cardResponse.card);
+      }
+    } else {
+      await this.feishuAPI.sendText(message.chatId, '❌ 重命名失败');
+    }
   }
 
   /**

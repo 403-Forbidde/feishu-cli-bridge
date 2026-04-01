@@ -201,13 +201,32 @@ export function buildPathTraversalErrorCard(path: string): object {
 }
 
 /**
- * 构建认证错误卡片
+ * 构建停止确认卡片（用户发送 /stop 后）
+ * 使用红色主题和红色圆形图标
  */
-export function buildAuthErrorCard(service: string): object {
-  return buildErrorCard(
-    `${service} 认证失败`,
-    'auth',
-    undefined,
-    '请检查配置是否正确，或重新进行认证。'
-  );
+export function buildStopConfirmationCard(): object {
+  return {
+    schema: '2.0',
+    config: {
+      ...createCardConfig(),
+      summary: { content: '已停止生成' },
+    },
+    header: {
+      title: {
+        tag: 'plain_text',
+        content: '已停止生成',
+      },
+      template: CardColors.ERROR, // 红色主题
+    },
+    body: {
+      elements: [
+        {
+          tag: 'markdown',
+          content: "🔴 **生成已停止**",
+        },
+        createDivider(),
+        createNoteBlock('用户主动中止了生成过程'),
+      ],
+    },
+  };
 }
