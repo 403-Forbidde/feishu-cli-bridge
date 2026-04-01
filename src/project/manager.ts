@@ -14,7 +14,7 @@ import type { Project, ProjectConfig, ProjectStorage } from './types.js';
 import { ProjectError, ProjectErrorCode } from './types.js';
 import { logger } from '../core/logger.js';
 
-const DEFAULT_ALLOWED_ROOT = homedir();
+const DEFAULT_ALLOWED_ROOT = '/';
 const STORAGE_VERSION = 1;
 
 /**
@@ -423,6 +423,42 @@ export class ProjectManager {
    */
   getCurrentProjectId(): string | null {
     return this.currentProjectId;
+  }
+
+  /**
+   * 获取版本控制信息
+   * 检测项目是否使用 Git 及其分支信息
+   * @param projectPath - 项目路径
+   * @returns VCS 信息字符串，如 "Git (main)" 或 undefined
+   */
+  async getVCSInfo(projectPath: string): Promise<string | undefined> {
+    try {
+      const gitDir = path.join(projectPath, '.git');
+      const gitHeadPath = path.join(gitDir, 'HEAD');
+
+      // 检查 .git 目录是否存在
+      try {
+        await access(gitDir, constants.R_OK);
+        await access(gitHeadPath, constants.R_OK);
+      } catch {
+        return undefined;
+      }
+
+      // 读取 HEAD 文件获取分支信息
+      const headContent = await readFile(gitHeadPath, 'utf-8');
+      const refMatch = headContent.match(/ref: refs\/heads\/(.+)/);
+
+      if (refMatch) {
+        const branch = refMatch[1].trim();
+        return `Git (${branch})`;
+      }
+
+      // 可能是 detached HEAD 状态，显示 commit 短哈希
+      const shortHash = headContent.trim().slice(0, 7);
+      return `Git (${shortHash}...)`;
+    } catch {
+      return undefined;
+    }
   }
 }
 

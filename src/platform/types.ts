@@ -214,7 +214,9 @@ export interface RawCardCallbackEvent {
     form_value?: Record<string, unknown>;
     tag?: string;
     option?: string;
-  };
+  } | string;
+  /** 操作值（SDK 某些版本直接返回此字段） */
+  actionValue?: Record<string, unknown>;
   /** 上下文信息 (实际格式) */
   context?: {
     open_message_id?: string;

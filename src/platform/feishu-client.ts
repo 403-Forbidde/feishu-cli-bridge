@@ -232,7 +232,7 @@ export class FeishuClient extends EventEmitter {
             hasChatId: !!rawEvent.chat_id,
             hasMessageId: !!rawEvent.message_id,
             hasAction: !!rawEvent.action,
-            actionValue: rawEvent.action?.value,
+            actionValue: typeof rawEvent.action === 'object' ? rawEvent.action?.value : rawEvent.actionValue,
             hasEvent: !!rawEvent.event,
             eventKeys: rawEvent.event ? Object.keys(rawEvent.event) : [],
           }, '卡片回调事件结构分析');
@@ -343,23 +343,37 @@ export class FeishuClient extends EventEmitter {
   /**
    * 解析卡片回调事件
    * 支持格式：
-   * { operator: { open_id }, action: { value, form_value, tag, option }, context: { open_message_id, open_chat_id } }
+   * 1. { operator: { open_id }, action: { value }, context: { ... } }
+   * 2. { operator: { open_id }, action: "action_name", actionValue: { ... }, context: { ... } }
    */
   private parseCardCallbackEvent(rawEvent: RawCardCallbackEvent): CardCallbackEvent {
     // Node.js SDK 格式使用 operator/context 嵌套
     const operator = rawEvent.operator;
-    const action = rawEvent.action;
     const context = rawEvent.context;
+
+    // 处理 action 的两种格式
+    let actionName: string | undefined;
+    let actionValue: Record<string, unknown> = {};
+
+    if (typeof rawEvent.action === 'string') {
+      // 格式 2: action 是字符串，actionValue 是单独字段
+      actionName = rawEvent.action;
+      actionValue = rawEvent.actionValue || {};
+    } else if (rawEvent.action && typeof rawEvent.action === 'object') {
+      // 格式 1: action 是对象，value 嵌套在内部
+      actionName = rawEvent.action.value?.action as string | undefined;
+      actionValue = rawEvent.action.value || {};
+    }
 
     return {
       openId: operator?.open_id ?? '',
       chatId: context?.open_chat_id ?? '',
       messageId: context?.open_message_id ?? '',
       data: {
-        action: action?.value?.action as string | undefined,
-        form: action?.form_value,
-        selected: action?.option ? [action.option] : undefined,
-        targetElementId: action?.tag,
+        action: actionName,
+        form: typeof rawEvent.action === 'object' ? rawEvent.action?.form_value : undefined,
+        selected: typeof rawEvent.action === 'object' && rawEvent.action?.option ? [rawEvent.action.option] : undefined,
+        targetElementId: typeof rawEvent.action === 'object' ? rawEvent.action?.tag : undefined,
       },
       raw: rawEvent,
     };

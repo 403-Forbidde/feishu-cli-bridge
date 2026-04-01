@@ -156,9 +156,18 @@ export class MessageProcessor {
   async processCardCallback(event: CardCallbackEvent): Promise<CardCallbackResponse> {
     // 从 raw 中获取完整的 action value（包含按钮点击的所有数据）
     const rawEvent = event.raw as {
-      action?: { value?: Record<string, unknown> };
+      action?: { value?: Record<string, unknown> } | string;
+      actionValue?: Record<string, unknown>;
     } | undefined;
-    const actionValue = rawEvent?.action?.value || {};
+
+    // 支持两种 SDK 格式
+    let actionValue: Record<string, unknown> = {};
+    if (typeof rawEvent?.action === 'string') {
+      actionValue = rawEvent?.actionValue || {};
+    } else {
+      actionValue = rawEvent?.action?.value || {};
+    }
+
     const action = event.data.action as string | undefined;
 
     logger.info(
@@ -198,10 +207,10 @@ export class MessageProcessor {
         return this.handleSessionPageCallback(event, actionValue);
 
       case 'switch_project':
-        return this.handleSwitchProjectCallback(event);
+        return this.handleSwitchProjectCallback(event, actionValue);
 
       case 'delete_project':
-        return this.handleDeleteProjectCallback(event);
+        return this.handleDeleteProjectCallback(event, actionValue);
 
       default:
         logger.warn({ action }, '未知的卡片回调动作');
@@ -725,25 +734,86 @@ export class MessageProcessor {
    * 处理切换项目回调
    */
   private async handleSwitchProjectCallback(
-    event: CardCallbackEvent
+    event: CardCallbackEvent,
+    actionValue: Record<string, unknown>
   ): Promise<CardCallbackResponse> {
-    const projectId = event.data.selected?.[0];
+    const projectId = actionValue.projectId as string | undefined;
+
     if (!projectId) {
+      logger.warn('切换项目失败: 缺少 projectId');
       return {};
     }
 
-    await this.projectManager.switchProject(projectId);
+    const success = await this.projectManager.switchProject(projectId);
+    if (!success) {
+      await this.feishuAPI.sendText(event.chatId, '❌ 切换项目失败');
+      return {};
+    }
 
-    return {};
+    // 切换成功，刷新项目列表卡片
+    return await this.buildProjectListCardResponse(event.chatId);
   }
 
   /**
    * 处理删除项目回调
    */
   private async handleDeleteProjectCallback(
-    _event: CardCallbackEvent
+    event: CardCallbackEvent,
+    actionValue: Record<string, unknown>
   ): Promise<CardCallbackResponse> {
-    return {};
+    const projectId = actionValue.projectId as string | undefined;
+
+    if (!projectId) {
+      logger.warn('删除项目失败: 缺少 projectId');
+      return {};
+    }
+
+    const success = await this.projectManager.deleteProject(projectId);
+    if (!success) {
+      await this.feishuAPI.sendText(event.chatId, '❌ 删除项目失败');
+      return {};
+    }
+
+    // 删除成功，刷新项目列表卡片
+    return await this.buildProjectListCardResponse(event.chatId);
+  }
+
+  /**
+   * 构建项目列表卡片响应
+   */
+  private async buildProjectListCardResponse(
+    chatId: string
+  ): Promise<CardCallbackResponse> {
+    try {
+      const projects = await this.projectManager.listProjects();
+      const currentProject = await this.projectManager.getCurrentProject();
+
+      if (projects.length === 0) {
+        await this.feishuAPI.sendText(
+          chatId,
+          '📂 暂无项目\n\n使用 `/pa <路径> [名称]` 添加项目'
+        );
+        return {};
+      }
+
+      // 转换为 ProjectInfo 格式
+      const projectInfos = projects.map(p => ({
+        id: p.id,
+        name: p.displayName || p.name,
+        path: p.path,
+        createdAt: p.createdAt,
+        updatedAt: p.updatedAt,
+        isActive: p.id === currentProject?.id,
+      }));
+
+      const { buildProjectListCard } = await import('../cards/index.js');
+      const card = buildProjectListCard(projectInfos, currentProject?.id);
+
+      return { card };
+    } catch (error) {
+      logger.error({ error, chatId }, '构建项目列表卡片响应失败');
+      return {};
+    }
   }
 }
 

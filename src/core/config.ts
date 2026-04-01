@@ -167,7 +167,7 @@ function loadFromEnv(): Config {
       maxProjects: parseIntEnv(process.env.MAX_PROJECTS, DEFAULTS.PROJECT_MAX_PROJECTS),
     },
     security: {
-      allowedProjectRoot: process.env.ALLOWED_PROJECT_ROOT || homedir(),
+      allowedProjectRoot: process.env.ALLOWED_PROJECT_ROOT || '/',
       maxAttachmentSize: parseIntEnv(process.env.MAX_ATTACHMENT_SIZE, DEFAULTS.SECURITY_MAX_ATTACHMENT_SIZE),
       maxPromptLength: parseIntEnv(process.env.MAX_PROMPT_LENGTH, DEFAULTS.SECURITY_MAX_PROMPT_LENGTH),
     },
@@ -235,7 +235,7 @@ function parseConfig(data: Record<string, unknown>): Config {
       maxProjects: (projectData.max_projects as number) || DEFAULTS.PROJECT_MAX_PROJECTS,
     },
     security: {
-      allowedProjectRoot: (securityData.allowed_project_root as string) || homedir(),
+      allowedProjectRoot: (securityData.allowed_project_root as string) || '/',
       maxAttachmentSize: (securityData.max_attachment_size as number) || DEFAULTS.SECURITY_MAX_ATTACHMENT_SIZE,
       maxPromptLength: (securityData.max_prompt_length as number) || DEFAULTS.SECURITY_MAX_PROMPT_LENGTH,
     },

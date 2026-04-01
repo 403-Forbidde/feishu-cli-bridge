@@ -418,15 +418,33 @@ export class CommandProcessor {
     const projects = await this.projectManager.listProjects();
     const currentProject = await this.projectManager.getCurrentProject();
 
-    if (projects.length === 0) {
-      await this.sendText(
-        context.chatId,
-        '📂 暂无项目\n\n使用 `/pa <路径> [名称]` 添加项目'
-      );
-      return;
+    // 获取当前项目的 VCS 信息
+    let activeProjectVCS: string | undefined;
+    if (currentProject) {
+      activeProjectVCS = await this.projectManager.getVCSInfo(currentProject.path);
     }
 
-    const card = buildProjectListCard(projects, currentProject?.id);
+    // 转换为 ProjectInfo 格式
+    const projectInfos = await Promise.all(
+      projects.map(async (p) => {
+        const isActive = p.id === currentProject?.id;
+        let vcs: string | undefined;
+        if (isActive) {
+          vcs = activeProjectVCS;
+        }
+        return {
+          id: p.id,
+          name: p.displayName || p.name,
+          path: p.path,
+          createdAt: p.createdAt,
+          updatedAt: p.updatedAt,
+          isActive,
+          vcs,
+        };
+      })
+    );
+
+    const card = buildProjectListCard(projectInfos, currentProject?.id);
     await this.feishuAPI.sendCardMessage(context.chatId, card);
   }
 
@@ -467,7 +485,17 @@ export class CommandProcessor {
       return;
     }
 
-    const card = buildProjectInfoCard(currentProject);
+    // 转换为 ProjectInfo 格式
+    const projectInfo = {
+      id: currentProject.id,
+      name: currentProject.displayName || currentProject.name,
+      path: currentProject.path,
+      createdAt: currentProject.createdAt,
+      updatedAt: currentProject.updatedAt,
+      isActive: true,
+    };
+
+    const card = buildProjectInfoCard(projectInfo);
     await this.feishuAPI.sendCardMessage(context.chatId, card);
   }
 
