@@ -44,11 +44,33 @@ export function buildModeSelectCard(
 ): FeishuCard {
   const elements: CardElement[] = [];
 
-  const getLabel = (a: AgentInfo): string => a.displayName || a.name;
+  // Agent 中文显示名称映射
+  const AGENT_NAME_MAP: Record<string, string> = {
+    build: 'Build · 构建',
+    plan: 'Plan · 规划',
+    explore: 'Explore · 探索',
+    general: 'General · 通用',
+    compaction: 'Compaction · 压缩',
+    summary: 'Summary · 总结',
+    title: 'Title · 标题',
+  };
+
+  // Agent 中文描述映射
+  const AGENT_DESC_MAP: Record<string, string> = {
+    build: '默认模式，全工具权限，可读写文件、执行命令',
+    plan: '只读模式，用于分析代码和制定方案，不会修改文件',
+    explore: '快速代码库探索，查找文件和搜索代码',
+    general: '通用目的 agent，处理多步骤任务',
+    compaction: '对话压缩，生成会话摘要',
+    summary: '生成对话总结',
+    title: '生成会话标题',
+  };
+
+  const getLabel = (a: AgentInfo): string => AGENT_NAME_MAP[a.name] || a.displayName || a.name;
 
   const currentInfo = agents.find((a) => a.name === currentAgent);
   const currentLabel = currentInfo ? getLabel(currentInfo) : currentAgent;
-  const currentDesc = currentInfo?.description || '';
+  const currentDesc = currentInfo ? (AGENT_DESC_MAP[currentInfo.name] || currentInfo.description || '') : '';
 
   // ── 当前激活区块（绿色高亮，无切换按钮）─────────────────────────────
   elements.push({
@@ -65,7 +87,7 @@ export function buildModeSelectCard(
   for (const agent of agents) {
     const name = agent.name;
     const label = getLabel(agent);
-    const desc = agent.description || '';
+    const desc = AGENT_DESC_MAP[name] || agent.description || '';
     if (name === currentAgent) {
       continue;
     }

@@ -14,6 +14,7 @@ import type { SessionManager } from '../../session/manager.js';
 import type { ProjectManager } from '../../project/manager.js';
 import { buildSessionListCard } from '../cards/session-cards.js';
 import { buildProjectListCard, buildProjectInfoCard } from '../cards/project-cards.js';
+import { buildModeSelectCard } from '../../card-builder/interactive-cards.js';
 
 /**
  * 命令处理器选项
@@ -92,6 +93,9 @@ export class CommandProcessor {
           break;
         case '/model':
           await this.handleModelCommand(context, args);
+          break;
+        case '/mode':
+          await this.handleModeCommand(context, args);
           break;
         case '/reset':
         case '/clear':
@@ -309,6 +313,61 @@ export class CommandProcessor {
     }
 
     await this.sendText(context.chatId, lines.join('\n'));
+  }
+
+  /**
+   * 处理 /mode - 模式/Agent 切换
+   */
+  private async handleModeCommand(context: CommandContext, args: string[]): Promise<void> {
+    const adapter = this.adapters.get(context.adapterType);
+    if (!adapter) {
+      await this.sendText(context.chatId, `❌ 适配器 ${context.adapterType} 不可用`);
+      return;
+    }
+
+    // OpenCode 适配器（直接类型断言，因为目前只支持 OpenCode）
+    const opencodeAdapter = adapter as unknown as {
+      listAgents(): Promise<Array<{ id: string; name?: string; description?: string }>>;
+      switchAgent(agentId: string): Promise<boolean>;
+      getCurrentAgent(): string;
+    };
+
+    // 如果有参数，尝试切换模式
+    if (args.length > 0) {
+      const agentId = args[0];
+      const success = await opencodeAdapter.switchAgent(agentId);
+      if (success) {
+        await this.sendText(context.chatId, `✅ 已切换到模式: **${agentId}**`);
+      } else {
+        await this.sendText(context.chatId, `❌ 无法切换到模式: **${agentId}**`);
+      }
+
+      // 切换后显示模式列表
+      const agents = await opencodeAdapter.listAgents();
+      const current = opencodeAdapter.getCurrentAgent();
+      const card = buildModeSelectCard(
+        agents.map((a) => ({ name: a.id, displayName: a.name, description: a.description })),
+        current,
+        context.adapterType
+      );
+      await this.feishuAPI.sendCardMessage(context.chatId, card);
+      return;
+    }
+
+    // 列出可用模式
+    const agents = await opencodeAdapter.listAgents();
+    if (!agents || agents.length === 0) {
+      await this.sendText(context.chatId, 'ℹ️ 暂无可用 Agent 模式');
+      return;
+    }
+
+    const current = opencodeAdapter.getCurrentAgent();
+    const card = buildModeSelectCard(
+      agents.map((a) => ({ name: a.id, displayName: a.name, description: a.description })),
+      current,
+      context.adapterType
+    );
+    await this.feishuAPI.sendCardMessage(context.chatId, card);
   }
 
   /**

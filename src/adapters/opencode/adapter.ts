@@ -49,6 +49,24 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
   // 活跃的会话状态
   private activeWorkingDir: string = '';
 
+  // 内置 Agent 定义（参考 Python 实现）
+  private readonly BUILTIN_AGENTS: Record<string, { name: string; description: string }> = {
+    build: { name: 'Build · 构建', description: '默认模式，全工具权限，可读写文件、执行命令' },
+    plan: { name: 'Plan · 规划', description: '只读模式，用于分析代码和制定方案，不会修改文件' },
+  };
+
+  private readonly OHM_AGENTS: Record<string, { name: string; description: string }> = {
+    sisyphus: { name: 'Sisyphus · 总协调', description: '主协调者，并行调度其他 agent，驱动任务完成' },
+    hephaestus: { name: 'Hephaestus · 深度工作', description: '自主深度工作者，端到端探索和执行代码任务' },
+    prometheus: { name: 'Prometheus · 战略规划', description: '动手前先与你确认任务范围和策略' },
+    oracle: { name: 'Oracle · 架构调试', description: '架构设计与调试专家' },
+    librarian: { name: 'Librarian · 文档搜索', description: '文档查找与代码搜索专家' },
+    explore: { name: 'Explore · 快速探索', description: '快速代码库 grep 与文件浏览' },
+    multimodal_looker: { name: 'Multimodal Looker · 视觉分析', description: '图片与多模态内容分析' },
+  };
+
+  private readonly OHM_SIGNATURE = new Set(['sisyphus', 'hephaestus', 'prometheus']);
+
   constructor(config: AdapterConfig) {
     super(config);
 
@@ -317,6 +335,73 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
    */
   getCurrentModel(): string {
     return this.opencodeConfig.defaultModel;
+  }
+
+  /**
+   * 列出可用 Agents
+   */
+  async listAgents(): Promise<Array<{ id: string; name?: string; description?: string }>> {
+    await this.ensureServer();
+
+    try {
+      const agents = await this.httpClient.listAgents();
+
+      // 检查返回的 agents 是否包含 OHM 签名
+      const namesLower = new Set(agents.map((a) => a.name?.toLowerCase() || ''));
+      const hasOhmSignature = [...this.OHM_SIGNATURE].some((sig) => namesLower.has(sig));
+
+      if (hasOhmSignature) {
+        // 返回 OHM agents，并映射为统一格式
+        return agents
+          .filter((a) => {
+            const key = a.name?.toLowerCase() || '';
+            return key in this.OHM_AGENTS;
+          })
+          .map((a) => {
+            const key = a.name?.toLowerCase() || '';
+            const display = this.OHM_AGENTS[key];
+            return {
+              id: a.name,
+              name: display?.name || a.name,
+              description: display?.description || a.description || '',
+            };
+          });
+      }
+
+      // 非 OHM 环境：返回所有非隐藏的 primary agents
+      return agents
+        .filter((a) => !a.hidden && (a.mode === 'primary' || !a.mode))
+        .map((a) => ({
+          id: a.name,
+          name: a.name,
+          description: a.description || '',
+        }));
+    } catch (error) {
+      logger.warn({ err: error }, 'listAgents 失败，使用内置 agents');
+      // 返回内置 agents 作为后备
+      return Object.entries(this.BUILTIN_AGENTS).map(([key, value]) => ({
+        id: key,
+        name: value.name,
+        description: value.description,
+      }));
+    }
+  }
+
+  /**
+   * 切换 Agent
+   * 注意：Python 实现中只更新本地配置，不调用 API
+   */
+  async switchAgent(agentId: string): Promise<boolean> {
+    this.opencodeConfig.defaultAgent = agentId;
+    logger.info({ agentId }, '切换到 agent');
+    return true;
+  }
+
+  /**
+   * 获取当前 Agent
+   */
+  getCurrentAgent(): string {
+    return this.opencodeConfig.defaultAgent;
   }
 
   /**

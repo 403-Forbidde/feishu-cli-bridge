@@ -36,6 +36,7 @@ const TUI_COMMANDS = [
   '/new',      // 创建新会话
   '/session',  // 会话管理
   '/model',    // 模型管理
+  '/mode',     // 模式切换（Agent）
   '/reset',    // 重置会话
   '/clear',    // 清空历史
   '/rename',   // 重命名会话

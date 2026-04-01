@@ -281,13 +281,32 @@ export class OpenCodeHTTPClient {
 
   /**
    * 获取可用 Agents 列表
+   * 端点: /agent (参考 Python 实现)
    */
-  async listAgents(): Promise<AgentInfo[]> {
+  async listAgents(): Promise<
+    Array<{
+      name: string;
+      display_name?: string;
+      description?: string;
+      hidden?: boolean;
+      mode?: string;
+      native?: boolean;
+    }>
+  > {
     this.ensureInitialized();
 
     try {
-      const response = await this.client!.get<{ agents: AgentInfo[] }>('/agents');
-      return response.data.agents || [];
+      const response = await this.client!.get<
+        Array<{
+          name: string;
+          display_name?: string;
+          description?: string;
+          hidden?: boolean;
+          mode?: string;
+          native?: boolean;
+        }>
+      >('/agent');
+      return response.data || [];
     } catch (error) {
       throw this.wrapError('Failed to list agents', error);
     }

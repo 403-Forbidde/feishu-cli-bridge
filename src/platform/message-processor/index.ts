@@ -226,6 +226,9 @@ export class MessageProcessor {
       case 'delete_project':
         return this.handleDeleteProjectCallback(event, actionValue);
 
+      case 'switch_mode':
+        return this.handleSwitchModeCallback(event, actionValue);
+
       default:
         logger.warn({ action }, '未知的卡片回调动作');
         return {};
@@ -769,6 +772,53 @@ export class MessageProcessor {
 
     // 切换成功，刷新项目列表卡片
     return await this.buildProjectListCardResponse(event.chatId);
+  }
+
+  /**
+   * 处理切换模式回调
+   */
+  private async handleSwitchModeCallback(
+    event: CardCallbackEvent,
+    actionValue: Record<string, unknown>
+  ): Promise<CardCallbackResponse> {
+    const agentId = actionValue.agent_id as string | undefined;
+
+    if (!agentId) {
+      logger.warn('切换模式失败: 缺少 agent_id');
+      return {};
+    }
+
+    // 获取适配器
+    const adapter = this.getAdapter(this.defaultAdapterType);
+    if (!adapter) {
+      await this.feishuAPI.sendText(event.chatId, '❌ 适配器不可用');
+      return {};
+    }
+
+    // 调用适配器切换 agent
+    const opencodeAdapter = adapter as unknown as {
+      switchAgent(agentId: string): Promise<boolean>;
+      listAgents(): Promise<Array<{ id: string; name?: string; description?: string }>>;
+      getCurrentAgent(): string;
+    };
+
+    const success = await opencodeAdapter.switchAgent(agentId);
+    if (!success) {
+      await this.feishuAPI.sendText(event.chatId, `❌ 无法切换到模式: ${agentId}`);
+      return {};
+    }
+
+    // 刷新模式列表卡片
+    const agents = await opencodeAdapter.listAgents();
+    const current = opencodeAdapter.getCurrentAgent();
+    const { buildModeSelectCard } = await import('../../card-builder/interactive-cards.js');
+    const card = buildModeSelectCard(
+      agents.map((a) => ({ name: a.id, displayName: a.name, description: a.description })),
+      current,
+      this.defaultAdapterType
+    );
+
+    return { card };
   }
 
   /**

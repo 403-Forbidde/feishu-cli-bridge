@@ -162,7 +162,7 @@ export function buildProjectListCard(
         content: `<font color='grey'>📂</font> \`${shortenPath(project.path)}\` · ${timeStr}`,
       });
 
-      // 操作按钮
+      // 操作按钮（水平排列，放在最下方）
       elements.push({
         tag: 'column_set',
         flex_mode: 'none',
@@ -171,25 +171,47 @@ export function buildProjectListCard(
             tag: 'column',
             width: 'weighted',
             weight: 1,
-            elements: [],
-          },
-          {
-            tag: 'column',
-            width: 'auto',
             elements: [
               {
                 tag: 'button',
                 text: { tag: 'plain_text', content: '▶ 切换' },
                 type: 'primary',
+                size: 'medium',
                 value: {
                   action: 'switch_project',
                   projectId: project.id,
                 },
               },
+            ],
+          },
+          {
+            tag: 'column',
+            width: 'weighted',
+            weight: 1,
+            elements: [
+              {
+                tag: 'button',
+                text: { tag: 'plain_text', content: '📝 改名' },
+                type: 'default',
+                size: 'medium',
+                value: {
+                  action: 'rename_project_prompt',
+                  projectId: project.id,
+                  projectName: project.name,
+                },
+              },
+            ],
+          },
+          {
+            tag: 'column',
+            width: 'weighted',
+            weight: 1,
+            elements: [
               {
                 tag: 'button',
                 text: { tag: 'plain_text', content: '🗑️ 删除' },
                 type: 'danger',
+                size: 'medium',
                 value: {
                   action: 'delete_project',
                   projectId: project.id,
@@ -339,6 +361,44 @@ export function buildProjectInfoCard(project: ProjectInfo): object {
     header: {
       title: { tag: 'plain_text', content: '📁 项目信息' },
       template: 'blue',
+    },
+    body: { elements },
+  };
+}
+
+/**
+ * 构建项目重命名提示卡片
+ *
+ * 显示需要改名的项目信息，并提示用户直接回复新名称
+ *
+ * @param project - 需要改名的项目
+ */
+export function buildRenameProjectPromptCard(project: ProjectInfo): object {
+  const displayId = project.id.length >= 12 ? project.id.slice(-12) : project.id;
+  const createdStr = formatDateTime(project.createdAt);
+
+  const elements: object[] = [
+    {
+      tag: 'markdown',
+      content: `📝 **重命名项目**`,
+    },
+    { tag: 'hr' },
+    {
+      tag: 'markdown',
+      content: `📁 **当前名称：** ${project.name}\n🆔 **项目ID：** \`${displayId}\`\n📅 **创建时间：** ${createdStr}`,
+    },
+    { tag: 'hr' },
+    {
+      tag: 'markdown',
+      content: `<font color='orange'>⚠️ **请直接回复此消息，输入新的项目名称**</font>\n\n输入后系统将自动完成重命名并切换至该项目`,
+    },
+  ];
+
+  return {
+    schema: '2.0',
+    header: {
+      title: { tag: 'plain_text', content: '📝 重命名项目' },
+      template: 'orange',
     },
     body: { elements },
   };
