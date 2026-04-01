@@ -108,9 +108,16 @@ export function buildProjectListCard(
       : createdStr;
     const vcsText = activeProject.vcs || '未启用项目版本管理';
 
+    // 表格1：项目ID + 版本管理
     elements.push({
       tag: 'markdown',
-      content: `| 🆔 项目ID | 📅 创建时间 |\n| --- | --- |\n| ${displayId} | ${createdStr} |\n| 🔀 版本管理 | 📝 更新时间 |\n| ${vcsText} | ${updatedStr} |`,
+      content: `| 🆔 项目ID | 🔀 版本管理 |\n| --- | --- |\n| ${displayId} | ${vcsText} |`,
+    });
+
+    // 表格2：创建时间 + 更新时间
+    elements.push({
+      tag: 'markdown',
+      content: `| 📅 创建时间 | 📝 更新时间 |\n| --- | --- |\n| ${createdStr} | ${updatedStr} |`,
     });
 
     // 项目路径（表格外单独一行）
