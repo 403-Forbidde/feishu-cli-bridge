@@ -100,7 +100,7 @@ export function buildProjectListCard(
       content: `**${activeProject.name}**`,
     });
 
-    // 表格：使用 column_set + markdown 布局
+    // 表格：使用 Markdown 表格样式
     const displayId = activeProject.id.length >= 12 ? activeProject.id.slice(-12) : activeProject.id;
     const createdStr = formatDateTime(activeProject.createdAt);
     const updatedStr = activeProject.updatedAt && activeProject.updatedAt !== activeProject.createdAt
@@ -108,124 +108,9 @@ export function buildProjectListCard(
       : createdStr;
     const vcsText = activeProject.vcs || '未启用项目版本管理';
 
-    // 第一行标题：ID + 创建时间（使用灰色背景标签）
     elements.push({
-      tag: 'column_set',
-      flex_mode: 'none',
-      columns: [
-        {
-          tag: 'column',
-          width: 'weighted',
-          weight: 1,
-          elements: [
-            {
-              tag: 'markdown',
-              content: '<font color="grey">🆔</font> **ID**',
-            },
-          ],
-        },
-        {
-          tag: 'column',
-          width: 'weighted',
-          weight: 1,
-          elements: [
-            {
-              tag: 'markdown',
-              content: '<font color="grey">📅</font> **创建时间**',
-            },
-          ],
-        },
-      ],
-    });
-
-    // 第一行内容：ID值 + 创建时间值
-    elements.push({
-      tag: 'column_set',
-      flex_mode: 'none',
-      columns: [
-        {
-          tag: 'column',
-          width: 'weighted',
-          weight: 1,
-          elements: [
-            {
-              tag: 'markdown',
-              content: `\`${displayId}\``,
-            },
-          ],
-        },
-        {
-          tag: 'column',
-          width: 'weighted',
-          weight: 1,
-          elements: [
-            {
-              tag: 'markdown',
-              content: createdStr,
-            },
-          ],
-        },
-      ],
-    });
-
-    // 第二行标题：版本管理 + 更新时间
-    elements.push({
-      tag: 'column_set',
-      flex_mode: 'none',
-      columns: [
-        {
-          tag: 'column',
-          width: 'weighted',
-          weight: 1,
-          elements: [
-            {
-              tag: 'markdown',
-              content: '<font color="grey">🔀</font> **版本管理**',
-            },
-          ],
-        },
-        {
-          tag: 'column',
-          width: 'weighted',
-          weight: 1,
-          elements: [
-            {
-              tag: 'markdown',
-              content: '<font color="grey">📝</font> **更新时间**',
-            },
-          ],
-        },
-      ],
-    });
-
-    // 第二行内容：版本管理值 + 更新时间值
-    elements.push({
-      tag: 'column_set',
-      flex_mode: 'none',
-      columns: [
-        {
-          tag: 'column',
-          width: 'weighted',
-          weight: 1,
-          elements: [
-            {
-              tag: 'markdown',
-              content: vcsText,
-            },
-          ],
-        },
-        {
-          tag: 'column',
-          width: 'weighted',
-          weight: 1,
-          elements: [
-            {
-              tag: 'markdown',
-              content: updatedStr,
-            },
-          ],
-        },
-      ],
+      tag: 'markdown',
+      content: `| 🆔 ID | 📅 创建时间 |\n| --- | --- |\n| ${displayId} | ${createdStr} |\n| 🔀 版本管理 | 📝 更新时间 |\n| ${vcsText} | ${updatedStr} |`,
     });
 
     // 项目路径（表格外单独一行）
