@@ -110,7 +110,7 @@ export function buildProjectListCard(
 
     elements.push({
       tag: 'markdown',
-      content: `| 🆔 **项目ID** | 📅 **创建时间** |\n| --- | --- |\n| ${displayId} | ${createdStr} |\n| 🔀 **版本管理** | 📝 **更新时间** |\n| ${vcsText} | ${updatedStr} |`,
+      content: `| 🆔 项目ID | 📅 创建时间 |\n| --- | --- |\n| ${displayId} | ${createdStr} |\n| 🔀 版本管理 | 📝 更新时间 |\n| ${vcsText} | ${updatedStr} |`,
     });
 
     // 项目路径（表格外单独一行）
