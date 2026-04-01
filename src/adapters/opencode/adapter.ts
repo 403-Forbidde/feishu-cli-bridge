@@ -301,6 +301,11 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
 
     try {
       const models = await this.httpClient.listModels();
+      // 如果 API 返回空数组，使用配置中的模型列表作为后备
+      if (!models || models.length === 0) {
+        logger.debug('API returned empty models list, falling back to config');
+        return super.listModels();
+      }
       return models.map((m) => ({
         id: m.id,
         name: m.name,

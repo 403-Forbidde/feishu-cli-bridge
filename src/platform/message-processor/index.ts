@@ -229,6 +229,9 @@ export class MessageProcessor {
       case 'switch_mode':
         return this.handleSwitchModeCallback(event, actionValue);
 
+      case 'switch_model':
+        return this.handleSwitchModelCallback(event, actionValue);
+
       default:
         logger.warn({ action }, '未知的卡片回调动作');
         return {};
@@ -814,6 +817,47 @@ export class MessageProcessor {
     const { buildModeSelectCard } = await import('../../card-builder/interactive-cards.js');
     const card = buildModeSelectCard(
       agents.map((a) => ({ name: a.id, displayName: a.name, description: a.description })),
+      current,
+      this.defaultAdapterType
+    );
+
+    return { card };
+  }
+
+  /**
+   * 处理切换模型回调
+   */
+  private async handleSwitchModelCallback(
+    event: CardCallbackEvent,
+    actionValue: Record<string, unknown>
+  ): Promise<CardCallbackResponse> {
+    const modelId = actionValue.model_id as string | undefined;
+
+    if (!modelId) {
+      logger.warn('切换模型失败: 缺少 model_id');
+      return {};
+    }
+
+    // 获取适配器
+    const adapter = this.getAdapter(this.defaultAdapterType);
+    if (!adapter) {
+      await this.feishuAPI.sendText(event.chatId, '❌ 适配器不可用');
+      return {};
+    }
+
+    // 调用适配器切换模型
+    const success = await adapter.switchModel(modelId);
+    if (!success) {
+      await this.feishuAPI.sendText(event.chatId, `❌ 无法切换到模型: ${modelId}`);
+      return {};
+    }
+
+    // 刷新模型列表卡片
+    const models = await adapter.listModels();
+    const current = adapter.getCurrentModel();
+    const { buildModelSelectCard } = await import('../../card-builder/interactive-cards.js');
+    const card = buildModelSelectCard(
+      models.map((m) => ({ ...m, fullId: m.id })),
       current,
       this.defaultAdapterType
     );

@@ -15,7 +15,7 @@ import type { ProjectManager } from '../../project/manager.js';
 import { buildSessionListCard } from '../cards/session-cards.js';
 import { buildProjectListCard, buildProjectInfoCard } from '../cards/project-cards.js';
 import { buildHelpCard } from '../cards/help-card.js';
-import { buildModeSelectCard } from '../../card-builder/interactive-cards.js';
+import { buildModeSelectCard, buildModelSelectCard } from '../../card-builder/interactive-cards.js';
 
 /**
  * 命令处理器选项
@@ -279,17 +279,16 @@ export class CommandProcessor {
       return;
     }
 
-    // 列出模型
+    // 列出模型 - 使用交互式卡片
     const models = await adapter.listModels();
     const currentModel = adapter.getCurrentModel();
 
-    const lines = ['📋 **可用模型列表**\n'];
-    for (const model of models) {
-      const isCurrent = model.id === currentModel;
-      lines.push(`${isCurrent ? '▶️' : '  '} **${model.name}** (\`${model.id}\`)${isCurrent ? ' [当前]' : ''}`);
-    }
-
-    await this.sendText(context.chatId, lines.join('\n'));
+    const card = buildModelSelectCard(
+      models.map((m) => ({ ...m, fullId: m.id })),
+      currentModel,
+      context.adapterType
+    );
+    await this.feishuAPI.sendCardMessage(context.chatId, card);
   }
 
   /**
