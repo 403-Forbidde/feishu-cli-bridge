@@ -109,7 +109,7 @@ Right-aligned footer displaying elapsed time, token usage, context percentage, a
 Automatic download and base64 encoding of images/files sent, passed as FilePart for vision model recognition
 
 ### 📁 **Project Management**
-`/pl` interactive card for managing multiple working directories, click "Switch" button to change, with delete confirmation
+`/pl` interactive card for managing multiple working directories, with pagination, "Switch" button, and delete confirmation
 
 ### 🔄 **Working Directory Isolation**
 Each project has independent OpenCode session (via `directory` parameter), tool calls execute in precise CWD isolation
@@ -149,8 +149,8 @@ Batch processing after long gaps to avoid sparse initial updates
 - [x] IM Patch fallback (auto-switch when CardKit unavailable, 1500ms throttle)
 - [x] Collapsible thinking panel (real-time reasoning display)
 - [x] Image / file input (base64 FilePart, vision model recognition)
-- [x] Multi-project management (`/pl` interactive card for directory switching)
-- [x] TUI commands (`/new` `/session` `/model` `/mode` `/reset` `/help` `/stop`)
+- [x] Multi-project management (`/pl` interactive card with pagination and delete confirmation)
+- [x] TUI commands (`/new` `/session` `/model` `/mode` `/reset` `/help` `/stop`), all replied as interactive cards
 - [x] OpenCode Server session management (fully delegated to OpenCode server, zero local persistence)
 - [x] Cross-platform support: Windows / Linux / macOS
 
@@ -434,7 +434,7 @@ Use `@` prefix to specify tool (defaults to OpenCode):
 | Command | Description |
 |:--------|:------------|
 | `/new` | Create new session |
-| `/session` | List recent 10 sessions, reply with number to switch |
+| `/session` | List recent sessions as an interactive card with switch/rename/delete buttons |
 | `/model` | List available models (card), click button to switch; model list maintained in `config.yaml` |
 | `/mode` | List agent modes, click card button to switch (Build / Plan / oh-my-openagent) |
 | `/mode <agent>` | Directly switch to specified agent mode |
@@ -448,7 +448,7 @@ Use `@` prefix to specify tool (defaults to OpenCode):
 |:--------|:------------|
 | `/pa <path> [name]` | Add existing directory as project |
 | `/pc <path> [name]` | Create new directory and add as project |
-| `/pl` | List all projects (card with switch button) |
+| `/pl` | List all projects (interactive card with pagination and switch button) |
 | `/ps <identifier>` | Switch to specified project |
 | `/prm <identifier>` | Remove project from list (does not delete directory) |
 | `/pi [identifier]` | View project info |
@@ -607,6 +607,7 @@ feishu-cli-bridge/
 ├── vitest.config.ts
 ├── README.md                  # This file (English)
 └── doc/                       # Documentation directory
+    ├── CHANGELOG.md           # Version changelog
     └── README_CN.md           # Chinese version
 ```
 
@@ -652,6 +653,8 @@ npm run test
 - ⚡ **Performance Optimization** — HTTP connection pooling, smart throttling
 - 🛡️ **Security Hardening** — Path traversal protection, input validation
 - 🎯 **Feature Complete** — 100% parity with Python version
+- 🎴 **Unified TUI Cards** — All TUI commands (`/session`, `/model`, `/pl`, etc.) reply as interactive cards
+- 📁 **Project Management Improvements** — Pagination and delete confirmation in `/pl` cards
 
 ---
 

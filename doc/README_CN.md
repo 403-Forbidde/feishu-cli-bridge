@@ -109,7 +109,7 @@ HTTP/SSE 方式，自动启动并管理 `opencode serve`，自动预授权外部
 发送图片或文件自动下载并 base64 编码，作为 FilePart 传给模型视觉识别
 
 ### 📁 **项目管理**
-`/pl` 交互式卡片管理多个工作目录，点击「切换」按钮直接切换，带删除二次确认
+`/pl` 交互式卡片管理多个工作目录，支持分页，点击「切换」按钮直接切换，带删除二次确认
 
 ### 🔄 **工作目录隔离**
 每个项目对应独立 OpenCode session（通过 `directory` 参数），工具调用 CWD 精确隔离
@@ -150,8 +150,8 @@ HTTP/SSE 方式，自动启动并管理 `opencode serve`，自动预授权外部
 - [x] IM Patch 降级回退（CardKit 不可用时自动切换，1500ms 节流）
 - [x] 可折叠思考面板（Reasoning 过程实时展示）
 - [x] 图片 / 文件输入（base64 FilePart，视觉模型识别）
-- [x] 多项目管理（`/pl` 交互式卡片切换工作目录）
-- [x] TUI 命令（`/new` `/session` `/model` `/mode` `/reset` `/help` `/stop`）
+- [x] 多项目管理（`/pl` 交互式卡片，支持分页与删除二次确认）
+- [x] TUI 命令（`/new` `/session` `/model` `/mode` `/reset` `/help` `/stop`），全部以交互式卡片回复
 - [x] OpenCode Server 会话管理（完全委托给 OpenCode 服务器，本地零持久化）
 - [x] 跨平台支持：Windows / Linux / macOS
 
@@ -433,7 +433,7 @@ schtasks /delete /tn "FeiShuBridge" /f  & REM 卸载
 | 命令 | 说明 |
 |:-----|:-----|
 | `/new` | 创建新会话 |
-| `/session` | 列出最近 10 个会话，回复数字切换 |
+| `/session` | 列出最近会话，以交互式卡片回复，支持切换/重命名/删除 |
 | `/model` | 列出可用模型（卡片），点击按钮切换；模型列表在 `config.yaml` 中维护 |
 | `/mode` | 列出 Agent 模式，点击卡片按钮切换（Build / Plan / oh-my-openagent） |
 | `/mode <agent>` | 直接切换到指定 Agent 模式 |
@@ -447,7 +447,7 @@ schtasks /delete /tn "FeiShuBridge" /f  & REM 卸载
 |:-----|:-----|
 | `/pa <路径> [名称]` | 添加已有目录为项目 |
 | `/pc <路径> [名称]` | 创建新目录并添加为项目 |
-| `/pl` | 列出所有项目（卡片带切换按钮） |
+| `/pl` | 列出所有项目（交互式卡片，支持分页与切换按钮） |
 | `/ps <标识>` | 切换到指定项目 |
 | `/prm <标识>` | 从列表移除项目（不删除目录） |
 | `/pi [标识]` | 查看项目信息 |
@@ -625,6 +625,7 @@ feishu-cli-bridge/
 ├── vitest.config.ts
 ├── README.md                  # 🇬🇧 英文文档
 └── doc/
+    ├── CHANGELOG.md           # 版本更新日志
     └── README_CN.md           # 🇨🇳 中文文档（本文件）
 ```
 
@@ -670,6 +671,8 @@ npm run test
 - ⚡ **性能优化** — HTTP 连接池复用、智能节流
 - 🛡️ **安全加固** — 路径遍历防护、输入验证
 - 🎯 **功能完整** — 100% 功能对标 Python 版本
+- 🎴 **TUI 统一卡片化** — 所有 TUI 命令（`/session`、`/model`、`/pl` 等）均以交互式卡片回复
+- 📁 **项目管理增强** — `/pl` 卡片支持分页与删除二次确认
 
 ---
 
