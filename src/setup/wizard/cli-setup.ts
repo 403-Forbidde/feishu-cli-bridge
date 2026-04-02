@@ -1,5 +1,5 @@
 import process from 'node:process';
-import { confirm } from '@inquirer/prompts';
+import { confirm, select } from '@inquirer/prompts';
 import chalk from 'chalk';
 import ora from 'ora';
 
@@ -77,12 +77,40 @@ export async function runCliSetup(): Promise<CliSetupResult> {
     }
   }
 
-  // Model selection: skip interactive prompt, use default model directly
+  // Model selection: fetch free models from opencode and let user choose
+  const modelSpinner = ora('获取可用模型列表...').start();
+  const freeModels = await provider.fetchModels();
+  modelSpinner.stop();
+
+  let selectedModel: string;
+
+  if (freeModels.length === 0) {
+    // 如果没有获取到免费模型，使用默认配置
+    const defaultConfig = provider.getDefaultConfig();
+    selectedModel = defaultConfig.default_model;
+    console.log(chalk.yellow('  未找到免费模型，使用默认模型'));
+    console.log(chalk.dim(`  默认模型: ${selectedModel}（如需更改可后续手动修改配置文件）\n`));
+  } else {
+    // 显示找到的免费模型数量
+    console.log(chalk.green(`  找到 ${freeModels.length} 个免费模型`));
+    console.log('');
+
+    // 让用户选择模型
+    const modelChoices = freeModels.map((m) => ({
+      name: `${m.name} (${m.id})`,
+      value: m.id,
+      description: `提供商: ${m.provider || 'unknown'}`,
+    }));
+
+    selectedModel = await select({
+      message: '选择默认使用的模型',
+      choices: modelChoices,
+    });
+
+    console.log(chalk.green(`  已选择: ${selectedModel}\n`));
+  }
+
   const defaultConfig = provider.getDefaultConfig();
-  const selectedModel = defaultConfig.default_model;
-
-  console.log(chalk.dim(`  默认模型: ${selectedModel}（如需更改可后续手动修改配置文件）\n`));
-
   const config = {
     ...defaultConfig,
     default_model: selectedModel,

@@ -143,35 +143,62 @@ export class OpenCodeProvider implements ICLIProvider {
     }
   }
 
-  async fetchModels(): Promise<Array<{ id: string; name: string; provider?: string }>> {
-    // 优先尝试通过 API 获取模型列表
+  async fetchModels(): Promise<Array<{ id: string; name: string; provider?: string; isFree?: boolean }>> {
+    // 优先尝试通过 opencode models 命令获取模型列表
     try {
       const opencodePath = await which('opencode');
-      // 尝试使用 opencode models list 命令 (如果支持)
+      // 使用 opencode models 命令获取所有模型
       const { stdout, exitCode } = await execa(
         opencodePath,
-        ['models', 'list', '--json'],
+        ['models'],
         { reject: false, timeout: 15000 }
       );
       if (exitCode === 0 && stdout.trim()) {
-        const parsed = JSON.parse(stdout) as Array<{ id?: string; name?: string; provider?: string }>;
-        return parsed
-          .filter((m) => m.id)
-          .map((m) => ({
-            id: m.id!,
-            name: m.name || m.id!,
-            provider: m.provider,
+        // 解析模型列表，每行一个模型 ID
+        const allModels = stdout
+          .split('\n')
+          .map((line) => line.trim())
+          .filter((line) => line && !line.startsWith('Commands:') && !line.startsWith('Options:') && !line.startsWith('Positionals:'));
+
+        // 过滤出包含 free 的模型
+        const freeModels = allModels
+          .filter((id) => id.toLowerCase().includes('free'))
+          .map((id) => ({
+            id,
+            name: this.formatModelName(id),
+            provider: id.split('/')[0] || 'unknown',
+            isFree: true,
           }));
+
+        if (freeModels.length > 0) {
+          return freeModels;
+        }
       }
     } catch {
       // fallback to recommended models
     }
 
-    return this.recommendedModels.map((m) => ({
-      id: m.id,
-      name: m.name,
-      provider: 'kimi',
-    }));
+    // 如果无法获取或没有免费模型，返回默认的免费模型列表
+    const defaultFreeModels = [
+      { id: 'opencode/mimo-v2-omni-free', name: 'Mimo V2 Omni (Free)', provider: 'opencode', isFree: true },
+      { id: 'opencode/mimo-v2-pro-free', name: 'Mimo V2 Pro (Free)', provider: 'opencode', isFree: true },
+      { id: 'opencode/minimax-m2.5-free', name: 'MiniMax M2.5 (Free)', provider: 'opencode', isFree: true },
+      { id: 'opencode/nemotron-3-super-free', name: 'Nemotron 3 Super (Free)', provider: 'opencode', isFree: true },
+      { id: 'opencode/qwen3.6-plus-free', name: 'Qwen 3.6 Plus (Free)', provider: 'opencode', isFree: true },
+    ];
+
+    return defaultFreeModels;
+  }
+
+  private formatModelName(id: string): string {
+    // 将模型 ID 转换为可读名称
+    const parts = id.split('/');
+    const name = parts[parts.length - 1] || id;
+    return name
+      .replace(/-/g, ' ')
+      .replace(/:free$/, ' (Free)')
+      .replace(/-free$/, ' (Free)')
+      .replace(/\b\w/g, (c) => c.toUpperCase());
   }
 
   getDefaultConfig(): CLIConfig {
