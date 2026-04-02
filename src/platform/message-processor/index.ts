@@ -21,6 +21,8 @@ import { MessageRouter, type RouteResult } from './router.js';
 import { AIProcessor } from './ai-processor.js';
 import { CommandProcessor } from './command-processor.js';
 import { AttachmentProcessor } from './attachment-processor.js';
+import { buildSuccessCard, buildInfoCard, buildWarningCard } from '../cards/result-cards.js';
+import { buildErrorCard } from '../cards/error.js';
 
 /**
  * 消息处理器选项
@@ -301,9 +303,9 @@ export class MessageProcessor {
 
       case 'UNKNOWN':
         logger.warn({ content: message.content }, '无法识别的消息类型');
-        await this.feishuAPI.sendText(
+        await this.feishuAPI.sendCardMessage(
           message.chatId,
-          '❓ 无法理解您的消息，发送 `/help` 查看可用命令'
+          buildInfoCard('❓ 无法理解', '无法识别您的消息类型，发送 `/help` 查看可用命令', 'grey')
         );
         break;
 
@@ -325,7 +327,10 @@ export class MessageProcessor {
     this.pendingRenameSession = null;
 
     if (!newTitle) {
-      await this.feishuAPI.sendText(message.chatId, '❌ 名称不能为空');
+      await this.feishuAPI.sendCardMessage(
+        message.chatId,
+        buildErrorCard('名称不能为空', 'invalid_request')
+      );
       return;
     }
 
@@ -333,7 +338,10 @@ export class MessageProcessor {
     const workingDir = await this.projectManager.getCurrentWorkingDir();
     const adapter = this.getAdapter(this.defaultAdapterType);
     if (!adapter) {
-      await this.feishuAPI.sendText(message.chatId, '❌ 适配器不可用');
+      await this.feishuAPI.sendCardMessage(
+        message.chatId,
+        buildErrorCard('适配器不可用', 'server')
+      );
       return;
     }
 
@@ -370,7 +378,10 @@ export class MessageProcessor {
         await this.feishuAPI.sendCardMessage(message.chatId, cardResponse.card);
       }
     } else {
-      await this.feishuAPI.sendText(message.chatId, '❌ 重命名失败');
+      await this.feishuAPI.sendCardMessage(
+        message.chatId,
+        buildErrorCard('重命名失败', 'default')
+      );
     }
   }
 
@@ -388,9 +399,9 @@ export class MessageProcessor {
 
     const adapter = this.getAdapter(session.cliType);
     if (!adapter) {
-      await this.feishuAPI.sendText(
+      await this.feishuAPI.sendCardMessage(
         message.chatId,
-        `❌ 适配器 ${session.cliType} 不可用，请联系管理员`
+        buildErrorCard(`适配器 ${session.cliType} 不可用，请联系管理员`, 'server')
       );
       return;
     }
@@ -432,9 +443,9 @@ export class MessageProcessor {
       const card = buildStopConfirmationCard();
       await this.feishuAPI.sendCardMessage(message.chatId, card);
     } else {
-      await this.feishuAPI.sendText(
+      await this.feishuAPI.sendCardMessage(
         message.chatId,
-        'ℹ️ 没有正在进行的生成'
+        buildInfoCard('ℹ️ 提示', '没有正在进行的生成', 'grey')
       );
     }
   }
@@ -453,9 +464,9 @@ export class MessageProcessor {
     const errorMessage = error instanceof Error ? error.message : '未知错误';
 
     try {
-      await this.feishuAPI.sendText(
+      await this.feishuAPI.sendCardMessage(
         message.chatId,
-        `❌ 处理消息时出错: ${errorMessage}`
+        buildErrorCard(`处理消息时出错: ${errorMessage}`, 'default')
       );
     } catch (sendError) {
       logger.error({ sendError, originalError: error }, '发送错误消息失败');
@@ -549,7 +560,10 @@ export class MessageProcessor {
     const targetSession = allSessions.find(s => s.id === sessionId);
 
     if (!targetSession) {
-      await this.feishuAPI.sendText(event.chatId, '❌ 会话不存在或已删除');
+      await this.feishuAPI.sendCardMessage(
+        event.chatId,
+        buildErrorCard('会话不存在或已删除', 'invalid_request')
+      );
       return {};
     }
 
@@ -785,7 +799,10 @@ export class MessageProcessor {
 
     const success = await this.projectManager.switchProject(projectId);
     if (!success) {
-      await this.feishuAPI.sendText(event.chatId, '❌ 切换项目失败');
+      await this.feishuAPI.sendCardMessage(
+        event.chatId,
+        buildErrorCard('切换项目失败', 'invalid_request')
+      );
       return {};
     }
 
@@ -810,7 +827,10 @@ export class MessageProcessor {
     // 获取适配器
     const adapter = this.getAdapter(this.defaultAdapterType);
     if (!adapter) {
-      await this.feishuAPI.sendText(event.chatId, '❌ 适配器不可用');
+      await this.feishuAPI.sendCardMessage(
+        event.chatId,
+        buildErrorCard('适配器不可用', 'server')
+      );
       return {};
     }
 
@@ -823,7 +843,10 @@ export class MessageProcessor {
 
     const success = await opencodeAdapter.switchAgent(agentId);
     if (!success) {
-      await this.feishuAPI.sendText(event.chatId, `❌ 无法切换到模式: ${agentId}`);
+      await this.feishuAPI.sendCardMessage(
+        event.chatId,
+        buildErrorCard(`无法切换到模式: ${agentId}`, 'invalid_request')
+      );
       return {};
     }
 
@@ -857,14 +880,20 @@ export class MessageProcessor {
     // 获取适配器
     const adapter = this.getAdapter(this.defaultAdapterType);
     if (!adapter) {
-      await this.feishuAPI.sendText(event.chatId, '❌ 适配器不可用');
+      await this.feishuAPI.sendCardMessage(
+        event.chatId,
+        buildErrorCard('适配器不可用', 'server')
+      );
       return {};
     }
 
     // 调用适配器切换模型
     const success = await adapter.switchModel(modelId);
     if (!success) {
-      await this.feishuAPI.sendText(event.chatId, `❌ 无法切换到模型: ${modelId}`);
+      await this.feishuAPI.sendCardMessage(
+        event.chatId,
+        buildErrorCard(`无法切换到模型: ${modelId}`, 'invalid_request')
+      );
       return {};
     }
 
@@ -897,7 +926,10 @@ export class MessageProcessor {
 
     const success = await this.projectManager.deleteProject(projectId);
     if (!success) {
-      await this.feishuAPI.sendText(event.chatId, '❌ 删除项目失败');
+      await this.feishuAPI.sendCardMessage(
+        event.chatId,
+        buildErrorCard('删除项目失败', 'invalid_request')
+      );
       return {};
     }
 
@@ -923,7 +955,10 @@ export class MessageProcessor {
     // 获取项目信息
     const project = await this.projectManager.getProject(projectId);
     if (!project) {
-      await this.feishuAPI.sendText(event.chatId, '❌ 项目不存在或已删除');
+      await this.feishuAPI.sendCardMessage(
+        event.chatId,
+        buildErrorCard('项目不存在或已删除', 'invalid_request')
+      );
       return {};
     }
 
@@ -961,7 +996,10 @@ export class MessageProcessor {
     this.pendingRenameProject = null;
 
     if (!newName) {
-      await this.feishuAPI.sendText(message.chatId, '❌ 名称不能为空');
+      await this.feishuAPI.sendCardMessage(
+        message.chatId,
+        buildErrorCard('名称不能为空', 'invalid_request')
+      );
       return;
     }
 
@@ -998,7 +1036,10 @@ export class MessageProcessor {
         await this.feishuAPI.sendCardMessage(message.chatId, cardResponse.card);
       }
     } else {
-      await this.feishuAPI.sendText(message.chatId, '❌ 重命名失败');
+      await this.feishuAPI.sendCardMessage(
+        message.chatId,
+        buildErrorCard('重命名失败', 'default')
+      );
     }
   }
 
@@ -1014,9 +1055,14 @@ export class MessageProcessor {
       const currentProject = await this.projectManager.getCurrentProject();
 
       if (projects.length === 0) {
-        await this.feishuAPI.sendText(
+        await this.feishuAPI.sendCardMessage(
           chatId,
-          '📂 暂无项目\n\n使用 `/pa <路径> [名称]` 添加项目'
+          buildInfoCard(
+            '📂 暂无项目',
+            '还没有任何项目',
+            'grey',
+            '使用 `/pa <路径> [名称]` 添加项目'
+          )
         );
         return {};
       }

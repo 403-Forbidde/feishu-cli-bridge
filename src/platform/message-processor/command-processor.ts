@@ -15,6 +15,8 @@ import type { ProjectManager } from '../../project/manager.js';
 import { buildSessionListCard } from '../cards/session-cards.js';
 import { buildProjectListCard, buildProjectInfoCard } from '../cards/project-cards.js';
 import { buildHelpCard } from '../cards/help-card.js';
+import { buildSuccessCard, buildInfoCard, buildWarningCard } from '../cards/result-cards.js';
+import { buildErrorCard } from '../cards/error.js';
 import { buildModeSelectCard, buildModelSelectCard } from '../../card-builder/interactive-cards.js';
 
 /**
@@ -109,11 +111,20 @@ export class CommandProcessor {
           await this.handleDeleteSession(context, args);
           break;
         default:
-          await this.sendText(context.chatId, `❓ 未知命令: ${command}`);
+          await this.feishuAPI.sendCardMessage(
+            context.chatId,
+            buildErrorCard(`未知命令: ${command}`, 'invalid_request')
+          );
       }
     } catch (error) {
       logger.error({ error, command }, '处理 TUI 命令时出错');
-      await this.sendText(context.chatId, `❌ 命令执行失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      await this.feishuAPI.sendCardMessage(
+        context.chatId,
+        buildErrorCard(
+          `命令执行失败: ${error instanceof Error ? error.message : '未知错误'}`,
+          'default'
+        )
+      );
     }
   }
 
@@ -153,11 +164,20 @@ export class CommandProcessor {
           await this.handleDeleteProject(context, args);
           break;
         default:
-          await this.sendText(context.chatId, `❓ 未知项目命令: ${subcommand}`);
+          await this.feishuAPI.sendCardMessage(
+            context.chatId,
+            buildErrorCard(`未知项目命令: ${subcommand}`, 'invalid_request')
+          );
       }
     } catch (error) {
       logger.error({ error, subcommand }, '处理项目命令时出错');
-      await this.sendText(context.chatId, `❌ 项目命令执行失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      await this.feishuAPI.sendCardMessage(
+        context.chatId,
+        buildErrorCard(
+          `项目命令执行失败: ${error instanceof Error ? error.message : '未知错误'}`,
+          'default'
+        )
+      );
     }
   }
 
@@ -184,7 +204,10 @@ export class CommandProcessor {
   private async handleNewSession(context: CommandContext, _args: string[]): Promise<void> {
     const adapter = this.adapters.get(context.adapterType);
     if (!adapter) {
-      await this.sendText(context.chatId, `❌ 适配器 ${context.adapterType} 不可用`);
+      await this.feishuAPI.sendCardMessage(
+        context.chatId,
+        buildErrorCard(`适配器 ${context.adapterType} 不可用`, 'server')
+      );
       return;
     }
 
@@ -195,14 +218,23 @@ export class CommandProcessor {
       // 清空本地会话历史
       this.sessionManager.clearHistory(context.userId);
 
-      await this.sendText(
+      const displayId = sessionInfo.id.length > 8 ? sessionInfo.id.slice(-8) : sessionInfo.id;
+      await this.feishuAPI.sendCardMessage(
         context.chatId,
-        `✅ 已创建新会话: **${sessionInfo.title}**\nID: \`${sessionInfo.id}\``
+        buildSuccessCard(
+          '✅ 已创建新会话',
+          `**${sessionInfo.title}**`,
+          [{ key: '🆔 会话ID', value: `\`${displayId}\`` }],
+          '新消息将在此会话中继续对话'
+        )
       );
     } else {
       // 适配器不支持或创建失败，只清空本地历史
       this.sessionManager.clearHistory(context.userId);
-      await this.sendText(context.chatId, '✅ 已重置会话历史');
+      await this.feishuAPI.sendCardMessage(
+        context.chatId,
+        buildSuccessCard('✅ 已重置', '会话历史已清空', [], '可以开始新的对话了')
+      );
     }
   }
 
@@ -212,7 +244,10 @@ export class CommandProcessor {
   private async handleSessionList(context: CommandContext, args: string[]): Promise<void> {
     const adapter = this.adapters.get(context.adapterType);
     if (!adapter) {
-      await this.sendText(context.chatId, `❌ 适配器 ${context.adapterType} 不可用`);
+      await this.feishuAPI.sendCardMessage(
+        context.chatId,
+        buildErrorCard(`适配器 ${context.adapterType} 不可用`, 'server')
+      );
       return;
     }
 
@@ -224,9 +259,21 @@ export class CommandProcessor {
       if (success) {
         // 清空本地历史（切换会话后需要重新加载）
         this.sessionManager.clearHistory(context.userId);
-        await this.sendText(context.chatId, `✅ 已切换到会话: \`${sessionId}\``);
+        const displayId = sessionId.length > 8 ? sessionId.slice(-8) : sessionId;
+        await this.feishuAPI.sendCardMessage(
+          context.chatId,
+          buildSuccessCard(
+            '✅ 切换成功',
+            '已切换到会话',
+            [{ key: '🆔 会话ID', value: `\`${displayId}\`` }],
+            '可以继续之前的对话了'
+          )
+        );
       } else {
-        await this.sendText(context.chatId, `❌ 无法切换到会话: \`${sessionId}\``);
+        await this.feishuAPI.sendCardMessage(
+          context.chatId,
+          buildErrorCard(`无法切换到会话: ${sessionId}`, 'invalid_request')
+        );
       }
       return;
     }
@@ -262,7 +309,10 @@ export class CommandProcessor {
   private async handleModelCommand(context: CommandContext, args: string[]): Promise<void> {
     const adapter = this.adapters.get(context.adapterType);
     if (!adapter) {
-      await this.sendText(context.chatId, `❌ 适配器 ${context.adapterType} 不可用`);
+      await this.feishuAPI.sendCardMessage(
+        context.chatId,
+        buildErrorCard(`适配器 ${context.adapterType} 不可用`, 'server')
+      );
       return;
     }
 
@@ -272,9 +322,20 @@ export class CommandProcessor {
       const success = await adapter.switchModel(modelId);
 
       if (success) {
-        await this.sendText(context.chatId, `✅ 已切换到模型: **${modelId}**`);
+        await this.feishuAPI.sendCardMessage(
+          context.chatId,
+          buildSuccessCard(
+            '✅ 切换成功',
+            '已切换到模型',
+            [{ key: '🤖 模型', value: `\`${modelId}\`` }],
+            '新消息将使用此模型'
+          )
+        );
       } else {
-        await this.sendText(context.chatId, `❌ 无法切换到模型: **${modelId}**`);
+        await this.feishuAPI.sendCardMessage(
+          context.chatId,
+          buildErrorCard(`无法切换到模型: ${modelId}`, 'invalid_request')
+        );
       }
       return;
     }
@@ -297,7 +358,10 @@ export class CommandProcessor {
   private async handleModeCommand(context: CommandContext, args: string[]): Promise<void> {
     const adapter = this.adapters.get(context.adapterType);
     if (!adapter) {
-      await this.sendText(context.chatId, `❌ 适配器 ${context.adapterType} 不可用`);
+      await this.feishuAPI.sendCardMessage(
+        context.chatId,
+        buildErrorCard(`适配器 ${context.adapterType} 不可用`, 'server')
+      );
       return;
     }
 
@@ -313,9 +377,20 @@ export class CommandProcessor {
       const agentId = args[0];
       const success = await opencodeAdapter.switchAgent(agentId);
       if (success) {
-        await this.sendText(context.chatId, `✅ 已切换到模式: **${agentId}**`);
+        await this.feishuAPI.sendCardMessage(
+          context.chatId,
+          buildSuccessCard(
+            '✅ 切换成功',
+            '已切换到模式',
+            [{ key: '🎯 模式', value: `\`${agentId}\`` }],
+            '新消息将使用此 Agent 模式'
+          )
+        );
       } else {
-        await this.sendText(context.chatId, `❌ 无法切换到模式: **${agentId}**`);
+        await this.feishuAPI.sendCardMessage(
+          context.chatId,
+          buildErrorCard(`无法切换到模式: ${agentId}`, 'invalid_request')
+        );
       }
 
       // 切换后显示模式列表
@@ -333,7 +408,10 @@ export class CommandProcessor {
     // 列出可用模式
     const agents = await opencodeAdapter.listAgents();
     if (!agents || agents.length === 0) {
-      await this.sendText(context.chatId, 'ℹ️ 暂无可用 Agent 模式');
+      await this.feishuAPI.sendCardMessage(
+        context.chatId,
+        buildInfoCard('ℹ️ 提示', '暂无可用 Agent 模式')
+      );
       return;
     }
 
@@ -360,7 +438,10 @@ export class CommandProcessor {
     // 清空本地历史
     this.sessionManager.clearHistory(context.userId);
 
-    await this.sendText(context.chatId, '🔄 会话已重置');
+    await this.feishuAPI.sendCardMessage(
+      context.chatId,
+      buildSuccessCard('✅ 已重置', '会话已重置，历史已清空', [], '可以开始新的对话了')
+    );
   }
 
   /**
@@ -368,13 +449,19 @@ export class CommandProcessor {
    */
   private async handleRenameSession(context: CommandContext, args: string[]): Promise<void> {
     if (args.length === 0) {
-      await this.sendText(context.chatId, '❌ 请提供新名称，例如: `/rename 我的新会话`');
+      await this.feishuAPI.sendCardMessage(
+        context.chatId,
+        buildErrorCard('请提供新名称，例如: `/rename 我的新会话`', 'invalid_request')
+      );
       return;
     }
 
     const adapter = this.adapters.get(context.adapterType);
     if (!adapter) {
-      await this.sendText(context.chatId, `❌ 适配器 ${context.adapterType} 不可用`);
+      await this.feishuAPI.sendCardMessage(
+        context.chatId,
+        buildErrorCard(`适配器 ${context.adapterType} 不可用`, 'server')
+      );
       return;
     }
 
@@ -382,7 +469,10 @@ export class CommandProcessor {
 
     // 获取当前会话 ID（这里简化处理，实际需要跟踪当前会话）
     // TODO: 需要从 SessionManager 获取当前会话 ID
-    await this.sendText(context.chatId, '⚠️ 重命名功能需要当前会话 ID 支持，暂不可用');
+    await this.feishuAPI.sendCardMessage(
+      context.chatId,
+      buildWarningCard('功能暂不可用', '重命名功能需要当前会话 ID 支持，敬请期待')
+    );
   }
 
   /**
@@ -390,13 +480,19 @@ export class CommandProcessor {
    */
   private async handleDeleteSession(context: CommandContext, args: string[]): Promise<void> {
     if (args.length === 0) {
-      await this.sendText(context.chatId, '❌ 请提供会话 ID，例如: `/delete sess_xxx`');
+      await this.feishuAPI.sendCardMessage(
+        context.chatId,
+        buildErrorCard('请提供会话 ID，例如: `/delete sess_xxx`', 'invalid_request')
+      );
       return;
     }
 
     const adapter = this.adapters.get(context.adapterType);
     if (!adapter) {
-      await this.sendText(context.chatId, `❌ 适配器 ${context.adapterType} 不可用`);
+      await this.feishuAPI.sendCardMessage(
+        context.chatId,
+        buildErrorCard(`适配器 ${context.adapterType} 不可用`, 'server')
+      );
       return;
     }
 
@@ -404,9 +500,16 @@ export class CommandProcessor {
     const success = await adapter.deleteSession(sessionId);
 
     if (success) {
-      await this.sendText(context.chatId, `✅ 已删除会话: \`${sessionId}\``);
+      const displayId = sessionId.length > 8 ? sessionId.slice(-8) : sessionId;
+      await this.feishuAPI.sendCardMessage(
+        context.chatId,
+        buildSuccessCard('✅ 删除成功', '已删除会话', [{ key: '🆔 会话ID', value: `\`${displayId}\`` }])
+      );
     } else {
-      await this.sendText(context.chatId, `❌ 无法删除会话: \`${sessionId}\``);
+      await this.feishuAPI.sendCardMessage(
+        context.chatId,
+        buildErrorCard(`无法删除会话: ${sessionId}`, 'invalid_request')
+      );
     }
   }
 
@@ -417,7 +520,10 @@ export class CommandProcessor {
    */
   private async handleAddProject(context: CommandContext, args: string[]): Promise<void> {
     if (args.length === 0) {
-      await this.sendText(context.chatId, '❌ 请提供项目路径，例如: `/pa /path/to/project 我的项目`');
+      await this.feishuAPI.sendCardMessage(
+        context.chatId,
+        buildErrorCard('请提供项目路径，例如: `/pa /path/to/project 我的项目`', 'invalid_request')
+      );
       return;
     }
 
@@ -426,14 +532,25 @@ export class CommandProcessor {
 
     try {
       const project = await this.projectManager.addProject(projectPath, projectName);
-      await this.sendText(
+      await this.feishuAPI.sendCardMessage(
         context.chatId,
-        `✅ 项目已添加\n\n**名称:** ${project.displayName}\n**路径:** \`${project.path}\`\n**ID:** \`${project.id}\``
+        buildSuccessCard(
+          '✅ 项目已添加',
+          `**${project.displayName}**`,
+          [
+            { key: '📂 路径', value: `\`${project.path}\`` },
+            { key: '🆔 项目ID', value: `\`${project.id}\`` },
+          ],
+          '使用 `/ps <标识>` 切换到该项目'
+        )
       );
     } catch (error) {
-      await this.sendText(
+      await this.feishuAPI.sendCardMessage(
         context.chatId,
-        `❌ 添加项目失败: ${error instanceof Error ? error.message : '未知错误'}`
+        buildErrorCard(
+          `添加项目失败: ${error instanceof Error ? error.message : '未知错误'}`,
+          'default'
+        )
       );
     }
   }
@@ -490,7 +607,10 @@ export class CommandProcessor {
    */
   private async handleSwitchProject(context: CommandContext, args: string[]): Promise<void> {
     if (args.length === 0) {
-      await this.sendText(context.chatId, '❌ 请提供项目 ID 或名称，例如: `/ps my-project`');
+      await this.feishuAPI.sendCardMessage(
+        context.chatId,
+        buildErrorCard('请提供项目 ID 或名称，例如: `/ps my-project`', 'invalid_request')
+      );
       return;
     }
 
@@ -499,12 +619,20 @@ export class CommandProcessor {
 
     if (success) {
       const project = await this.projectManager.getCurrentProject();
-      await this.sendText(
+      await this.feishuAPI.sendCardMessage(
         context.chatId,
-        `✅ 已切换到项目: **${project?.displayName}**\n路径: \`${project?.path}\``
+        buildSuccessCard(
+          '✅ 切换成功',
+          `已切换到项目: **${project?.displayName || identifier}**`,
+          project?.path ? [{ key: '📂 路径', value: `\`${project.path}\`` }] : undefined,
+          '新消息将在此项目的工作目录下执行'
+        )
       );
     } else {
-      await this.sendText(context.chatId, `❌ 未找到项目: **${identifier}**`);
+      await this.feishuAPI.sendCardMessage(
+        context.chatId,
+        buildErrorCard(`未找到项目: ${identifier}`, 'invalid_request')
+      );
     }
   }
 
@@ -515,9 +643,14 @@ export class CommandProcessor {
     const currentProject = await this.projectManager.getCurrentProject();
 
     if (!currentProject) {
-      await this.sendText(
+      await this.feishuAPI.sendCardMessage(
         context.chatId,
-        '📂 当前未选择项目\n\n使用 `/pl` 查看项目列表，或 `/pa <路径>` 添加项目'
+        buildInfoCard(
+          '📂 当前未选择项目',
+          '没有激活的项目',
+          'grey',
+          '使用 `/pl` 查看项目列表，或 `/pa <路径>` 添加项目'
+        )
       );
       return;
     }
@@ -541,7 +674,10 @@ export class CommandProcessor {
    */
   private async handleDeleteProject(context: CommandContext, args: string[]): Promise<void> {
     if (args.length === 0) {
-      await this.sendText(context.chatId, '❌ 请提供项目 ID 或名称，例如: `/pd my-project`');
+      await this.feishuAPI.sendCardMessage(
+        context.chatId,
+        buildErrorCard('请提供项目 ID 或名称，例如: `/pd my-project`', 'invalid_request')
+      );
       return;
     }
 
@@ -549,9 +685,15 @@ export class CommandProcessor {
     const success = await this.projectManager.deleteProject(identifier);
 
     if (success) {
-      await this.sendText(context.chatId, `✅ 已删除项目: **${identifier}**`);
+      await this.feishuAPI.sendCardMessage(
+        context.chatId,
+        buildSuccessCard('✅ 删除成功', `已删除项目: **${identifier}**`)
+      );
     } else {
-      await this.sendText(context.chatId, `❌ 未找到项目: **${identifier}**`);
+      await this.feishuAPI.sendCardMessage(
+        context.chatId,
+        buildErrorCard(`未找到项目: ${identifier}`, 'invalid_request')
+      );
     }
   }
 
@@ -574,13 +716,6 @@ export class CommandProcessor {
       adapterType: session.cliType,
       workingDir: session.workingDir,
     };
-  }
-
-  /**
-   * 发送文本消息
-   */
-  private async sendText(chatId: string, content: string): Promise<void> {
-    await this.feishuAPI.sendText(chatId, content);
   }
 }
 

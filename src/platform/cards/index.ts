@@ -25,3 +25,6 @@ export * from './project-cards.js';
 
 // 帮助卡片
 export * from './help-card.js';
+
+// 通用结果卡片
+export * from './result-cards.js';

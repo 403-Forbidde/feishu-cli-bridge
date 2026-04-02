@@ -7,7 +7,7 @@
  */
 
 import type { TUIResult, CommandContext } from './base.js';
-import { TUIBaseCommand, TUIResultType, createTextResult, createCardResult, createErrorResult } from './base.js';
+import { TUIBaseCommand, TUIResultType, createCardResult, createErrorResult } from './base.js';
 import type { ICLIAdapter, SessionInfo, ModelInfo, AgentInfo } from '../adapters/interface/types.js';
 import {
   buildNewSessionCard,
@@ -18,6 +18,7 @@ import {
   buildResetSuccessCard,
   buildHelpCard,
 } from '../card-builder/index.js';
+import { buildSuccessCard, buildInfoCard } from '../platform/cards/result-cards.js';
 
 /** OpenCode 适配器扩展接口 */
 interface OpenCodeAdapter extends ICLIAdapter {
@@ -238,11 +239,14 @@ export class OpenCodeTUICommands extends TUIBaseCommand {
           displayId = sessionId.slice(-8);
         }
 
-        return createTextResult(
-          `✅ **已切换到会话**\n\n` +
-          `**ID:** \`${displayId}\`\n` +
-          `💡 可以继续之前的对话了`
-        );
+        return createCardResult('', {
+          cardJson: buildSuccessCard(
+            '✅ 切换成功',
+            '已切换到会话',
+            [{ key: '🆔 会话ID', value: `\`${displayId}\`` }],
+            '可以继续之前的对话了'
+          ),
+        });
       } else {
         return createErrorResult('切换会话失败: 会话不存在或无法访问');
       }
@@ -279,11 +283,14 @@ export class OpenCodeTUICommands extends TUIBaseCommand {
 
       const success = await this.adapter.renameSession(sessionId, newTitle.trim());
       if (success) {
-        return createTextResult(
-          `✅ **已重命名会话**\n\n` +
-          `**新名称:** ${newTitle}\n` +
-          `💡 使用 \`/session\` 查看列表`
-        );
+        return createCardResult('', {
+          cardJson: buildSuccessCard(
+            '✅ 重命名成功',
+            '已重命名会话',
+            [{ key: '📋 新名称', value: newTitle }],
+            '使用 `/session` 查看列表'
+          ),
+        });
       } else {
         return createErrorResult('重命名会话失败');
       }
@@ -327,11 +334,14 @@ export class OpenCodeTUICommands extends TUIBaseCommand {
         if (sessionId.length >= 8) {
           displayId = sessionId.slice(-8);
         }
-        return createTextResult(
-          `✅ **已删除会话**\n\n` +
-          `**ID:** \`${displayId}\`\n` +
-          `🗑️ 该会话及其消息历史已永久删除`
-        );
+        return createCardResult('', {
+          cardJson: buildSuccessCard(
+            '✅ 删除成功',
+            '已删除会话',
+            [{ key: '🆔 会话ID', value: `\`${displayId}\`` }],
+            '该会话及其消息历史已永久删除'
+          ),
+        });
       } else {
         return createErrorResult('删除会话失败');
       }
@@ -363,9 +373,13 @@ export class OpenCodeTUICommands extends TUIBaseCommand {
     try {
       const models = await this.adapter.listModels();
       if (!models || models.length === 0) {
-        return createTextResult(
-          'ℹ️ 暂无可用模型，请在 config.yaml 的 cli.opencode.models 中添加'
-        );
+        return createCardResult('', {
+          cardJson: buildInfoCard(
+            'ℹ️ 提示',
+            '暂无可用模型，请在 `config.yaml` 的 `cli.opencode.models` 中添加',
+            'grey'
+          ),
+        });
       }
 
       const card = buildModelSelectCard(
@@ -393,9 +407,14 @@ export class OpenCodeTUICommands extends TUIBaseCommand {
 
       const success = await this.adapter.switchModel(modelId);
       if (success) {
-        return createTextResult(
-          `✅ **已切换到模型**\n\n**模型:** \`${modelId}\`\n💡 新消息将使用此模型`
-        );
+        return createCardResult('', {
+          cardJson: buildSuccessCard(
+            '✅ 切换成功',
+            '已切换到模型',
+            [{ key: '🤖 模型', value: `\`${modelId}\`` }],
+            '新消息将使用此模型'
+          ),
+        });
       } else {
         return createErrorResult('切换模型失败: 模型不可用');
       }
@@ -428,7 +447,9 @@ export class OpenCodeTUICommands extends TUIBaseCommand {
     }
     const agents = await this.adapter.listAgents();
     if (!agents || agents.length === 0) {
-      return createTextResult('ℹ️ 暂无可用 agent 模式');
+      return createCardResult('', {
+        cardJson: buildInfoCard('ℹ️ 提示', '暂无可用 agent 模式', 'grey'),
+      });
     }
 
     const current = this.adapter.getCurrentAgent ? this.adapter.getCurrentAgent() : 'build';
