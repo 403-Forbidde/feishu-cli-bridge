@@ -53,6 +53,14 @@ export function getConfigDir(): string {
 }
 
 /**
+ * 清理字符串值（去除 Windows 换行符 \r）
+ */
+function cleanString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  return value.replace(/\r/g, '').trim();
+}
+
+/**
  * 解析路径（支持相对路径和 ~ 展开）
  */
 export function resolvePath(inputPath: string): string {
@@ -187,8 +195,8 @@ function parseCLIConfig(data: Record<string, unknown>): Record<string, CLIConfig
     const config = c as Record<string, unknown>;
     configs[name] = {
       enabled: config.enabled !== false,
-      command: (config.command as string) || name,
-      defaultModel: (config.default_model as string) || '',
+      command: cleanString(config.command) || name,
+      defaultModel: cleanString(config.default_model) || '',
       timeout: (config.timeout as number) || DEFAULTS.CLI_TIMEOUT,
       models: (config.models as CLIConfig['models']) || [],
     };
@@ -211,10 +219,10 @@ function parseConfig(data: Record<string, unknown>): Config {
 
   return {
     feishu: {
-      appId: (feishuData.app_id as string) || '',
-      appSecret: (feishuData.app_secret as string) || '',
-      encryptKey: feishuData.encrypt_key as string | undefined,
-      verificationToken: feishuData.verification_token as string | undefined,
+      appId: cleanString(feishuData.app_id) || '',
+      appSecret: cleanString(feishuData.app_secret) || '',
+      encryptKey: cleanString(feishuData.encrypt_key),
+      verificationToken: cleanString(feishuData.verification_token),
     },
     session: {
       maxSessions: (sessionData.max_sessions as number) || DEFAULTS.SESSION_MAX_SESSIONS,
@@ -227,16 +235,16 @@ function parseConfig(data: Record<string, unknown>): Config {
       maxMessageLength: (streamingData.max_message_length as number) || DEFAULTS.STREAMING_MAX_MESSAGE_LENGTH,
     },
     debug: {
-      logLevel: (debugData.log_level as DebugConfig['logLevel']) || DEFAULTS.DEBUG_LOG_LEVEL,
+      logLevel: (cleanString(debugData.log_level) as DebugConfig['logLevel']) || DEFAULTS.DEBUG_LOG_LEVEL,
       saveLogs: debugData.save_logs !== false,
-      logDir: (debugData.log_dir as string) || '',
+      logDir: cleanString(debugData.log_dir) || '',
     },
     project: {
-      storagePath: (projectData.storage_path as string) || '',
+      storagePath: cleanString(projectData.storage_path) || '',
       maxProjects: (projectData.max_projects as number) || DEFAULTS.PROJECT_MAX_PROJECTS,
     },
     security: {
-      allowedProjectRoot: (securityData.allowed_project_root as string) || '/',
+      allowedProjectRoot: cleanString(securityData.allowed_project_root) || '/',
       maxAttachmentSize: (securityData.max_attachment_size as number) || DEFAULTS.SECURITY_MAX_ATTACHMENT_SIZE,
       maxPromptLength: (securityData.max_prompt_length as number) || DEFAULTS.SECURITY_MAX_PROMPT_LENGTH,
     },
