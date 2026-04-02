@@ -20,6 +20,40 @@ function Refresh-Path {
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 }
 
+function Find-NodeExe {
+    $candidates = @(
+        "C:\Program Files\nodejs\node.exe"
+        "C:\Program Files (x86)\nodejs\node.exe"
+        "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\OpenJS.NodeJS.LTS*\node.exe"
+        "$env:LOCALAPPDATA\Microsoft\WinGet\Links\node.exe"
+        "$env:LOCALAPPDATA\Programs\nodejs\node.exe"
+        "$env:ProgramFiles\nodejs\node.exe"
+        "$env:ProgramFiles(x86)\nodejs\node.exe"
+    )
+    foreach ($pattern in $candidates) {
+        $found = Get-Item -Path $pattern -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($found) { return $found.FullName }
+    }
+    return $null
+}
+
+function Inject-NodePath {
+    $nodeExe = Find-NodeExe
+    if ($nodeExe) {
+        $nodeDir = Split-Path -Parent $nodeExe
+        if ($env:Path -notlike "*$nodeDir*") {
+            $env:Path = "$nodeDir;$env:Path"
+            Write-Info "Injected Node.js path: $nodeDir"
+        }
+        return $true
+    }
+    return $false
+}
+
+function Test-IsAdmin {
+    return ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
+}
+
 function Get-NodeMajor {
     try {
         $v = (node -v 2>$null)
@@ -44,51 +78,78 @@ function Test-Node {
     return $false
 }
 
+function Test-NodeInstall {
+    Refresh-Path
+    if (Test-Node) { return $true }
+    if (Inject-NodePath) {
+        if (Test-Node) { return $true }
+    }
+    return $false
+}
+
+function Install-NodeZip {
+    param([string]$Version = "v22.14.0")
+    $zipUrl = "https://nodejs.org/dist/$Version/node-$Version-win-x64.zip"
+    $zipPath = "$env:TEMP\node-portable.zip"
+    $nodeDir = "$env:LOCALAPPDATA\feishu-cli-bridge-node"
+
+    Write-Info "Downloading portable Node.js $Version..."
+    try {
+        Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
+        if (Test-Path $nodeDir) { Remove-Item -Recurse -Force $nodeDir }
+        Expand-Archive -Path $zipPath -DestinationPath "$env:TEMP\node-portable" -Force
+        Move-Item -Path "$env:TEMP\node-portable\node-$Version-win-x64" -Destination $nodeDir -Force
+        $env:Path = "$nodeDir;$env:Path"
+        Write-Ok "Portable Node.js installed to $nodeDir"
+        if (Test-Node) { return $true }
+    } catch {
+        Write-Warn "Portable Node.js installation failed: $_"
+    }
+    return $false
+}
+
 function Install-Node {
     Write-Info "Installing Node.js v${REQUIRED_NODE_MAJOR}+..."
 
-    # 1. winget
-    if (Get-Command winget -ErrorAction SilentlyContinue) {
-        Write-Info "Using winget..."
-        winget install OpenJS.NodeJS.LTS --source winget --accept-package-agreements --accept-source-agreements
-        Refresh-Path
-        if (Test-Node) { return }
-        Write-Warn "winget completed, but Node.js is still unavailable in this shell"
-        Write-Warn "Restart PowerShell and re-run the installer if Node.js was installed successfully."
-        exit 1
-    }
-
-    # 2. Chocolatey
-    if (Get-Command choco -ErrorAction SilentlyContinue) {
-        Write-Info "Using Chocolatey..."
-        choco install nodejs-lts -y
-        Refresh-Path
-        if (Test-Node) { return }
-    }
-
-    # 3. Scoop
-    if (Get-Command scoop -ErrorAction SilentlyContinue) {
-        Write-Info "Using Scoop..."
-        scoop install nodejs-lts
-        if (Test-Node) { return }
-    }
-
-    # 4. MSI download fallback
-    Write-Info "Downloading Node.js LTS installer..."
+    # 1. MSI download (most reliable with admin rights)
+    Write-Info "Trying Node.js MSI installer..."
     $msiUrl = "https://nodejs.org/dist/v22.14.0/node-v22.14.0-x64.msi"
     $msiPath = "$env:TEMP\node-installer.msi"
     try {
         Invoke-WebRequest -Uri $msiUrl -OutFile $msiPath -UseBasicParsing
-        Write-Warn "Installing Node.js MSI (UAC prompt may appear)..."
         $proc = Start-Process msiexec.exe -ArgumentList "/i `"$msiPath`" /qn /norestart" -Wait -PassThru
         if ($proc.ExitCode -ne 0) {
             throw "msiexec exited with code $($proc.ExitCode)"
         }
-        Refresh-Path
-        if (Test-Node) { return }
+        if (Test-NodeInstall) { return }
     } catch {
-        Write-Error "MSI installation failed: $_"
+        Write-Warn "MSI installation failed: $_. Trying next method..."
     }
+
+    # 2. winget
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        Write-Info "Trying winget..."
+        winget install --id OpenJS.NodeJS.LTS --source winget --accept-package-agreements --accept-source-agreements -e
+        if (Test-NodeInstall) { return }
+        Write-Warn "winget could not install Node.js. Trying next method..."
+    }
+
+    # 3. Chocolatey
+    if (Get-Command choco -ErrorAction SilentlyContinue) {
+        Write-Info "Trying Chocolatey..."
+        choco install nodejs-lts -y
+        if (Test-NodeInstall) { return }
+    }
+
+    # 4. Scoop
+    if (Get-Command scoop -ErrorAction SilentlyContinue) {
+        Write-Info "Trying Scoop..."
+        scoop install nodejs-lts
+        if (Test-NodeInstall) { return }
+    }
+
+    # 5. Portable ZIP fallback
+    if (Install-NodeZip) { return }
 
     Write-Error "Could not install Node.js automatically. Please install Node.js >= ${REQUIRED_NODE_MAJOR} manually from https://nodejs.org/"
     exit 1
@@ -107,6 +168,14 @@ function Test-Git {
 Write-Host ""
 Write-Host "  🚀 Feishu CLI Bridge Installer" -ForegroundColor Cyan
 Write-Host ""
+
+# 0. Admin check
+if (-not (Test-IsAdmin)) {
+    Write-Error "This installer requires Administrator privileges."
+    Write-Warn "Please right-click PowerShell and select 'Run as administrator', then re-run:"
+    Write-Warn "    powershell -c `"irm https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main/scripts/setup.ps1 | iex`""
+    exit 1
+}
 
 # 1. Node.js
 if (-not (Test-Node)) {
