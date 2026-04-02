@@ -110,7 +110,8 @@ export interface ProjectCommandResult {
 export function executeProjectCommand(
   content: string,
   projects: ProjectInfo[],
-  currentProjectName: string | null
+  currentProjectName: string | null,
+  page: number = 1
 ): ProjectCommandResult {
   content = content.trim();
 
@@ -169,11 +170,25 @@ export function executeProjectCommand(
     args = parts.slice(1).join(' ');
   }
 
+  // 分页配置：每页3个，最多12个（4页）
+  const ITEMS_PER_PAGE = 3;
+  const MAX_ITEMS = 12;
+  const totalPages = Math.ceil(Math.min(projects.length, MAX_ITEMS) / ITEMS_PER_PAGE) || 1;
+  const currentPage = Math.max(1, Math.min(page, totalPages));
+
   switch (subCmd) {
     case 'list':
       return {
         type: 'list',
-        result: createCardResult('', { cardJson: buildProjectListCard(projects, currentProjectName) }),
+        result: createCardResult('', {
+          cardJson: buildProjectListCard(
+            projects,
+            currentProjectName,
+            currentPage,
+            totalPages,
+            projects.length
+          ),
+        }),
       };
 
     case 'add':

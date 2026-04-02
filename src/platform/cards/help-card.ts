@@ -53,7 +53,7 @@ const COMMANDS: CommandItem[] = [
     description: '重置当前会话，清除所有历史消息',
   },
   {
-    icon: '⏹️',
+    icon: '🔴',
     command: '/stop',
     title: '停止生成',
     description: '立即中断 AI 正在进行的回复生成',

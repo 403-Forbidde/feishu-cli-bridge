@@ -72,20 +72,35 @@ function shortenPath(path: string): string {
  *
  * 布局：
  * 1. 顶部：当前激活项目详细信息（绿色主题）
- * 2. 中部：未激活项目列表
+ * 2. 中部：未激活项目列表（分页显示，每页3个）
  *
  * @param projects - 项目列表
  * @param activeProjectId - 当前激活的项目 ID
+ * @param page - 当前页码（从1开始）
+ * @param totalPages - 总页数
+ * @param totalCount - 总项目数
  */
 export function buildProjectListCard(
   projects: ProjectInfo[],
-  activeProjectId?: string
+  activeProjectId?: string,
+  page: number = 1,
+  totalPages: number = 1,
+  totalCount?: number
 ): object {
   const elements: object[] = [];
 
   // 分离激活项目和其他项目
   const activeProject = projects.find(p => p.id === activeProjectId);
   const inactiveProjects = projects.filter(p => p.id !== activeProjectId);
+
+  // 分页逻辑：每页3个项目，最多12个项目（4页）
+  const ITEMS_PER_PAGE = 3;
+  const MAX_ITEMS = 12;
+  const actualTotalCount = totalCount ?? projects.length;
+  const currentPage = Math.max(1, Math.min(page, totalPages));
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, Math.min(inactiveProjects.length, MAX_ITEMS));
+  const paginatedProjects = inactiveProjects.slice(startIndex, endIndex);
 
   // ── 顶部：当前激活项目详细信息 ─────────────────────────────────────────
   if (activeProject) {
@@ -130,9 +145,10 @@ export function buildProjectListCard(
   }
 
   // ── 中部：未激活项目列表 ───────────────────────────────────────────────
+  const otherCount = Math.max(0, actualTotalCount - (activeProject ? 1 : 0));
   elements.push({
     tag: 'markdown',
-    content: `📁 **项目列表** (${inactiveProjects.length} 个)`,
+    content: `📁 **其他项目** (${otherCount} 个)`,
   });
 
   if (inactiveProjects.length === 0 && !activeProject) {
@@ -146,8 +162,8 @@ export function buildProjectListCard(
       content: '<font color=\'grey\'>暂无其他项目</font>',
     });
   } else {
-    for (let i = 0; i < inactiveProjects.length; i++) {
-      const project = inactiveProjects[i];
+    for (let i = 0; i < paginatedProjects.length; i++) {
+      const project = paginatedProjects[i];
       const timeStr = formatTime(project.updatedAt || project.createdAt);
 
       // 项目名称
@@ -222,9 +238,53 @@ export function buildProjectListCard(
         ],
       });
 
-      if (i < inactiveProjects.length - 1) {
+      if (i < paginatedProjects.length - 1) {
         elements.push({ tag: 'hr' });
       }
+    }
+
+    // ── 分页控件 ─────────────────────────────────────────────────────────
+    if (totalPages > 1) {
+      elements.push({ tag: 'hr' });
+      elements.push({
+        tag: 'column_set',
+        flex_mode: 'none',
+        columns: [
+          {
+            tag: 'column',
+            width: 'auto',
+            elements: [{
+              tag: 'button',
+              text: { tag: 'plain_text', content: '⬅️ 上一页' },
+              type: 'default',
+              value: { action: 'project_page', page: currentPage - 1 },
+              disabled: currentPage <= 1,
+            }],
+          },
+          {
+            tag: 'column',
+            width: 'weighted',
+            weight: 1,
+            vertical_align: 'center',
+            elements: [{
+              tag: 'markdown',
+              content: `**第 ${currentPage}/${totalPages} 页**`,
+              text_align: 'center',
+            }],
+          },
+          {
+            tag: 'column',
+            width: 'auto',
+            elements: [{
+              tag: 'button',
+              text: { tag: 'plain_text', content: '下一页 ➡️' },
+              type: 'default',
+              value: { action: 'project_page', page: currentPage + 1 },
+              disabled: currentPage >= totalPages,
+            }],
+          },
+        ],
+      });
     }
   }
 
@@ -240,7 +300,7 @@ export function buildProjectListCard(
   return {
     schema: '2.0',
     header: {
-      title: { tag: 'plain_text', content: '项目管理' },
+      title: { tag: 'plain_text', content: '📁 项目管理' },
       template: 'green',
     },
     body: { elements },

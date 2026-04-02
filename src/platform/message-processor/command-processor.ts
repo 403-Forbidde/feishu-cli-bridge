@@ -449,13 +449,19 @@ export class CommandProcessor {
   /**
    * 处理 /pl - 列出项目
    */
-  private async handleListProjects(context: CommandContext): Promise<void> {
+  private async handleListProjects(context: CommandContext, page: number = 1): Promise<void> {
     const projects = await this.projectManager.listProjects();
     const currentProject = await this.projectManager.getCurrentProject();
 
-    // 转换为 ProjectInfo 格式（并行获取每个项目的 VCS 信息）
+    // 分页配置：每页3个，最多12个（4页）
+    const ITEMS_PER_PAGE = 3;
+    const MAX_ITEMS = 12;
+    const totalCount = projects.length;
+
+    // 转换为 ProjectInfo 格式（并行获取每个项目的 VCS 信息，最多处理 MAX_ITEMS 个）
+    const limitedProjects = projects.slice(0, MAX_ITEMS);
     const projectInfos = await Promise.all(
-      projects.map(async (p) => ({
+      limitedProjects.map(async (p) => ({
         id: p.id,
         name: p.displayName || p.name,
         path: p.path,
@@ -466,7 +472,16 @@ export class CommandProcessor {
       }))
     );
 
-    const card = buildProjectListCard(projectInfos, currentProject?.id);
+    const totalPages = Math.ceil(projectInfos.length / ITEMS_PER_PAGE) || 1;
+    const currentPage = Math.max(1, Math.min(page, totalPages));
+
+    const card = buildProjectListCard(
+      projectInfos,
+      currentProject?.id,
+      currentPage,
+      totalPages,
+      totalCount
+    );
     await this.feishuAPI.sendCardMessage(context.chatId, card);
   }
 

@@ -217,6 +217,9 @@ export class MessageProcessor {
       case 'session_page':
         return this.handleSessionPageCallback(event, actionValue);
 
+      case 'project_page':
+        return this.handleProjectPageCallback(event, actionValue);
+
       case 'switch_project':
         return this.handleSwitchProjectCallback(event, actionValue);
 
@@ -652,6 +655,19 @@ export class MessageProcessor {
   }
 
   /**
+   * 处理项目分页回调
+   */
+  private async handleProjectPageCallback(
+    event: CardCallbackEvent,
+    actionValue: Record<string, unknown>
+  ): Promise<CardCallbackResponse> {
+    const page = (actionValue.page as number) || 1;
+
+    // 返回刷新后的项目列表卡片
+    return await this.buildProjectListCardResponse(event.chatId, page);
+  }
+
+  /**
    * 构建会话列表卡片响应（用于回调返回）
    */
   private async buildSessionListCardResponse(
@@ -990,7 +1006,8 @@ export class MessageProcessor {
    * 构建项目列表卡片响应
    */
   private async buildProjectListCardResponse(
-    chatId: string
+    chatId: string,
+    page: number = 1
   ): Promise<CardCallbackResponse> {
     try {
       const projects = await this.projectManager.listProjects();
@@ -1004,9 +1021,15 @@ export class MessageProcessor {
         return {};
       }
 
-      // 转换为 ProjectInfo 格式（并行获取每个项目的 VCS 信息）
+      // 分页配置：每页3个，最多12个（4页）
+      const ITEMS_PER_PAGE = 3;
+      const MAX_ITEMS = 12;
+      const totalCount = projects.length;
+
+      // 转换为 ProjectInfo 格式（并行获取每个项目的 VCS 信息，最多处理 MAX_ITEMS 个）
+      const limitedProjects = projects.slice(0, MAX_ITEMS);
       const projectInfos = await Promise.all(
-        projects.map(async (p) => ({
+        limitedProjects.map(async (p) => ({
           id: p.id,
           name: p.displayName || p.name,
           path: p.path,
@@ -1017,8 +1040,17 @@ export class MessageProcessor {
         }))
       );
 
+      const totalPages = Math.ceil(projectInfos.length / ITEMS_PER_PAGE) || 1;
+      const currentPage = Math.max(1, Math.min(page, totalPages));
+
       const { buildProjectListCard } = await import('../cards/index.js');
-      const card = buildProjectListCard(projectInfos, currentProject?.id);
+      const card = buildProjectListCard(
+        projectInfos,
+        currentProject?.id,
+        currentPage,
+        totalPages,
+        totalCount
+      );
 
       return { card };
     } catch (error) {

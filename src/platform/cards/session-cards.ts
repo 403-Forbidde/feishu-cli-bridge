@@ -316,7 +316,7 @@ export function buildSessionListCard(
   return {
     schema: '2.0',
     header: {
-      title: { tag: 'plain_text', content: '会话管理' },
+      title: { tag: 'plain_text', content: '💬 会话管理' },
       template: 'blue',
     },
     body: { elements },
