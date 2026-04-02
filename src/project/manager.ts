@@ -58,9 +58,13 @@ export async function sanitizePath(
 }
 
 /**
- * 获取默认项目存储路径
+ * 获取默认项目存储路径（跨平台）
  */
 function getDefaultStoragePath(): string {
+  if (process.platform === 'win32') {
+    const appdata = process.env.APPDATA || homedir();
+    return path.join(appdata, 'feishu-cli-bridge', 'projects.json');
+  }
   const configDir = process.env.XDG_CONFIG_HOME || path.join(homedir(), '.config');
   return path.join(configDir, 'feishu-cli-bridge', 'projects.json');
 }

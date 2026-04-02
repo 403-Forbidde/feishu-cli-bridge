@@ -8,7 +8,8 @@
 #
 # 配置文件查找顺序（优先级由高到低）：
 #   1. CONFIG_FILE 环境变量指定的路径
-#   2. ~/.config/feishu-cli-bridge/config.yaml（服务模式默认位置）
+#   2. ~/.config/feishu-cli-bridge/config.yaml（Linux/macOS 服务模式默认位置）
+#      %APPDATA%\feishu-cli-bridge\config.yaml（Windows 服务模式默认位置）
 #   3. ./config.yaml（当前工作目录，开发模式）
 #
 # 所有字段均支持环境变量覆盖，环境变量优先级高于 config.yaml。
@@ -46,12 +47,12 @@ cli:
   opencode:
     enabled: true                       # 环境变量: OPENCODE_ENABLED
     command: "opencode"                 # 可执行文件名或绝对路径（环境变量: OPENCODE_CMD）
-    default_model: "kimi-for-coding/k2p5"  # 格式: provider/model（环境变量: OPENCODE_MODEL）
+    default_model: "kimi"  # 格式: provider/model（环境变量: OPENCODE_MODEL）
     default_agent: "build"              # 默认 agent：build / plan / 自定义（环境变量: OPENCODE_AGENT）
     timeout: 300                        # 单次请求超时（秒）（环境变量: OPENCODE_TIMEOUT）
     models:                             # /model 命令展示的常用模型列表
-      - id: "kimi-for-coding/k2p5"
-        name: "Kimi K2.5"
+      - id: "kimi"
+        name: "Kimi"
       - id: "kimi-for-coding/kimi-k2-thinking"
         name: "Kimi K2 Thinking"
       - id: "opencode/mimo-v2-pro-free"
@@ -89,7 +90,8 @@ image:
 # -----------------------------------------------------------------------------
 project:
   storage_path: ""   # 项目列表 JSON 路径，留空使用默认值:
-                     # ~/.config/feishu-cli-bridge/projects.json
+                     # Linux/macOS: ~/.config/feishu-cli-bridge/projects.json
+                     # Windows: %APPDATA%\feishu-cli-bridge\projects.json
                      # 环境变量: PROJECT_STORAGE_PATH
   max_projects: 50   # 最大项目数（环境变量: MAX_PROJECTS）
 

@@ -417,6 +417,8 @@ schtasks /end    /tn "FeiShuBridge"   & REM 停止
 schtasks /delete /tn "FeiShuBridge" /f  & REM 卸载
 ```
 
+> 在 CMD/PowerShell 中运行 `npm start` 前，先执行 `chcp 65001`，可避免中文日志乱码。
+
 </details>
 
 ---
@@ -504,12 +506,12 @@ cli:
   opencode:
     enabled: true
     command: "opencode"
-    default_model: "kimi-for-coding/k2p5"
+    default_model: "kimi"
     default_agent: "build"
     timeout: 300
     models:                        # /model 命令展示的常用模型列表
-      - id: "kimi-for-coding/k2p5"
-        name: "Kimi K2.5"
+      - id: "kimi"
+        name: "Kimi"
       - id: "opencode/mimo-v2-pro-free"
         name: "MiMo V2 Pro Free"
 
@@ -517,7 +519,7 @@ cli:
 # 项目管理
 # ═══════════════════════════════════════════════════════════════
 project:
-  storage_path: ""    # 留空使用默认 ~/.config/feishu-cli-bridge/projects.json
+  storage_path: ""    # 留空使用默认 ~/.config/feishu-cli-bridge/projects.json（Linux/macOS）或 %APPDATA%\feishu-cli-bridge\projects.json（Windows）
   max_projects: 50
 
 # ═══════════════════════════════════════════════════════════════

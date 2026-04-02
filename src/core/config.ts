@@ -66,6 +66,18 @@ export function resolvePath(inputPath: string): string {
 }
 
 /**
+ * 获取默认配置文件路径（跨平台）
+ */
+export function getDefaultConfigPath(): string {
+  if (process.platform === 'win32') {
+    const appdata = process.env.APPDATA || homedir();
+    return join(appdata, 'feishu-cli-bridge', 'config.yaml');
+  }
+  const configHome = process.env.XDG_CONFIG_HOME || join(homedir(), '.config');
+  return join(configHome, 'feishu-cli-bridge', 'config.yaml');
+}
+
+/**
  * 按优先级查找配置文件
  */
 function findConfigFile(): string | null {
@@ -79,20 +91,9 @@ function findConfigFile(): string | null {
   }
 
   // 2. 平台配置目录
-  if (process.platform === 'win32') {
-    // Windows: %APPDATA%\feishu-cli-bridge\config.yaml
-    const appdata = process.env.APPDATA || homedir();
-    const winConfig = join(appdata, 'feishu-cli-bridge', 'config.yaml');
-    if (existsSync(winConfig)) {
-      return winConfig;
-    }
-  } else {
-    // Linux/macOS: XDG_CONFIG_HOME (~/.config)
-    const configHome = process.env.XDG_CONFIG_HOME || join(homedir(), '.config');
-    const xdgConfig = join(configHome, 'feishu-cli-bridge', 'config.yaml');
-    if (existsSync(xdgConfig)) {
-      return xdgConfig;
-    }
+  const defaultConfig = getDefaultConfigPath();
+  if (existsSync(defaultConfig)) {
+    return defaultConfig;
   }
 
   // 3. 当前工作目录（开发模式）
@@ -140,7 +141,7 @@ function loadFromEnv(): Config {
       opencode: {
         enabled: parseBool(process.env.OPENCODE_ENABLED, true),
         command: process.env.OPENCODE_CMD || 'opencode',
-        defaultModel: process.env.OPENCODE_MODEL || 'kimi-for-coding/k2p5',
+        defaultModel: process.env.OPENCODE_MODEL || 'kimi',
         timeout: parseIntEnv(process.env.OPENCODE_TIMEOUT, DEFAULTS.CLI_TIMEOUT),
         models: [],
       },

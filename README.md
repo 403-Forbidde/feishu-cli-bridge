@@ -246,7 +246,7 @@ The wizard will then guide you through:
 2. **Feishu credentials** — validates App ID / App Secret with format checking
 3. **Service configuration** — auto-detects systemd / launchd and generates service files
 
-> 💡 **Tip**: The generated config is saved to `~/.config/feishu-cli-bridge/config.yaml`. You can still manually edit it afterward.
+> 💡 **Tip**: The generated config is saved to `~/.config/feishu-cli-bridge/config.yaml` (Linux/macOS) or `%APPDATA%\feishu-cli-bridge\config.yaml` (Windows). You can still manually edit it afterward.
 
 ---
 
@@ -403,6 +403,8 @@ schtasks /end    /tn "FeiShuBridge"   & REM Stop
 schtasks /delete /tn "FeiShuBridge" /f  & REM Uninstall
 ```
 
+> Run `chcp 65001` before `npm start` in CMD/PowerShell to prevent Chinese garbled text.
+
 </details>
 
 ---
@@ -490,12 +492,12 @@ cli:
   opencode:
     enabled: true
     command: "opencode"
-    default_model: "kimi-for-coding/k2p5"
+    default_model: "kimi"
     default_agent: "build"
     timeout: 300
     models:                        # Model list for /model command
-      - id: "kimi-for-coding/k2p5"
-        name: "Kimi K2.5"
+      - id: "kimi"
+        name: "Kimi"
       - id: "opencode/mimo-v2-pro-free"
         name: "MiMo V2 Pro Free"
 
@@ -503,7 +505,7 @@ cli:
 # Project Management
 # ═══════════════════════════════════════════════════════════════
 project:
-  storage_path: ""    # Leave empty for default ~/.config/feishu-cli-bridge/projects.json
+  storage_path: ""    # Leave empty for default ~/.config/feishu-cli-bridge/projects.json (Linux/macOS) or %APPDATA%\feishu-cli-bridge\projects.json (Windows)
   max_projects: 50
 
 # ═══════════════════════════════════════════════════════════════

@@ -11,6 +11,9 @@
  * 5. 处理信号和优雅退出
  */
 
+// 必须在其他模块之前加载，确保 Windows 终端使用 UTF-8 编码
+import './core/win-utf8.js';
+
 import { loadConfig, validateConfig } from './core/config.js';
 import { logger } from './core/logger.js';
 import { FeishuClient } from './platform/feishu-client.js';

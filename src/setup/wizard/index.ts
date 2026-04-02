@@ -11,6 +11,7 @@ import { runFeishuConfig, type FeishuConfig } from './feishu-config.js';
 import { runServiceConfig, type ServiceSetupResult } from './service-config.js';
 import { writeConfigFile, type FullConfig } from '../writers/config-file.js';
 import { installService, startService } from '../writers/service-files.js';
+import { getDefaultConfigPath } from '../../core/config.js';
 
 export async function runWizard(): Promise<void> {
   await showWelcome();
@@ -38,7 +39,7 @@ export async function runWizard(): Promise<void> {
   const serviceResult = await runServiceConfig(workingDirectory, 'node', ['dist/main.js']);
 
   // Phase 6: Write config and install service
-  const configPath = join(homedir(), '.config', 'feishu-cli-bridge', 'config.yaml');
+  const configPath = getDefaultConfigPath();
 
   const fullConfig: FullConfig = {
     feishu: feishuConfig,

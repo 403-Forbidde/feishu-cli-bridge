@@ -178,7 +178,7 @@ export class OpenCodeProvider implements ICLIProvider {
     return {
       enabled: true,
       command: 'opencode',
-      default_model: 'kimi-for-coding/k2p5',
+      default_model: 'kimi',
     };
   }
 }

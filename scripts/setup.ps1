@@ -53,6 +53,9 @@ function Test-Git {
     }
 }
 
+# Set UTF-8 code page to avoid Chinese garbled text in terminal
+chcp 65001 >$null 2>&1
+
 # ===== Main flow =====
 Write-Host ""
 Write-Host "  Feishu CLI Bridge Installer for Windows" -ForegroundColor Cyan
@@ -123,7 +126,9 @@ Write-Host "Feishu CLI Bridge installed successfully!" -ForegroundColor Green
 Write-Host "Project directory: $InstallDir"
 Write-Host "To start, run:"
 Write-Host "    cd \"$InstallDir\""
+Write-Host "    chcp 65001"
 Write-Host "    npm start"
 Write-Host ""
+Write-Host "Tip: Run 'chcp 65001' before 'npm start' to avoid Chinese garbled text." -ForegroundColor Yellow
 Write-Host "Tip: If 'npm' is not recognized after installing Node.js, restart your PowerShell / terminal." -ForegroundColor Yellow
 Write-Host ""
