@@ -5,21 +5,37 @@
   "engines": {
     "node": ">=20.0.0"
   },
+  "bin": {
+    "feishu-bridge": "./dist/main.js",
+    "feishu-bridge-setup": "./dist/setup/index.js"
+  },
   "scripts": {
     "dev": "tsx src/main.ts",
     "build": "tsc",
     "start": "node dist/main.js",
+    "setup": "node dist/setup/index.js",
+    "setup:dev": "tsx src/setup/index.ts",
     "test": "vitest",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@inquirer/prompts": "^7.10.1",
     "@larksuiteoapi/node-sdk": "^1.39.0",
+    "@types/semver": "^7.7.1",
+    "@types/which": "^3.0.4",
     "async-mutex": "^0.5.0",
     "axios": "^1.7.0",
+    "boxen": "^8.0.1",
+    "chalk": "^5.6.2",
+    "commander": "^12.1.0",
     "eventsource-parser": "^1.1.2",
+    "execa": "^9.6.1",
     "js-yaml": "^4.1.0",
-    "pino": "^9.0.0"
+    "ora": "^8.2.0",
+    "pino": "^9.0.0",
+    "semver": "^7.7.4",
+    "which": "^4.0.0"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",

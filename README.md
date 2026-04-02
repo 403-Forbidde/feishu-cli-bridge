@@ -211,66 +211,63 @@ Batch processing after long gaps to avoid sparse initial updates
 
 ## ⚡ Quick Start
 
-### Step 1: Install Prerequisites
+### Option 1: One-line Install (Recommended 🌟)
 
-Requires **Node.js 20+ LTS** and **opencode CLI**.
+The zero-dependency install script automatically checks and installs Node.js, clones the repo, installs dependencies, and launches the interactive wizard.
 
 <details>
-<summary><b>🐧 Linux (Ubuntu/Debian)</b></summary>
+<summary><b>🐧 Linux / macOS</b></summary>
 
 ```bash
-# Node.js LTS
-curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
-sudo apt-get install -y nodejs
-
-# opencode
-npm install -g opencode-ai
+curl -fsSL https://raw.githubusercontent.com/ERROR403/feishu-cli-bridge/main/scripts/setup.sh | bash
 ```
+
+> The script will auto-detect your package manager (`apt`, `dnf`, `yum`, `pacman`, `brew`) to install Node.js if needed.
 
 </details>
 
 <details>
-<summary><b>🍎 macOS</b></summary>
+<summary><b>🪟 Windows</b></summary>
 
-```bash
-brew install node    # Requires Homebrew: https://brew.sh
-npm install -g opencode-ai
+1. Download [`scripts/setup.bat`](https://raw.githubusercontent.com/ERROR403/feishu-cli-bridge/main/scripts/setup.bat)
+2. Double-click to run, or run in CMD:
+
+```cmd
+setup.bat
 ```
 
-</details>
-
-<details>
-<summary><b>🪟 Windows (CMD)</b></summary>
-
-- [Node.js LTS](https://nodejs.org/) — Check "**Add to PATH**" during installation
-- After installation: `npm install -g opencode-ai`
+> If Node.js is not installed, the script will prompt you to download it from [nodejs.org](https://nodejs.org/).
 
 </details>
 
-<details>
-<summary><b>✅ Verification</b></summary>
+The wizard will then guide you through:
+1. **OpenCode CLI installation** — detects, installs, logs in, and selects default model
+2. **Feishu credentials** — validates App ID / App Secret with format checking
+3. **Service configuration** — auto-detects systemd / launchd and generates service files
 
-```bash
-node --version      # Requires 20+
-npm --version
-opencode --version
-```
-
-</details>
+> 💡 **Tip**: The generated config is saved to `~/.config/feishu-cli-bridge/config.yaml`. You can still manually edit it afterward.
 
 ---
 
-### Step 2: Clone Project & Install Dependencies
+### Option 2: Manual Setup (for developers / existing Node.js)
+
+If you already have **Node.js 20+**, you can clone and run the wizard directly:
 
 ```bash
 git clone <repo_url>
 cd feishu-cli-bridge
 npm install
+npm run setup:dev      # Run interactive wizard directly via tsx
 ```
+
+At this point the wizard assumes Node.js is already available and focuses on:
+- **Version compliance check** — warns if Node.js < 20.0.0
+- **npm mirror switching** — optional taobao/official registry toggle
+- **OpenCode / Feishu / Service config** — same as Option 1
 
 ---
 
-### Step 3: Create Feishu Custom App
+### Step 1: Create Feishu Custom App
 
 1. Go to [Feishu Developer Console](https://open.feishu.cn/app), create an **Enterprise Custom App**
 
@@ -300,7 +297,7 @@ npm install
 
 ---
 
-### Step 4: Configuration
+### Step 2: Manual Configuration (Skip if you used the wizard)
 
 ```bash
 cp config.example.yaml config.yaml   # Windows: copy config.example.yaml config.yaml
@@ -338,7 +335,7 @@ set FEISHU_APP_SECRET=xxx
 
 ---
 
-### Step 5: Start
+### Step 3: Start
 
 #### Development mode (hot reload)
 
@@ -655,6 +652,7 @@ npm run test
 - 🎯 **Feature Complete** — 100% parity with Python version
 - 🎴 **Unified TUI Cards** — All TUI commands (`/session`, `/model`, `/pl`, etc.) reply as interactive cards
 - 📁 **Project Management Improvements** — Pagination and delete confirmation in `/pl` cards
+- 🧙 **Interactive Setup Wizard** — One-command setup for environment, credentials, and system services
 
 ---
 
