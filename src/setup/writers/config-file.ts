@@ -98,6 +98,10 @@ function generateYAML(config: FullConfig): string {
 
 function quote(value: string): string {
   if (!value) return '""';
+  // Windows 路径包含反斜杠，使用单引号避免转义问题
+  if (value.includes('\\')) {
+    return `'${value.replace(/'/g, "''")}'`;
+  }
   if (/[:#{}[\],&*?\|\-<>=!%@`]/.test(value) || value.startsWith(' ') || value.endsWith(' ')) {
     return `"${value.replace(/"/g, '\\"')}"`;
   }
