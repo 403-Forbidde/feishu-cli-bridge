@@ -363,13 +363,13 @@ On successful startup, logs will show `🚀 Feishu CLI Bridge started successful
 <summary><b>🐧 Linux — systemd user service (recommended, auto-start on boot)</b></summary>
 
 ```bash
-# Create service file ~/.config/systemd/user/cli-feishu-bridge.service
+# Create service file ~/.config/systemd/user/feishu-cli-bridge.service
 # Refer to pm2 or manual npm start configuration
 
-systemctl --user enable --now cli-feishu-bridge   # Start and enable auto-start
-systemctl --user status  cli-feishu-bridge        # Check status
-systemctl --user restart cli-feishu-bridge        # Restart
-journalctl --user -u cli-feishu-bridge -f         # Real-time logs
+systemctl --user enable --now feishu-cli-bridge   # Start and enable auto-start
+systemctl --user status  feishu-cli-bridge        # Check status
+systemctl --user restart feishu-cli-bridge        # Restart
+journalctl --user -u feishu-cli-bridge -f         # Real-time logs
 ```
 
 </details>
@@ -505,7 +505,7 @@ cli:
 # Project Management
 # ═══════════════════════════════════════════════════════════════
 project:
-  storage_path: ""    # Leave empty for default ~/.config/cli-feishu-bridge/projects.json
+  storage_path: ""    # Leave empty for default ~/.config/feishu-cli-bridge/projects.json
   max_projects: 50
 
 # ═══════════════════════════════════════════════════════════════

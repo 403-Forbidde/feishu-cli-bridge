@@ -62,7 +62,7 @@ export async function sanitizePath(
  */
 function getDefaultStoragePath(): string {
   const configDir = process.env.XDG_CONFIG_HOME || path.join(homedir(), '.config');
-  return path.join(configDir, 'cli-feishu-bridge', 'projects.json');
+  return path.join(configDir, 'feishu-cli-bridge', 'projects.json');
 }
 
 /**

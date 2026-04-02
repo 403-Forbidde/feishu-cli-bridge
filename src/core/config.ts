@@ -5,7 +5,7 @@
  * 配置加载优先级：
  * 1. 显式传入的配置文件路径
  * 2. CONFIG_FILE 环境变量
- * 3. XDG_CONFIG_HOME (~/.config/cli-feishu-bridge/config.yaml)
+ * 3. XDG_CONFIG_HOME (~/.config/feishu-cli-bridge/config.yaml)
  * 4. 当前工作目录的 config.yaml
  * 5. 环境变量默认值
  */
@@ -80,16 +80,16 @@ function findConfigFile(): string | null {
 
   // 2. 平台配置目录
   if (process.platform === 'win32') {
-    // Windows: %APPDATA%\cli-feishu-bridge\config.yaml
+    // Windows: %APPDATA%\feishu-cli-bridge\config.yaml
     const appdata = process.env.APPDATA || homedir();
-    const winConfig = join(appdata, 'cli-feishu-bridge', 'config.yaml');
+    const winConfig = join(appdata, 'feishu-cli-bridge', 'config.yaml');
     if (existsSync(winConfig)) {
       return winConfig;
     }
   } else {
     // Linux/macOS: XDG_CONFIG_HOME (~/.config)
     const configHome = process.env.XDG_CONFIG_HOME || join(homedir(), '.config');
-    const xdgConfig = join(configHome, 'cli-feishu-bridge', 'config.yaml');
+    const xdgConfig = join(configHome, 'feishu-cli-bridge', 'config.yaml');
     if (existsSync(xdgConfig)) {
       return xdgConfig;
     }

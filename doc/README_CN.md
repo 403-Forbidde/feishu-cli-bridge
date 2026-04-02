@@ -362,13 +362,13 @@ npm start
 <summary><b>🐧 Linux — systemd 用户服务（推荐，开机自启）</b></summary>
 
 ```bash
-# 创建服务文件 ~/.config/systemd/user/cli-feishu-bridge.service
+# 创建服务文件 ~/.config/systemd/user/feishu-cli-bridge.service
 # 内容参考 scripts/install_service.sh（需自行修改适配 npm 启动）
 
-systemctl --user enable --now cli-feishu-bridge   # 启动并设为自启
-systemctl --user status  cli-feishu-bridge        # 查看状态
-systemctl --user restart cli-feishu-bridge        # 重启
-journalctl --user -u cli-feishu-bridge -f         # 实时日志
+systemctl --user enable --now feishu-cli-bridge   # 启动并设为自启
+systemctl --user status  feishu-cli-bridge        # 查看状态
+systemctl --user restart feishu-cli-bridge        # 重启
+journalctl --user -u feishu-cli-bridge -f         # 实时日志
 ```
 
 </details>
@@ -504,7 +504,7 @@ cli:
 # 项目管理
 # ═══════════════════════════════════════════════════════════════
 project:
-  storage_path: ""    # 留空使用默认 ~/.config/cli-feishu-bridge/projects.json
+  storage_path: ""    # 留空使用默认 ~/.config/feishu-cli-bridge/projects.json
   max_projects: 50
 
 # ═══════════════════════════════════════════════════════════════

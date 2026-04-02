@@ -31,7 +31,7 @@ const STORAGE_VERSION = 1;
  */
 function getDefaultStoragePath(): string {
   const configDir = process.env.XDG_CONFIG_HOME || path.join(homedir(), '.config');
-  return path.join(configDir, 'cli-feishu-bridge', 'opencode-sessions.json');
+  return path.join(configDir, 'feishu-cli-bridge', 'opencode-sessions.json');
 }
 
 /**
