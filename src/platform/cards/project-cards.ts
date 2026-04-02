@@ -178,15 +178,14 @@ export function buildProjectListCard(
         content: `<font color='grey'>📂</font> \`${shortenPath(project.path)}\` · ${timeStr}`,
       });
 
-      // 操作按钮（水平排列，放在最下方）
+      // 操作按钮：左对齐紧凑排列
       elements.push({
         tag: 'column_set',
         flex_mode: 'none',
         columns: [
           {
             tag: 'column',
-            width: 'weighted',
-            weight: 1,
+            width: 'auto',
             elements: [
               {
                 tag: 'button',
@@ -202,8 +201,7 @@ export function buildProjectListCard(
           },
           {
             tag: 'column',
-            width: 'weighted',
-            weight: 1,
+            width: 'auto',
             elements: [
               {
                 tag: 'button',
@@ -220,8 +218,7 @@ export function buildProjectListCard(
           },
           {
             tag: 'column',
-            width: 'weighted',
-            weight: 1,
+            width: 'auto',
             elements: [
               {
                 tag: 'button',
@@ -234,6 +231,12 @@ export function buildProjectListCard(
                 },
               },
             ],
+          },
+          {
+            tag: 'column',
+            width: 'weighted',
+            weight: 1,
+            elements: [],
           },
         ],
       });
