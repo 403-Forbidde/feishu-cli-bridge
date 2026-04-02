@@ -246,10 +246,12 @@ npm install -g opencode-ai
 **右键 PowerShell → "以管理员身份运行"**，然后执行：
 
 ```powershell
-powershell -c "irm https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main/scripts/setup.ps1 | iex"
+powershell -ExecutionPolicy Bypass -Command "iex (irm https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main/scripts/setup.ps1)"
 ```
 
 > 该脚本**需要管理员权限**才能正确安装 Node.js。优先使用官方 MSI 安装包，如失败则回退到 `winget`、`choco`、`scoop` 或便携 ZIP。
+>
+> `-ExecutionPolicy Bypass` 仅作用于当前进程，避免系统执行策略拦截 `npm` 的 PowerShell 脚本。
 
 </details>
 

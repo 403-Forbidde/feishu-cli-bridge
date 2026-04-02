@@ -228,12 +228,14 @@ curl -fsSL https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main
 **Right-click PowerShell → "Run as administrator"**, then run:
 
 ```powershell
-powershell -c "irm https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main/scripts/setup.ps1 | iex"
+powershell -ExecutionPolicy Bypass -Command "iex (irm https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main/scripts/setup.ps1)"
 ```
 
 > The script **requires Administrator privileges** to install Node.js properly.
 >
 > Auto-installs Node.js via the official **MSI installer** (preferred), then falls back to `winget`, `choco`, `scoop`, or a portable ZIP download.
+>
+> `-ExecutionPolicy Bypass` applies only to the current process, preventing the system's script execution policy from blocking `npm` PowerShell scripts.
 
 #### 🪟 Windows (CMD / BAT fallback)
 
