@@ -229,7 +229,16 @@ export class MessageProcessor {
         return this.handleRenameProjectCallback(event, actionValue);
 
       case 'delete_project':
+      case 'delete_project_confirmed':
         return this.handleDeleteProjectCallback(event, actionValue);
+
+      case 'delete_project_confirm':
+        // 进入删除确认状态 - 刷新卡片显示确认按钮
+        return this.handleDeleteProjectConfirmCallback(event, actionValue);
+
+      case 'delete_project_cancel':
+        // 取消删除 - 刷新卡片
+        return this.handleProjectPageCallback(event, { page: 1 });
 
       case 'switch_mode':
         return this.handleSwitchModeCallback(event, actionValue);
@@ -918,6 +927,8 @@ export class MessageProcessor {
     actionValue: Record<string, unknown>
   ): Promise<CardCallbackResponse> {
     const projectId = actionValue.projectId as string | undefined;
+    const projectName = actionValue.projectName as string | undefined;
+    const projectPath = actionValue.projectPath as string | undefined;
 
     if (!projectId) {
       logger.warn('删除项目失败: 缺少 projectId');
@@ -933,7 +944,12 @@ export class MessageProcessor {
       return {};
     }
 
-    // 删除成功，刷新项目列表卡片
+    // 删除成功，先发送成功提示卡片
+    const { buildProjectDeletedCard } = await import('../cards/index.js');
+    const successCard = buildProjectDeletedCard(projectId, projectName, projectPath);
+    await this.feishuAPI.sendCardMessage(event.chatId, successCard);
+
+    // 然后刷新项目列表卡片
     return await this.buildProjectListCardResponse(event.chatId);
   }
 
@@ -1044,11 +1060,29 @@ export class MessageProcessor {
   }
 
   /**
+   * 处理删除项目确认回调（进入确认状态）
+   */
+  private async handleDeleteProjectConfirmCallback(
+    event: CardCallbackEvent,
+    actionValue: Record<string, unknown>
+  ): Promise<CardCallbackResponse> {
+    const projectId = actionValue.projectId as string | undefined;
+    if (!projectId) {
+      logger.warn('删除项目确认失败: 缺少 projectId');
+      return {};
+    }
+
+    // 返回进入删除确认状态的项目列表卡片
+    return await this.buildProjectListCardResponse(event.chatId, 1, projectId);
+  }
+
+  /**
    * 构建项目列表卡片响应
    */
   private async buildProjectListCardResponse(
     chatId: string,
-    page: number = 1
+    page: number = 1,
+    deletingProjectId?: string
   ): Promise<CardCallbackResponse> {
     try {
       const projects = await this.projectManager.listProjects();
@@ -1095,7 +1129,8 @@ export class MessageProcessor {
         currentProject?.id,
         currentPage,
         totalPages,
-        totalCount
+        totalCount,
+        deletingProjectId
       );
 
       return { card };

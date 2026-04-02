@@ -79,13 +79,15 @@ function shortenPath(path: string): string {
  * @param page - 当前页码（从1开始）
  * @param totalPages - 总页数
  * @param totalCount - 总项目数
+ * @param deletingProjectId - 处于"确认删除"状态的项目ID
  */
 export function buildProjectListCard(
   projects: ProjectInfo[],
   activeProjectId?: string,
   page: number = 1,
   totalPages: number = 1,
-  totalCount?: number
+  totalCount?: number,
+  deletingProjectId?: string
 ): object {
   const elements: object[] = [];
 
@@ -165,11 +167,13 @@ export function buildProjectListCard(
     for (let i = 0; i < paginatedProjects.length; i++) {
       const project = paginatedProjects[i];
       const timeStr = formatTime(project.updatedAt || project.createdAt);
+      const isDeleting = project.id === deletingProjectId;
 
       // 项目名称
+      const statusIcon = isDeleting ? '🔴' : '⚪';
       elements.push({
         tag: 'markdown',
-        content: `⚪ **${project.name}**`,
+        content: `${statusIcon} **${project.name}**`,
       });
 
       // 路径和时间
@@ -178,68 +182,123 @@ export function buildProjectListCard(
         content: `<font color='grey'>📂</font> \`${shortenPath(project.path)}\` · ${timeStr}`,
       });
 
-      // 操作按钮：左对齐紧凑排列
-      elements.push({
-        tag: 'column_set',
-        flex_mode: 'none',
-        columns: [
-          {
-            tag: 'column',
-            width: 'auto',
-            elements: [
-              {
-                tag: 'button',
-                text: { tag: 'plain_text', content: '▶ 切换' },
-                type: 'primary',
-                size: 'medium',
-                value: {
-                  action: 'switch_project',
-                  projectId: project.id,
+      if (isDeleting) {
+        // 删除确认态
+        elements.push({
+          tag: 'markdown',
+          content: `<font color='red'>⚠️ 确认从列表中移除该项目？</font>
+
+<font color='grey'>💡 此操作仅将项目从管理列表中移除，不会删除磁盘上的实际文件</font>`,
+        });
+        elements.push({
+          tag: 'column_set',
+          flex_mode: 'none',
+          columns: [
+            {
+              tag: 'column',
+              width: 'auto',
+              elements: [
+                {
+                  tag: 'button',
+                  text: { tag: 'plain_text', content: '✅ 确认移除' },
+                  type: 'danger',
+                  size: 'medium',
+                  value: {
+                    action: 'delete_project_confirmed',
+                    projectId: project.id,
+                    projectName: project.name,
+                    projectPath: project.path,
+                  },
                 },
-              },
-            ],
-          },
-          {
-            tag: 'column',
-            width: 'auto',
-            elements: [
-              {
-                tag: 'button',
-                text: { tag: 'plain_text', content: '📝 改名' },
-                type: 'default',
-                size: 'medium',
-                value: {
-                  action: 'rename_project_prompt',
-                  projectId: project.id,
-                  projectName: project.name,
+              ],
+            },
+            {
+              tag: 'column',
+              width: 'auto',
+              elements: [
+                {
+                  tag: 'button',
+                  text: { tag: 'plain_text', content: '❌ 取消' },
+                  type: 'default',
+                  size: 'medium',
+                  value: {
+                    action: 'delete_project_cancel',
+                  },
                 },
-              },
-            ],
-          },
-          {
-            tag: 'column',
-            width: 'auto',
-            elements: [
-              {
-                tag: 'button',
-                text: { tag: 'plain_text', content: '🗑️ 删除' },
-                type: 'danger',
-                size: 'medium',
-                value: {
-                  action: 'delete_project',
-                  projectId: project.id,
+              ],
+            },
+            {
+              tag: 'column',
+              width: 'weighted',
+              weight: 1,
+              elements: [],
+            },
+          ],
+        });
+      } else {
+        // 操作按钮：左对齐紧凑排列
+        elements.push({
+          tag: 'column_set',
+          flex_mode: 'none',
+          columns: [
+            {
+              tag: 'column',
+              width: 'auto',
+              elements: [
+                {
+                  tag: 'button',
+                  text: { tag: 'plain_text', content: '▶ 切换' },
+                  type: 'primary',
+                  size: 'medium',
+                  value: {
+                    action: 'switch_project',
+                    projectId: project.id,
+                  },
                 },
-              },
-            ],
-          },
-          {
-            tag: 'column',
-            width: 'weighted',
-            weight: 1,
-            elements: [],
-          },
-        ],
-      });
+              ],
+            },
+            {
+              tag: 'column',
+              width: 'auto',
+              elements: [
+                {
+                  tag: 'button',
+                  text: { tag: 'plain_text', content: '📝 改名' },
+                  type: 'default',
+                  size: 'medium',
+                  value: {
+                    action: 'rename_project_prompt',
+                    projectId: project.id,
+                    projectName: project.name,
+                  },
+                },
+              ],
+            },
+            {
+              tag: 'column',
+              width: 'auto',
+              elements: [
+                {
+                  tag: 'button',
+                  text: { tag: 'plain_text', content: '🗑️ 删除' },
+                  type: 'danger',
+                  size: 'medium',
+                  value: {
+                    action: 'delete_project_confirm',
+                    projectId: project.id,
+                  },
+                },
+              ],
+            },
+            {
+              tag: 'column',
+              width: 'weighted',
+              weight: 1,
+              elements: [],
+            },
+          ],
+        });
+      }
 
       if (i < paginatedProjects.length - 1) {
         elements.push({ tag: 'hr' });
@@ -368,23 +427,38 @@ export function buildProjectSwitchedCard(project: ProjectInfo): object {
 /**
  * 构建项目删除确认卡片
  */
-export function buildProjectDeletedCard(projectId: string): object {
+export function buildProjectDeletedCard(projectId: string, projectName?: string, projectPath?: string): object {
   const displayId = projectId.length >= 8 ? projectId.slice(-8) : projectId;
+  const name = projectName || displayId;
+  const path = projectPath ? shortenPath(projectPath) : '';
+
+  const elements: object[] = [
+    {
+      tag: 'markdown',
+      content: `**${name}** 已从项目列表中移除`,
+    },
+  ];
+
+  if (path) {
+    elements.push({
+      tag: 'markdown',
+      content: `<font color='grey'>📂 目录:</font> \`${path}\``,
+    });
+  }
+
+  elements.push({ tag: 'hr' });
+  elements.push({
+    tag: 'markdown',
+    content: `<font color='grey'>💡 项目文件仍保留在磁盘原位置，可随时重新添加</font>`,
+  });
 
   return {
     schema: '2.0',
     header: {
-      title: { tag: 'plain_text', content: '🗑️ 项目已删除' },
-      template: 'orange',
+      title: { tag: 'plain_text', content: '✅ 项目已移除' },
+      template: 'green',
     },
-    body: {
-      elements: [
-        {
-          tag: 'markdown',
-          content: `项目 \`${displayId}\` 已被删除`,
-        },
-      ],
-    },
+    body: { elements },
   };
 }
 
