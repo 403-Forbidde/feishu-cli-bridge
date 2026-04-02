@@ -67,7 +67,10 @@ function Get-NodeMajor {
 function Test-Node {
     $major = Get-NodeMajor
     if ($major -ge $REQUIRED_NODE_MAJOR) {
-        Write-Ok "Node.js $(node -v) found"
+        if (-not $script:NodeOkPrinted) {
+            Write-Ok "Node.js $(node -v) found"
+            $script:NodeOkPrinted = $true
+        }
         return $true
     }
     if ($major -gt 0) {
@@ -164,6 +167,63 @@ function Test-Git {
     return $false
 }
 
+function Install-Git {
+    Write-Info "Installing Git for Windows..."
+
+    # 1. winget
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        Write-Info "Trying winget..."
+        winget install --id Git.Git --source winget --accept-package-agreements --accept-source-agreements -e
+        Refresh-Path
+        if (Test-Git) { return }
+        Write-Warn "winget could not install Git. Trying next method..."
+    }
+
+    # 2. Download from GitHub (API first, then hardcoded fallback)
+    Write-Info "Trying to download Git for Windows installer..."
+    $gitUrl = $null
+    try {
+        $release = Invoke-RestMethod -Uri "https://api.github.com/repos/git-for-windows/git/releases/latest" -UseBasicParsing -TimeoutSec 15
+        $asset = $release.assets | Where-Object { $_.name -match "^Git-\d+\.\d+(\.\d+)?(\.\d+)?-64-bit\.exe$" } | Select-Object -First 1
+        if ($asset) {
+            $gitUrl = $asset.browser_download_url
+            Write-Info "Found latest Git release: $($asset.name)"
+        }
+    } catch {
+        Write-Warn "Could not query GitHub API for latest Git release: $_"
+    }
+
+    if (-not $gitUrl) {
+        $gitUrl = "https://github.com/git-for-windows/git/releases/download/v2.49.0.windows.1/Git-2.49.0-64-bit.exe"
+        Write-Info "Falling back to hardcoded Git download URL"
+    }
+
+    $gitPath = "$env:TEMP\git-installer.exe"
+    try {
+        Invoke-WebRequest -Uri $gitUrl -OutFile $gitPath -UseBasicParsing
+        Write-Info "Running Git installer (silent mode)..."
+        $proc = Start-Process -FilePath $gitPath -ArgumentList "/VERYSILENT /NORESTART /NOCANCEL /SP-" -Wait -PassThru
+        if ($proc.ExitCode -ne 0) {
+            throw "Git installer exited with code $($proc.ExitCode)"
+        }
+        Refresh-Path
+        if (Test-Git) { return }
+    } catch {
+        Write-Warn "Git installer download/run failed: $_. Trying next method..."
+    }
+
+    # 3. Chocolatey
+    if (Get-Command choco -ErrorAction SilentlyContinue) {
+        Write-Info "Trying Chocolatey..."
+        choco install git -y
+        Refresh-Path
+        if (Test-Git) { return }
+    }
+
+    Write-Error "Could not install Git automatically. Please install Git for Windows manually from https://git-scm.com/download/win"
+    exit 1
+}
+
 # ===== Main flow =====
 Write-Host ""
 Write-Host "  🚀 Feishu CLI Bridge Installer" -ForegroundColor Cyan
@@ -189,8 +249,11 @@ if (-not (Test-Node)) {
 
 # 2. Git
 if (-not (Test-Git)) {
-    Write-Error "Git is required but not installed. Please install Git for Windows: https://git-scm.com/download/win"
-    exit 1
+    Install-Git
+    if (-not (Test-Git)) {
+        Write-Error "Git installation failed"
+        exit 1
+    }
 }
 
 # 3. Clone / update
