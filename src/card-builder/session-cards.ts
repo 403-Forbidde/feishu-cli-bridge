@@ -166,6 +166,8 @@ export function buildSessionListCard(
             tag: 'button',
             text: { tag: 'plain_text', content: '🆕 新建' },
             type: 'primary',
+            size: 'medium',
+            width: 'fill',
             value: { action: 'create_new_session', cli_type: cliType, working_dir: workingDir },
           },
         ],
@@ -229,6 +231,8 @@ export function buildSessionListCard(
                   tag: 'button',
                   text: { tag: 'plain_text', content: '📝 改名' },
                   type: 'default',
+                  size: 'medium',
+                  width: 'fill',
                   value: {
                     action: 'rename_session_prompt',
                     session_id: session.sessionId,
@@ -260,6 +264,8 @@ export function buildSessionListCard(
                   tag: 'button',
                   text: { tag: 'plain_text', content: '▶ 切换' },
                   type: 'primary',
+                  size: 'medium',
+                  width: 'fill',
                   value: {
                     action: 'switch_session',
                     session_id: session.sessionId,
@@ -271,6 +277,8 @@ export function buildSessionListCard(
                   tag: 'button',
                   text: { tag: 'plain_text', content: '🗑️ 删除' },
                   type: 'danger',
+                  size: 'medium',
+                  width: 'fill',
                   value: {
                     action: 'delete_session_confirm',
                     session_id: session.sessionId,

@@ -64,6 +64,8 @@ export function buildSessionListCard(
           tag: 'button',
           text: { tag: 'plain_text', content: '🆕 新建' },
           type: 'primary',
+          size: 'medium',
+          width: 'fill',
           value: { action: 'create_new_session', cli_type: cliType, working_dir: workingDir },
         }],
       },
@@ -139,6 +141,8 @@ export function buildSessionListCard(
                   tag: 'button',
                   text: { tag: 'plain_text', content: '✅ 确认' },
                   type: 'danger',
+                  size: 'medium',
+                  width: 'fill',
                   value: {
                     action: 'delete_session_confirmed',
                     session_id: sessionId,
@@ -147,8 +151,10 @@ export function buildSessionListCard(
                 },
                 {
                   tag: 'button',
-                  text: { tag: 'plain_text', content: '取消' },
+                  text: { tag: 'plain_text', content: '❌ 取消' },
                   type: 'default',
+                  size: 'medium',
+                  width: 'fill',
                   value: {
                     action: 'delete_session_cancel',
                     cli_type: cliType,
@@ -180,6 +186,8 @@ export function buildSessionListCard(
                 tag: 'button',
                 text: { tag: 'plain_text', content: '📝 改名' },
                 type: 'default',
+                size: 'medium',
+                width: 'fill',
                 value: {
                   action: 'rename_session_prompt',
                   session_id: sessionId,
@@ -211,6 +219,8 @@ export function buildSessionListCard(
                   tag: 'button',
                   text: { tag: 'plain_text', content: '▶ 切换' },
                   type: 'primary',
+                  size: 'medium',
+                  width: 'fill',
                   value: {
                     action: 'switch_session',
                     session_id: sessionId,
@@ -222,6 +232,8 @@ export function buildSessionListCard(
                   tag: 'button',
                   text: { tag: 'plain_text', content: '📝 改名' },
                   type: 'default',
+                  size: 'medium',
+                  width: 'fill',
                   value: {
                     action: 'rename_session_prompt',
                     session_id: sessionId,
@@ -234,6 +246,8 @@ export function buildSessionListCard(
                   tag: 'button',
                   text: { tag: 'plain_text', content: '🗑️ 删除' },
                   type: 'danger',
+                  size: 'medium',
+                  width: 'fill',
                   value: {
                     action: 'delete_session_confirm',
                     session_id: sessionId,
