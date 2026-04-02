@@ -218,7 +218,7 @@ Copy and paste **one line** into your terminal. The script handles everything: N
 #### 🐧 Linux / macOS
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ERROR403/feishu-cli-bridge/main/scripts/setup.sh | bash
+curl -fsSL https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main/scripts/setup.sh | bash
 ```
 
 > Auto-detects your package manager (`apt`, `dnf`, `yum`, `pacman`, `brew`) to install Node.js if needed.
@@ -226,7 +226,7 @@ curl -fsSL https://raw.githubusercontent.com/ERROR403/feishu-cli-bridge/main/scr
 #### 🪟 Windows (PowerShell)
 
 ```powershell
-powershell -c "irm https://raw.githubusercontent.com/ERROR403/feishu-cli-bridge/main/scripts/setup.ps1 | iex"
+powershell -c "irm https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main/scripts/setup.ps1 | iex"
 ```
 
 > Auto-installs Node.js via `winget` (preferred), `choco`, `scoop`, or falls back to downloading the official MSI installer. A single UAC prompt may appear for MSI install.
@@ -236,7 +236,7 @@ powershell -c "irm https://raw.githubusercontent.com/ERROR403/feishu-cli-bridge/
 If you prefer CMD, download and double-click:
 
 ```cmd
-curl -L -o setup.bat https://raw.githubusercontent.com/ERROR403/feishu-cli-bridge/main/scripts/setup.bat && setup.bat
+curl -L -o setup.bat https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main/scripts/setup.bat && setup.bat
 ```
 
 > `bat` will try `winget` first; if unavailable, it asks you to download Node.js manually.

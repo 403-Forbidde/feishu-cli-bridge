@@ -1,9 +1,9 @@
 # Feishu CLI Bridge Installer for Windows
-# Usage: powershell -c "irm https://raw.githubusercontent.com/ERROR403/feishu-cli-bridge/main/scripts/setup.ps1 | iex"
-#        powershell -ExecutionPolicy Bypass -Command "iex (irm https://raw.githubusercontent.com/ERROR403/feishu-cli-bridge/main/scripts/setup.ps1)"
+# Usage: powershell -c "irm https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main/scripts/setup.ps1 | iex"
+#        powershell -ExecutionPolicy Bypass -Command "iex (irm https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main/scripts/setup.ps1)"
 
 param(
-    [string]$RepoUrl = "https://github.com/ERROR403/feishu-cli-bridge.git",
+    [string]$RepoUrl = "https://github.com/403-Forbidde/feishu-cli-bridge.git",
     [string]$InstallDir = "$env:USERPROFILE\feishu-cli-bridge"
 )
 

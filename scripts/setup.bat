@@ -4,7 +4,7 @@ setlocal enabledelayedexpansion
 
 set "REQUIRED_NODE_VERSION=20.0.0"
 set "INSTALL_DIR=%USERPROFILE%\feishu-cli-bridge"
-set "REPO_URL=https://github.com/ERROR403/feishu-cli-bridge.git"
+set "REPO_URL=https://github.com/403-Forbidde/feishu-cli-bridge.git"
 
 echo 🚀 Feishu CLI Bridge 一键安装脚本
 echo.

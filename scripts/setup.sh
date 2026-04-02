@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Feishu CLI Bridge Installer for Linux and macOS
-# Usage: curl -fsSL https://raw.githubusercontent.com/ERROR403/feishu-cli-bridge/main/scripts/setup.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main/scripts/setup.sh | bash
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -12,7 +12,7 @@ GRAY='\033[0;90m'
 NC='\033[0m'
 
 REQUIRED_NODE_MAJOR=20
-REPO_URL="${REPO_URL:-https://github.com/ERROR403/feishu-cli-bridge.git}"
+REPO_URL="${REPO_URL:-https://github.com/403-Forbidde/feishu-cli-bridge.git}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/feishu-cli-bridge}"
 TMPFILES=()
 
