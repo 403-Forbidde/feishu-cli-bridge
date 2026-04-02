@@ -227,7 +227,23 @@ curl -fsSL https://raw.githubusercontent.com/ERROR403/feishu-cli-bridge/main/scr
 </details>
 
 <details>
-<summary><b>🪟 Windows</b></summary>
+<summary><b>🪟 Windows (PowerShell - 推荐 ✅)</b></summary>
+
+**PowerShell 脚本支持自动安装 Node.js**（通过 `winget` 或下载 MSI 静默安装）：
+
+```powershell
+# 方法 A: 直接下载并执行
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/ERROR403/feishu-cli-bridge/main/scripts/setup.ps1" -OutFile "$env:TEMP\setup.ps1"; & "$env:TEMP\setup.ps1"
+
+# 方法 B: 先下载到本地，再右键选择 "使用 PowerShell 运行"
+```
+
+> 如果系统使用 `winget`，Node.js 会完全静默安装；否则会下载官方 MSI 安装包，可能会弹出一次 UAC 授权窗口。
+
+</details>
+
+<details>
+<summary><b>🪟 Windows (CMD / BAT - 备选)</b></summary>
 
 1. Download [`scripts/setup.bat`](https://raw.githubusercontent.com/ERROR403/feishu-cli-bridge/main/scripts/setup.bat)
 2. Double-click to run, or run in CMD:
@@ -236,7 +252,7 @@ curl -fsSL https://raw.githubusercontent.com/ERROR403/feishu-cli-bridge/main/scr
 setup.bat
 ```
 
-> If Node.js is not installed, the script will prompt you to download it from [nodejs.org](https://nodejs.org/).
+> `bat` 版本会尝试调用 `winget` 自动安装 Node.js；如果 `winget` 不可用，会提示手动下载。
 
 </details>
 

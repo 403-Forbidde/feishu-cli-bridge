@@ -12,15 +12,32 @@ echo.
 :: 检查 Node.js
 node --version >nul 2>&1
 if errorlevel 1 (
-    echo ⚠️ Node.js 未安装
-    echo.
-    echo 请前往 https://nodejs.org/ 下载安装 Node.js LTS (>= 20.0.0)
+    echo ⚠️ Node.js 未安装，尝试自动安装...
+
+    :: 尝试使用 winget
+    winget --version >nul 2>&1
+    if not errorlevel 1 (
+        echo 📦 使用 winget 安装 Node.js LTS...
+        winget install OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements
+        if not errorlevel 1 (
+            echo ✅ winget 安装完成，正在刷新环境变量...
+            call :RefreshPath
+            node --version >nul 2>&1
+            if not errorlevel 1 (
+                goto NodeOk
+            )
+        )
+        echo ⚠️ winget 安装后仍未能找到 node，可能需要重启终端
+    )
+
+    echo ❌ 自动安装失败，请手动前往 https://nodejs.org/ 下载安装 Node.js LTS (^>= 20.0.0^)
     echo 安装时务必勾选 "Add to PATH"
     echo.
     pause
     exit /b 1
 )
 
+:NodeOk
 for /f "tokens=*" %%a in ('node --version') do set "NODE_VERSION=%%a"
 set "NODE_VERSION=%NODE_VERSION:v=%"
 echo ✅ Node.js v%NODE_VERSION% 已安装
@@ -70,3 +87,14 @@ echo 🎉 安装完成！
 echo 项目目录: %INSTALL_DIR%
 echo 启动命令: cd "%INSTALL_DIR%" ^&^& npm start
 pause
+
+:: 刷新环境变量子程序
+:RefreshPath
+for /f "tokens=2*" %%a in ('reg query "HKCU\Environment" /v Path 2^>nul ^| find "Path"') do (
+    set "USER_PATH=%%b"
+)
+for /f "tokens=2*" %%a in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul ^| find "Path"') do (
+    set "SYS_PATH=%%b"
+)
+set "PATH=%SYS_PATH%;%USER_PATH%"
+goto :eof
