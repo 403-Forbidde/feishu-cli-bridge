@@ -6,7 +6,7 @@
 
 **版本**: v0.2.0  
 **开发**: ERROR403  
-**更新日期**: 2026-04-01
+**更新日期**: 2026-04-02
 
 ## 使用场景
 
@@ -44,12 +44,14 @@
 | 里程碑 | 核心交付 | 状态 |
 |--------|---------|------|
 | **v0.2.0** | TypeScript 重写 · 架构优化 · 性能提升 | ✅ 已完成 |
-| **v0.3.0** | Kimi CLI 适配器（Wire 协议） | 🔜 规划中 |
-| **v1.0.0** | Codex CLI 适配器 | 🔜 规划中 |
+| **v0.3.0** | Claude Code 适配器 | 🔜 规划中 |
+| **v0.4.0** | Kimi CLI 适配器（Wire 协议） | 🔜 规划中 |
+| **v0.5.0** | Codex CLI 适配器 | 🔜 规划中 |
+| **v1.0.0** | 首个正式版本 | 🔜 规划中 |
 
 ---
 
-### ✅ v0.2.0 — TypeScript 重写完成
+### ✅ v0.2.0（当前版本）— TypeScript 重写完成
 
 - [x] 全面迁移至 TypeScript/Node.js 技术栈
 - [x] 分层架构：Core → Platform → Adapter
@@ -67,7 +69,20 @@
 
 ---
 
-### 🔜 v0.3.0 — Kimi CLI 适配器（Wire 协议）
+### 🔜 v0.3.0 — Claude Code 适配器
+
+**目标**：集成 Claude Code CLI，通过 `@claude` 前缀调用。
+
+| 特性 | 说明 |
+|------|------|
+| 子进程流式输出 | 实时解析 stdout/stderr 实现流式响应 |
+| 会话管理 | 与 OpenCode 会话隔离，LRU 复用 |
+| 双路并行启用 | `@opencode` / `@claude` 自由切换 |
+| 图片输入支持 | 统一的附件预处理管道 |
+
+---
+
+### 🔜 v0.4.0 — Kimi CLI 适配器（Wire 协议）
 
 **目标**：将 [Kimi CLI](https://kimi.moonshot.cn) 以 Wire 协议接入，通过 `@kimi` 前缀调用。
 
@@ -77,20 +92,33 @@
 | 持久化子进程池 | 每个 session 对应独立长驻 kimi 进程，上下文完整保留 |
 | 思维链流式展示 | `--thinking` 模式下推理过程实时显示在可折叠面板 |
 | `--yolo` 全自动模式 | 工具调用无需人工确认，配置开关控制 |
-| 与 OpenCode 并行启用 | `@kimi` / `@opencode` 自由切换，无默认冲突 |
+| 三路并行启用 | `@opencode` / `@claude` / `@kimi` 自由切换 |
 
 ---
 
-### 🔜 v1.0.0 — Codex CLI 适配器
+### 🔜 v0.5.0 — Codex CLI 适配器
 
 **目标**：将 [Codex CLI](https://github.com/openai/codex) 以子进程模式接入，通过 `@codex` 前缀调用。
 
 | 特性 | 说明 |
 |------|------|
 | 子进程流式输出 | `codex --stream` 模式，逐行解析 stdout |
-| 独立会话管理 | 与 OpenCode / Kimi session 隔离，LRU 复用 |
-| 与 OpenCode / Kimi 并行启用 | `@opencode` / `@kimi` / `@codex` 三路自由切换 |
+| 独立会话管理 | 与其他 CLI 会话隔离，LRU 复用 |
+| 四路并行启用 | `@opencode` / `@claude` / `@kimi` / `@codex` 自由切换 |
 | 图片输入支持 | 与 OpenCode 路径对齐，附件统一预处理 |
+
+---
+
+### 🔜 v1.0.0 — 首个正式版本
+
+**目标**：经过大量测试和完善后的生产就绪稳定版本。
+
+| 重点领域 | 说明 |
+|----------|------|
+| 稳定性与可靠性 | 全面的错误处理、优雅降级 |
+| 性能优化 | 连接池、缓存、内存优化 |
+| 文档完善 | 完整的 API 文档、部署指南、故障排查 |
+| 测试覆盖 | 高测试覆盖率、集成测试、E2E 验证 |
 
 ---
 
@@ -203,12 +231,6 @@ set FEISHU_APP_SECRET=xxx
 
 ```bash
 npm run dev
-```
-
-**开发模式（IM Patch 降级）：**
-
-```bash
-npm run dev:legacy
 ```
 
 **生产模式：**
@@ -346,7 +368,7 @@ cli:
 
 # 项目管理
 project:
-  storage_path: ""    # 留空使用默认 ~/.config/feishu-cli-bridge/projects.json
+  storage_path: ""    # 留空使用默认 ~/.config/cli-feishu-bridge/projects.json
   max_projects: 50
 
 # 安全配置
@@ -451,7 +473,7 @@ feishu-cli-bridge/
 
 ## 更新日志
 
-### v0.2.0 (2026-04-01) — TypeScript 重写
+### v0.2.0 (2026-04-02) — TypeScript 重写（当前版本）
 
 - 🔧 **全面迁移** — 从 Python 迁移至 TypeScript/Node.js
 - 🏗️ **架构升级** — 分层架构：Core → Platform → Adapter
@@ -497,8 +519,6 @@ npm start
 
 # 测试
 npm run test
-npm run test:unit
-npm run test:integration
 ```
 
 ## 许可证

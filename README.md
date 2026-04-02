@@ -6,7 +6,7 @@ A Node.js/TypeScript bridge connecting Feishu (Lark) to OpenCode CLI, delivering
 
 **Version**: v0.2.0  
 **Developer**: ERROR403  
-**Updated**: 2026-04-01
+**Updated**: 2026-04-02
 
 ---
 
@@ -62,10 +62,12 @@ Typical scenarios:
 | Milestone | Core Deliverables | Status |
 |-----------|-------------------|--------|
 | **v0.2.0** | TypeScript Rewrite · Architecture Optimization · Performance Improvements | ✅ Completed |
-| **v0.3.0** | Kimi CLI Adapter (Wire Protocol) | 🔜 Planned |
-| **v1.0.0** | Codex CLI Adapter | 🔜 Planned |
+| **v0.3.0** | Claude Code Adapter | 🔜 Planned |
+| **v0.4.0** | Kimi CLI Adapter (Wire Protocol) | 🔜 Planned |
+| **v0.5.0** | Codex CLI Adapter | 🔜 Planned |
+| **v1.0.0** | First Stable Release | 🔜 Planned |
 
-### ✅ v0.2.0 — TypeScript Rewrite Complete
+### ✅ v0.2.0 (Current) — TypeScript Rewrite Complete
 
 - [x] Full migration to TypeScript/Node.js stack
 - [x] Layered architecture: Core → Platform → Adapter
@@ -82,7 +84,18 @@ Typical scenarios:
 - [x] OpenCode Server session management (fully delegated to OpenCode server, zero local persistence)
 - [x] Cross-platform support: Windows / Linux / macOS
 
-### 🔜 v0.3.0 — Kimi CLI Adapter (Wire Protocol)
+### 🔜 v0.3.0 — Claude Code Adapter
+
+**Goal**: Integrate Claude Code CLI via subprocess mode, invoked with `@claude` prefix.
+
+| Feature | Description |
+|---------|-------------|
+| Subprocess Streaming Output | Real-time stdout/stderr parsing for streaming responses |
+| Session Management | Isolated sessions from OpenCode, LRU-based reuse |
+| Dual Parallel Enablement | `@opencode` / `@claude` free switching |
+| Image Input Support | Unified attachment preprocessing pipeline |
+
+### 🔜 v0.4.0 — Kimi CLI Adapter (Wire Protocol)
 
 **Goal**: Integrate [Kimi CLI](https://kimi.moonshot.cn) via Wire protocol, invoked with `@kimi` prefix.
 
@@ -92,18 +105,29 @@ Typical scenarios:
 | Persistent Subprocess Pool | Each session corresponds to a long-running kimi process, full context retention |
 | Thinking Chain Streaming | `--thinking` mode reasoning displayed in real-time in collapsible panel |
 | `--yolo` Fully Automatic Mode | Tool calls without manual confirmation, controlled by config switch |
-| Parallel with OpenCode | `@kimi` / `@opencode` free switching, no default conflicts |
+| Triple Parallel Enablement | `@opencode` / `@claude` / `@kimi` free switching |
 
-### 🔜 v1.0.0 — Codex CLI Adapter
+### 🔜 v0.5.0 — Codex CLI Adapter
 
 **Goal**: Integrate [Codex CLI](https://github.com/openai/codex) via subprocess mode, invoked with `@codex` prefix.
 
 | Feature | Description |
 |---------|-------------|
 | Subprocess Streaming Output | `codex --stream` mode, line-by-line stdout parsing |
-| Independent Session Management | Isolated from OpenCode / Kimi sessions, LRU reuse |
-| Triple Parallel Enablement | `@opencode` / `@kimi` / `@codex` free switching |
+| Independent Session Management | Isolated from other CLI sessions, LRU reuse |
+| Quadruple Parallel Enablement | `@opencode` / `@claude` / `@kimi` / `@codex` free switching |
 | Image Input Support | Aligned with OpenCode path, unified attachment preprocessing |
+
+### 🔜 v1.0.0 — First Stable Release
+
+**Goal**: Production-ready stable release after extensive testing and refinement.
+
+| Focus Area | Description |
+|------------|-------------|
+| Stability & Reliability | Comprehensive error handling, graceful degradation |
+| Performance Optimization | Connection pooling, caching, memory optimization |
+| Documentation | Complete API docs, deployment guides, troubleshooting |
+| Testing | High test coverage, integration tests, E2E validation |
 
 ---
 
@@ -171,6 +195,8 @@ npm install
    | `contact:user.id:readonly` | Read user ID |
    | `cardkit:card:read` / `cardkit:card:write` | CardKit streaming cards (optional, auto-fallback if disabled) |
 
+   > **Note**: If CardKit permissions are not granted, the system will automatically fall back to IM Patch mode with 1500ms update intervals.
+
 3. **Events & Callbacks** → Connection mode: "**Long Connection**" → Add event `im.message.receive_v1`
    
    > Do not fill in card callback URL, long connection automatically receives card button callbacks.
@@ -217,12 +243,6 @@ set FEISHU_APP_SECRET=xxx
 
 ```bash
 npm run dev
-```
-
-**Development mode (IM Patch fallback):**
-
-```bash
-npm run dev:legacy
 ```
 
 **Production mode:**
@@ -362,7 +382,7 @@ cli:
 
 # Project Management
 project:
-  storage_path: ""    # Leave empty for default ~/.config/feishu-cli-bridge/projects.json
+  storage_path: ""    # Leave empty for default ~/.config/cli-feishu-bridge/projects.json
   max_projects: 50
 
 # Security Configuration
@@ -491,15 +511,13 @@ npm start
 
 # Tests
 npm run test
-npm run test:unit
-npm run test:integration
 ```
 
 ---
 
 ## Changelog
 
-### v0.2.0 (2026-04-01) — TypeScript Rewrite
+### v0.2.0 (2026-04-02) — TypeScript Rewrite
 
 - 🔧 **Full Migration** — Migrated from Python to TypeScript/Node.js
 - 🏗️ **Architecture Upgrade** — Layered architecture: Core → Platform → Adapter
