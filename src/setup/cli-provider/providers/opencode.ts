@@ -59,8 +59,8 @@ export class OpenCodeProvider implements ICLIProvider {
     methods.push({
       id: 'npm',
       displayName: 'npm 全局安装',
-      description: '通过 npm 安装 opencode 包',
-      command: 'npm install -g opencode',
+      description: '通过 npm 安装 opencode-ai 包',
+      command: 'npm install -g opencode-ai',
       platform: ['linux', 'darwin', 'win32'],
     });
 
