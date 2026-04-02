@@ -1,104 +1,345 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
-# 颜色定义
-RED='\033[0;31m'
+# Feishu CLI Bridge Installer for Linux and macOS
+# Usage: curl -fsSL https://raw.githubusercontent.com/ERROR403/feishu-cli-bridge/main/scripts/setup.sh | bash
+
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+GRAY='\033[0;90m'
+NC='\033[0m'
 
-REQUIRED_NODE_VERSION="20.0.0"
+REQUIRED_NODE_MAJOR=20
 REPO_URL="${REPO_URL:-https://github.com/ERROR403/feishu-cli-bridge.git}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/feishu-cli-bridge}"
+TMPFILES=()
 
-echo -e "${GREEN}🚀 Feishu CLI Bridge 一键安装脚本${NC}"
-echo ""
+cleanup_tmpfiles() {
+    local f
+    for f in "${TMPFILES[@]:-}"; do
+        rm -rf "$f" 2>/dev/null || true
+    done
+}
+trap cleanup_tmpfiles EXIT
 
-# 检查 Node.js
-check_node() {
-  if command -v node &> /dev/null; then
-    local node_version
-    node_version=$(node --version | sed 's/v//')
-    if [ "$(printf '%s\n' "$REQUIRED_NODE_VERSION" "$node_version" | sort -V | head -n1)" = "$REQUIRED_NODE_VERSION" ]; then
-      echo -e "${GREEN}✅ Node.js v${node_version} 已安装${NC}"
-      return 0
-    else
-      echo -e "${YELLOW}⚠️ Node.js v${node_version} 版本过低，需要 >= ${REQUIRED_NODE_VERSION}${NC}"
-      return 1
+mktempfile() {
+    local f
+    f="$(mktemp)"
+    TMPFILES+=("$f")
+    echo "$f"
+}
+
+ui_ok()    { echo -e "${GREEN}[OK]${NC} $*"; }
+ui_info()  { echo -e "${GRAY}[*]${NC} $*"; }
+ui_warn()  { echo -e "${YELLOW}[!]${NC} $*"; }
+ui_error() { echo -e "${RED}[ERROR]${NC} $*"; }
+
+detect_downloader() {
+    if command -v curl &>/dev/null; then
+        echo "curl"
+        return 0
     fi
-  else
-    echo -e "${YELLOW}⚠️ Node.js 未安装${NC}"
+    if command -v wget &>/dev/null; then
+        echo "wget"
+        return 0
+    fi
+    ui_error "Missing downloader (curl or wget required)"
+    exit 1
+}
+
+download_file() {
+    local url="$1"
+    local output="$2"
+    local downloader
+    downloader="$(detect_downloader)"
+    if [[ "$downloader" == "curl" ]]; then
+        curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-delay 1 -o "$output" "$url"
+    else
+        wget -q --https-only --secure-protocol=TLSv1_2 --tries=3 --timeout=20 -O "$output" "$url"
+    fi
+}
+
+node_major_version() {
+    if ! command -v node &>/dev/null; then
+        return 1
+    fi
+    local version major
+    version="$(node -v 2>/dev/null || true)"
+    major="${version#v}"
+    major="${major%%.*}"
+    if [[ "$major" =~ ^[0-9]+$ ]]; then
+        echo "$major"
+        return 0
+    fi
     return 1
-  fi
 }
 
-# 安装 Node.js
+check_node() {
+    if command -v node &>/dev/null; then
+        local major
+        major="$(node_major_version || true)"
+        if [[ -n "$major" && "$major" -ge $REQUIRED_NODE_MAJOR ]]; then
+            ui_ok "Node.js $(node -v) found"
+            return 0
+        else
+            ui_warn "Node.js $(node -v) found, but v${REQUIRED_NODE_MAJOR}+ required"
+            return 1
+        fi
+    fi
+    ui_info "Node.js not found"
+    return 1
+}
+
+refresh_shell_command_cache() {
+    hash -r 2>/dev/null || true
+}
+
+prepend_path_dir() {
+    local dir="${1%/}"
+    [[ -n "$dir" && -d "$dir" ]] || return 1
+    local current=":${PATH:-}:"
+    current="${current//:${dir}:/:}"
+    current="${current#:}"
+    current="${current%:}"
+    if [[ -n "$current" ]]; then
+        export PATH="${dir}:${current}"
+    else
+        export PATH="${dir}"
+    fi
+    refresh_shell_command_cache
+}
+
+ensure_supported_node_on_path() {
+    if check_node; then
+        return 0
+    fi
+
+    local -a candidates=()
+    local candidate=""
+    while IFS= read -r candidate; do
+        [[ -n "$candidate" ]] && candidates+=("$candidate")
+    done < <(type -aP node 2>/dev/null || true)
+    candidates+=(
+        "/usr/bin/node"
+        "/usr/local/bin/node"
+        "/opt/homebrew/bin/node"
+        "$HOME/.nvm/versions/node/v22.14.0/bin/node"
+        "$HOME/.nvm/versions/node/v20.19.0/bin/node"
+    )
+
+    local seen=":"
+    for candidate in "${candidates[@]}"; do
+        [[ -n "$candidate" && -x "$candidate" ]] || continue
+        case "$seen" in *":$candidate:"*) continue ;; esac
+        seen="${seen}${candidate}:"
+
+        local major
+        major="$($candidate -p 'process.versions.node.split(".")[0]' 2>/dev/null || true)"
+        if [[ "$major" =~ ^[0-9]+$ && "$major" -ge $REQUIRED_NODE_MAJOR ]]; then
+            prepend_path_dir "$(dirname "$candidate")"
+            ui_ok "Using Node.js runtime at ${candidate}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+resolve_brew_bin() {
+    local brew_bin=""
+    brew_bin="$(command -v brew 2>/dev/null || true)"
+    [[ -n "$brew_bin" ]] && { echo "$brew_bin"; return 0; }
+    [[ -x "/opt/homebrew/bin/brew" ]] && { echo "/opt/homebrew/bin/brew"; return 0; }
+    [[ -x "/usr/local/bin/brew" ]] && { echo "/usr/local/bin/brew"; return 0; }
+    return 1
+}
+
 install_node() {
-  echo ""
-  echo -e "${YELLOW}📦 正在安装 Node.js...${NC}"
+    ui_info "Installing Node.js v${REQUIRED_NODE_MAJOR}+..."
 
-  if command -v apt-get &> /dev/null; then
-    # Debian/Ubuntu
-    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-    sudo apt-get install -y nodejs
-  elif command -v dnf &> /dev/null; then
-    # Fedora/RHEL
-    sudo dnf module reset nodejs -y
-    sudo dnf module install nodejs:20/common -y
-  elif command -v yum &> /dev/null; then
-    # CentOS
-    curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
-    sudo yum install -y nodejs
-  elif command -v pacman &> /dev/null; then
-    # Arch
-    sudo pacman -S nodejs npm --noconfirm
-  elif command -v brew &> /dev/null; then
-    # macOS Homebrew
-    brew install node@20
-  else
-    echo -e "${RED}❌ 未找到支持的包管理器，请手动安装 Node.js >= ${REQUIRED_NODE_VERSION}${NC}"
+    local os
+    os="$(uname -s)"
+
+    if [[ "$os" == "Darwin" ]]; then
+        local brew_bin
+        brew_bin="$(resolve_brew_bin || true)"
+        if [[ -n "$brew_bin" ]]; then
+            ui_info "Using Homebrew..."
+            if ! $brew_bin list node@22 &>/dev/null; then
+                $brew_bin install node@22 2>/dev/null || $brew_bin install node 2>/dev/null || true
+            fi
+            local brew_prefix
+            brew_prefix="$($brew_bin --prefix node@22 2>/dev/null || true)"
+            [[ -n "$brew_prefix" && -d "$brew_prefix/bin" ]] && prepend_path_dir "$brew_prefix/bin"
+            if ensure_supported_node_on_path; then
+                return 0
+            fi
+        fi
+    fi
+
+    if command -v apt-get &>/dev/null; then
+        ui_info "Using apt..."
+        local tmp_script
+        tmp_script="$(mktempfile)"
+        download_file "https://deb.nodesource.com/setup_${REQUIRED_NODE_MAJOR}.x" "$tmp_script"
+        if command -v sudo &>/dev/null; then
+            bash "$tmp_script"
+            sudo apt-get install -y nodejs
+        else
+            bash "$tmp_script"
+            apt-get install -y nodejs
+        fi
+        refresh_shell_command_cache
+        if ensure_supported_node_on_path; then
+            return 0
+        fi
+    fi
+
+    if command -v dnf &>/dev/null; then
+        ui_info "Using dnf..."
+        if command -v sudo &>/dev/null; then
+            sudo dnf module reset nodejs -y
+            sudo dnf module install nodejs:${REQUIRED_NODE_MAJOR}/common -y
+        else
+            dnf module reset nodejs -y
+            dnf module install nodejs:${REQUIRED_NODE_MAJOR}/common -y
+        fi
+        refresh_shell_command_cache
+        if ensure_supported_node_on_path; then
+            return 0
+        fi
+    fi
+
+    if command -v yum &>/dev/null; then
+        ui_info "Using yum..."
+        local tmp_script
+        tmp_script="$(mktempfile)"
+        download_file "https://rpm.nodesource.com/setup_${REQUIRED_NODE_MAJOR}.x" "$tmp_script"
+        if command -v sudo &>/dev/null; then
+            bash "$tmp_script"
+            sudo yum install -y nodejs
+        else
+            bash "$tmp_script"
+            yum install -y nodejs
+        fi
+        refresh_shell_command_cache
+        if ensure_supported_node_on_path; then
+            return 0
+        fi
+    fi
+
+    if command -v pacman &>/dev/null; then
+        ui_info "Using pacman..."
+        if command -v sudo &>/dev/null; then
+            sudo pacman -S nodejs npm --noconfirm
+        else
+            pacman -S nodejs npm --noconfirm
+        fi
+        refresh_shell_command_cache
+        if ensure_supported_node_on_path; then
+            return 0
+        fi
+    fi
+
+    ui_error "Could not install Node.js automatically. Please install Node.js >= ${REQUIRED_NODE_MAJOR} manually."
     exit 1
-  fi
 }
 
-# 主流程
-if ! check_node; then
-  install_node
-  if ! check_node; then
-    echo -e "${RED}❌ Node.js 安装失败，请手动安装后重试${NC}"
-    exit 1
-  fi
-fi
+is_root() {
+    [[ "$(id -u)" -eq 0 ]]
+}
 
-# 检查 git
-if ! command -v git &> /dev/null; then
-  echo -e "${RED}❌ 请先安装 git${NC}"
-  exit 1
-fi
+check_git() {
+    if command -v git &>/dev/null; then
+        ui_ok "Git found"
+        return 0
+    fi
+    ui_info "Git not found, installing..."
+    return 1
+}
 
-# 克隆或更新项目
+install_git() {
+    local os
+    os="$(uname -s)"
+    if [[ "$os" == "Darwin" ]]; then
+        local brew_bin
+        brew_bin="$(resolve_brew_bin || true)"
+        if [[ -n "$brew_bin" ]]; then
+            $brew_bin install git
+        else
+            ui_error "Homebrew not available; cannot install Git"
+            exit 1
+        fi
+    elif [[ "$os" == "Linux" ]]; then
+        if command -v apt-get &>/dev/null; then
+            if is_root; then
+                apt-get update -qq && apt-get install -y -qq git
+            else
+                sudo apt-get update -qq && sudo apt-get install -y -qq git
+            fi
+        elif command -v dnf &>/dev/null; then
+            if is_root; then sudo dnf install -y -q git; else sudo dnf install -y -q git; fi
+        elif command -v yum &>/dev/null; then
+            if is_root; then yum install -y -q git; else sudo yum install -y -q git; fi
+        elif command -v pacman &>/dev/null; then
+            if is_root; then pacman -S git --noconfirm; else sudo pacman -S git --noconfirm; fi
+        else
+            ui_error "Could not detect package manager for Git"
+            exit 1
+        fi
+    fi
+    refresh_shell_command_cache
+    ui_ok "Git installed"
+}
+
+# ===== Main flow =====
 echo ""
-echo -e "${GREEN}📥 下载项目...${NC}"
-if [ -d "$INSTALL_DIR" ]; then
-  echo -e "${YELLOW}目录已存在，更新代码...${NC}"
-  cd "$INSTALL_DIR"
-  git pull
+echo -e "${CYAN}  🚀 Feishu CLI Bridge Installer${NC}"
+echo ""
+
+# 1. Node.js
+if ! ensure_supported_node_on_path; then
+    install_node
+    if ! ensure_supported_node_on_path; then
+        ui_error "Node.js installation may require a terminal restart"
+        ui_warn "Please close this terminal, open a new one, and run the installer again."
+        exit 1
+    fi
+fi
+
+# 2. Git
+if ! check_git; then
+    install_git
+    if ! command -v git &>/dev/null; then
+        ui_error "Git installation failed"
+        exit 1
+    fi
+fi
+
+# 3. Clone / update
+ui_info "Cloning repository..."
+if [[ -d "$INSTALL_DIR" ]]; then
+    ui_info "Directory exists, pulling latest..."
+    cd "$INSTALL_DIR"
+    git pull
 else
-  git clone "$REPO_URL" "$INSTALL_DIR"
-  cd "$INSTALL_DIR"
+    git clone "$REPO_URL" "$INSTALL_DIR"
+    cd "$INSTALL_DIR"
 fi
 
-# 安装依赖
-echo ""
-echo -e "${GREEN}📦 安装依赖...${NC}"
+# 4. Install deps
+ui_info "Installing npm dependencies..."
 npm install
 
-# 运行交互式安装向导
+# 5. Run wizard
+ui_ok "Dependencies installed"
 echo ""
-echo -e "${GREEN}🧙 启动交互式安装向导...${NC}"
+ui_ok "Launching interactive setup wizard..."
 npm run setup:dev
 
 echo ""
-echo -e "${GREEN}🎉 安装完成！${NC}"
-echo -e "项目目录: ${YELLOW}$INSTALL_DIR${NC}"
-echo -e "启动命令: ${YELLOW}cd $INSTALL_DIR \u0026\u0026 npm start${NC}"
+echo -e "${GREEN}🎉 Feishu CLI Bridge installed successfully!${NC}"
+echo -e "${GRAY}Project directory:${NC} ${CYAN}$INSTALL_DIR${NC}"
+echo -e "${GRAY}Start command:${NC}   ${CYAN}cd $INSTALL_DIR && npm start${NC}"
+echo ""

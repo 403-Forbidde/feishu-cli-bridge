@@ -213,48 +213,33 @@ Batch processing after long gaps to avoid sparse initial updates
 
 ### Option 1: One-line Install (Recommended 🌟)
 
-The zero-dependency install script automatically checks and installs Node.js, clones the repo, installs dependencies, and launches the interactive wizard.
+Copy and paste **one line** into your terminal. The script handles everything: Node.js check/install, repo clone, dependency install, and launches the interactive wizard.
 
-<details>
-<summary><b>🐧 Linux / macOS</b></summary>
+#### 🐧 Linux / macOS
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ERROR403/feishu-cli-bridge/main/scripts/setup.sh | bash
 ```
 
-> The script will auto-detect your package manager (`apt`, `dnf`, `yum`, `pacman`, `brew`) to install Node.js if needed.
+> Auto-detects your package manager (`apt`, `dnf`, `yum`, `pacman`, `brew`) to install Node.js if needed.
 
-</details>
-
-<details>
-<summary><b>🪟 Windows (PowerShell - 推荐 ✅)</b></summary>
-
-**PowerShell 脚本支持自动安装 Node.js**（通过 `winget` 或下载 MSI 静默安装）：
+#### 🪟 Windows (PowerShell)
 
 ```powershell
-# 方法 A: 直接下载并执行
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/ERROR403/feishu-cli-bridge/main/scripts/setup.ps1" -OutFile "$env:TEMP\setup.ps1"; & "$env:TEMP\setup.ps1"
-
-# 方法 B: 先下载到本地，再右键选择 "使用 PowerShell 运行"
+powershell -c "irm https://raw.githubusercontent.com/ERROR403/feishu-cli-bridge/main/scripts/setup.ps1 | iex"
 ```
 
-> 如果系统使用 `winget`，Node.js 会完全静默安装；否则会下载官方 MSI 安装包，可能会弹出一次 UAC 授权窗口。
+> Auto-installs Node.js via `winget` (preferred), `choco`, `scoop`, or falls back to downloading the official MSI installer. A single UAC prompt may appear for MSI install.
 
-</details>
+#### 🪟 Windows (CMD / BAT fallback)
 
-<details>
-<summary><b>🪟 Windows (CMD / BAT - 备选)</b></summary>
-
-1. Download [`scripts/setup.bat`](https://raw.githubusercontent.com/ERROR403/feishu-cli-bridge/main/scripts/setup.bat)
-2. Double-click to run, or run in CMD:
+If you prefer CMD, download and double-click:
 
 ```cmd
-setup.bat
+curl -L -o setup.bat https://raw.githubusercontent.com/ERROR403/feishu-cli-bridge/main/scripts/setup.bat && setup.bat
 ```
 
-> `bat` 版本会尝试调用 `winget` 自动安装 Node.js；如果 `winget` 不可用，会提示手动下载。
-
-</details>
+> `bat` will try `winget` first; if unavailable, it asks you to download Node.js manually.
 
 The wizard will then guide you through:
 1. **OpenCode CLI installation** — detects, installs, logs in, and selects default model
