@@ -241,7 +241,20 @@ npm install -g opencode-ai
 </details>
 
 <details>
-<summary><b>🪟 Windows（CMD）</b></summary>
+<summary><b>🪟 Windows（一键安装，推荐）</b></summary>
+
+**右键 PowerShell → "以管理员身份运行"**，然后执行：
+
+```powershell
+powershell -c "irm https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main/scripts/setup.ps1 | iex"
+```
+
+> 该脚本**需要管理员权限**才能正确安装 Node.js。优先使用官方 MSI 安装包，如失败则回退到 `winget`、`choco`、`scoop` 或便携 ZIP。
+
+</details>
+
+<details>
+<summary><b>🪟 Windows（手动安装）</b></summary>
 
 - [Node.js LTS](https://nodejs.org/) — 安装时勾选「**Add to PATH**」
 - 安装完成后：`npm install -g opencode-ai`

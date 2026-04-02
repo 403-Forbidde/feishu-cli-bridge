@@ -225,11 +225,15 @@ curl -fsSL https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main
 
 #### 🪟 Windows (PowerShell)
 
+**Right-click PowerShell → "Run as administrator"**, then run:
+
 ```powershell
 powershell -c "irm https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main/scripts/setup.ps1 | iex"
 ```
 
-> Auto-installs Node.js via `winget` (preferred), `choco`, `scoop`, or falls back to downloading the official MSI installer. A single UAC prompt may appear for MSI install.
+> The script **requires Administrator privileges** to install Node.js properly.
+>
+> Auto-installs Node.js via the official **MSI installer** (preferred), then falls back to `winget`, `choco`, `scoop`, or a portable ZIP download.
 
 #### 🪟 Windows (CMD / BAT fallback)
 
