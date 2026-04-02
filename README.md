@@ -225,27 +225,21 @@ curl -fsSL https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main
 
 #### 🪟 Windows (PowerShell)
 
-**Right-click PowerShell → "Run as administrator"**, then run:
+**Prerequisites:**
+- [Node.js LTS (v20+)](https://nodejs.org/en/download) — install with "**Add to PATH**" checked
+- [Git for Windows](https://git-scm.com/download/win) — use the 64-bit standalone installer with default options
+
+> After installing both, **restart PowerShell** so the new PATH is loaded.
+
+Then run:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -Command "iex (irm https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main/scripts/setup.ps1)"
 ```
 
-> The script **requires Administrator privileges** to install Node.js properly.
->
-> Auto-installs Node.js via the official **MSI installer** (preferred), then falls back to `winget`, `choco`, `scoop`, or a portable ZIP download.
+> The script no longer auto-installs Node.js/Git. It verifies they exist and then clones the repo, installs npm dependencies, and launches the interactive wizard.
 >
 > `-ExecutionPolicy Bypass` applies only to the current process, preventing the system's script execution policy from blocking `npm` PowerShell scripts.
-
-#### 🪟 Windows (CMD / BAT fallback)
-
-If you prefer CMD, download and double-click:
-
-```cmd
-curl -L -o setup.bat https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main/scripts/setup.bat && setup.bat
-```
-
-> `bat` will try `winget` first; if unavailable, it asks you to download Node.js manually.
 
 The wizard will then guide you through:
 1. **OpenCode CLI installation** — detects, installs, logs in, and selects default model

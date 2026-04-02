@@ -1,10 +1,11 @@
 import process from 'node:process';
-import { select, confirm } from '@inquirer/prompts';
+import { confirm } from '@inquirer/prompts';
 import chalk from 'chalk';
 import ora from 'ora';
 
 import { OpenCodeProvider } from '../cli-provider/providers/opencode.js';
 import type { ICLIProvider, CLICheckResult, AuthStatus } from '../cli-provider/interface.js';
+import { safeSelect } from './safe-select.js';
 
 export interface CliSetupResult {
   success: boolean;
@@ -76,32 +77,16 @@ export async function runCliSetup(): Promise<CliSetupResult> {
     }
   }
 
-  // Model selection
-  const modelSpinner = ora('获取模型列表...').start();
-  const models = await provider.fetchModels();
-  modelSpinner.stop();
-
+  // Model selection: skip interactive prompt, use default model directly
   const defaultConfig = provider.getDefaultConfig();
-  let selectedModel = defaultConfig.default_model;
+  const selectedModel = defaultConfig.default_model;
 
-  if (models.length > 0) {
-    selectedModel = await select({
-      message: '选择默认模型',
-      choices: models.map((m) => ({
-        name: m.provider ? `${m.name} (${m.provider})` : m.name,
-        value: m.id,
-        description: m.id,
-      })),
-      default: defaultConfig.default_model,
-    });
-  }
+  console.log(chalk.dim(`  默认模型: ${selectedModel}（如需更改可后续手动修改配置文件）\n`));
 
   const config = {
     ...defaultConfig,
     default_model: selectedModel,
   };
-
-  console.log(chalk.green(`\n已选择默认模型: ${selectedModel}\n`));
 
   return {
     success: true,
@@ -146,7 +131,7 @@ async function promptInstallCli(provider: ICLIProvider): Promise<boolean> {
     return false;
   }
 
-  const choice = await select({
+  const choice = await safeSelect({
     message: '选择安装方式',
     choices: methods.map((m) => ({
       name: `${m.displayName} - ${m.description}`,

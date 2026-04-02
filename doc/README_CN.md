@@ -241,25 +241,23 @@ npm install -g opencode-ai
 </details>
 
 <details>
-<summary><b>🪟 Windows（一键安装，推荐）</b></summary>
+<summary><b>🪟 Windows（PowerShell 一键安装，推荐）</b></summary>
 
-**右键 PowerShell → "以管理员身份运行"**，然后执行：
+**安装前请确保已安装：**
+- [Node.js LTS (v20+)](https://nodejs.org/en/download) — 安装时勾选「**Add to PATH**」
+- [Git for Windows](https://git-scm.com/download/win) — 下载 64 位独立安装包，使用默认选项安装即可
+
+> 安装完成后，**重启 PowerShell**，使环境变量生效。
+
+然后执行：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -Command "iex (irm https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main/scripts/setup.ps1)"
 ```
 
-> 该脚本**需要管理员权限**才能正确安装 Node.js。优先使用官方 MSI 安装包，如失败则回退到 `winget`、`choco`、`scoop` 或便携 ZIP。
+> 脚本不再自动安装 Node.js/Git。它会先检查前置环境，随后拉取仓库、安装 npm 依赖并启动交互式配置向导。
 >
 > `-ExecutionPolicy Bypass` 仅作用于当前进程，避免系统执行策略拦截 `npm` 的 PowerShell 脚本。
-
-</details>
-
-<details>
-<summary><b>🪟 Windows（手动安装）</b></summary>
-
-- [Node.js LTS](https://nodejs.org/) — 安装时勾选「**Add to PATH**」
-- 安装完成后：`npm install -g opencode-ai`
 
 </details>
 

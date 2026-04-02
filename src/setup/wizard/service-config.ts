@@ -1,4 +1,4 @@
-import { select, confirm, input } from '@inquirer/prompts';
+import { confirm, input } from '@inquirer/prompts';
 import chalk from 'chalk';
 import process from 'node:process';
 import { homedir } from 'node:os';
@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { SystemdServiceManager } from '../service-manager/platforms/systemd.js';
 import { LaunchdServiceManager } from '../service-manager/platforms/launchd.js';
 import type { ServiceMode, RunOption, ServiceConfig } from '../service-manager/types.js';
+import { safeSelect } from './safe-select.js';
 
 export interface ServiceSetupResult {
   mode: ServiceMode;
@@ -24,6 +25,15 @@ export async function runServiceConfig(
   console.log(chalk.bold('⚙️ 服务运行方式配置'));
   console.log('─'.repeat(40));
 
+  // Windows: only foreground is supported, skip selection
+  if (process.platform === 'win32') {
+    console.log(chalk.dim('Windows 当前仅支持前台运行模式'));
+    return {
+      mode: 'foreground',
+      config: buildServiceConfig('foreground', workingDirectory, cliCommand, cliArgs),
+    };
+  }
+
   const availableOptions = options.filter((o) => o.available);
   if (availableOptions.length === 0) {
     console.log(chalk.yellow('未检测到可用的服务管理器，使用前台运行模式'));
@@ -33,7 +43,7 @@ export async function runServiceConfig(
     };
   }
 
-  const choice = await select({
+  const choice = await safeSelect({
     message: '选择运行方式',
     choices: availableOptions.map((o) => ({
       name: `${o.displayName}${o.requiresAdmin ? ' [需管理员权限]' : ''}`,
