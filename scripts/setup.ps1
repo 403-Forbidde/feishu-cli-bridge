@@ -160,7 +160,10 @@ function Install-Node {
 
 function Test-Git {
     if (Get-Command git -ErrorAction SilentlyContinue) {
-        Write-Ok "Git found"
+        if (-not $script:GitOkPrinted) {
+            Write-Ok "Git found"
+            $script:GitOkPrinted = $true
+        }
         return $true
     }
     Write-Info "Git not found"
@@ -267,11 +270,18 @@ if (Test-Path $InstallDir) {
     Set-Location $InstallDir
 }
 
-# 4. Install deps
+# 4. Ensure execution policy allows npm.ps1 to run in this session
+$currentExecPolicy = Get-ExecutionPolicy -Scope Process
+if ($currentExecPolicy -in @('Restricted', 'AllSigned')) {
+    Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process -Force
+    Write-Info "Temporarily relaxed PowerShell execution policy for this session"
+}
+
+# 5. Install deps
 Write-Info "Installing npm dependencies..."
 npm install
 
-# 5. Run wizard
+# 6. Run wizard
 Write-Ok "Dependencies installed"
 Write-Host ""
 Write-Ok "Launching interactive setup wizard..."
