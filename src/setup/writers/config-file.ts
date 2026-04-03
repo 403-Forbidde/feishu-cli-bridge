@@ -97,13 +97,15 @@ function generateYAML(config: FullConfig): string {
 }
 
 function quote(value: string): string {
-  if (!value) return '""';
+  // 清理 Windows 换行符 \r（输入可能来自 Windows 环境变量或文件）
+  const cleanValue = value.replace(/\r/g, '');
+  if (!cleanValue) return '""';
   // Windows 路径包含反斜杠，使用单引号避免转义问题
-  if (value.includes('\\')) {
-    return `'${value.replace(/'/g, "''")}'`;
+  if (cleanValue.includes('\\')) {
+    return `'${cleanValue.replace(/'/g, "''")}'`;
   }
-  if (/[:#{}[\],&*?\|\-<>=!%@`]/.test(value) || value.startsWith(' ') || value.endsWith(' ')) {
-    return `"${value.replace(/"/g, '\\"')}"`;
+  if (/[:#{}[\],&*?\|\-<>=!%@`]/.test(cleanValue) || cleanValue.startsWith(' ') || cleanValue.endsWith(' ')) {
+    return `"${cleanValue.replace(/"/g, '\\"')}"`;
   }
-  return value;
+  return cleanValue;
 }
