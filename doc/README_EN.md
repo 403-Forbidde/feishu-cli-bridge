@@ -43,8 +43,27 @@
 
 ---
 
+## 📸 Interface Preview
+
+<div align="center">
+
+| Project Management | Session Management | Agent Modes |
+|:------------------:|:------------------:|:-----------:|
+| ![Project Management](../screenshot/1.png) | ![Session Management](../screenshot/2.png) | ![Agent Modes](../screenshot/3.png) |
+| `/pl` Interactive Project Card | `/session` Session List | `/mode` Mode Switching |
+
+| Model Switching | Help Card | AI Streaming Output |
+|:---------------:|:---------:|:-------------------:|
+| ![Model Switching](../screenshot/4.png) | ![Help Card](../screenshot/5.png) | ![AI Output](../screenshot/6.png) |
+| `/model` One-click Switch | `/help` Command List | Typewriter Effect + Token Stats |
+
+</div>
+
+---
+
 ## 📑 Table of Contents
 
+- [📸 Interface Preview](#-interface-preview)
 - [🎯 Use Cases](#-use-cases)
 - [✨ Features](#-features)
 - [⚡ Quick Start](#-quick-start)

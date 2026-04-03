@@ -42,6 +42,24 @@
 
 ---
 
+## 📸 界面预览
+
+<div align="center">
+
+| 项目管理 | 会话管理 | Agent 模式 |
+|:--------:|:--------:|:----------:|
+| ![项目管理](./doc/screenshot/1.png) | ![会话管理](./doc/screenshot/2.png) | ![Agent模式](./doc/screenshot/3.png) |
+| `/pl` 交互式项目卡片 | `/session` 会话列表 | `/mode` 模式切换 |
+
+| 模型切换 | 帮助卡片 | AI 流式输出 |
+|:--------:|:--------:|:-----------:|
+| ![模型切换](./doc/screenshot/4.png) | ![帮助卡片](./doc/screenshot/5.png) | ![AI输出](./doc/screenshot/6.png) |
+| `/model` 一键切换 | `/help` 命令列表 | 打字机效果 + Token 统计 |
+
+</div>
+
+---
+
 ## 📑 目录
 
 - [🎯 使用场景](#-使用场景)
