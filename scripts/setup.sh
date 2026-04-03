@@ -148,14 +148,65 @@ fi
 ui_info "Installing npm dependencies..."
 npm install
 
-# 5. Run wizard
-ui_ok "Dependencies installed"
+# 5. Build project
+ui_info "Building project..."
+npm run build
+
+# 6. Run wizard
+ui_ok "Build completed"
 echo ""
 ui_ok "Launching interactive setup wizard..."
-npm run setup:dev
+npm run setup
+
+# 7. Print post-setup instructions based on wizard result
+SETUP_RESULT_FILE="$INSTALL_DIR/.setup_result.json"
+SERVICE_MODE=""
+SERVICE_NAME=""
+SERVICE_RUNNING="false"
+
+if [ -f "$SETUP_RESULT_FILE" ]; then
+    SERVICE_MODE=$(grep '"mode"' "$SETUP_RESULT_FILE" | sed -E 's/.*"mode"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')
+    SERVICE_NAME=$(grep '"serviceName"' "$SETUP_RESULT_FILE" | sed -E 's/.*"serviceName"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')
+    SERVICE_RUNNING=$(grep '"serviceRunning"' "$SETUP_RESULT_FILE" | sed -E 's/.*"serviceRunning"[[:space:]]*:[[:space:]]*(true|false).*/\1/')
+fi
 
 echo ""
 echo -e "${GREEN}🎉 Feishu CLI Bridge installed successfully!${NC}"
 echo -e "${GRAY}Project directory:${NC} ${CYAN}$INSTALL_DIR${NC}"
-echo -e "${GRAY}Start command:${NC}   ${CYAN}cd $INSTALL_DIR && npm start${NC}"
+
+if [ "$SERVICE_MODE" = "foreground" ] || [ -z "$SERVICE_MODE" ]; then
+    echo -e "${GRAY}Start command:${NC}   ${CYAN}cd $INSTALL_DIR && npm start${NC}"
+else
+    echo -e "${GRAY}Service mode:${NC}  ${CYAN}$SERVICE_MODE${NC}"
+    echo -e "${GRAY}Service name:${NC}  ${CYAN}$SERVICE_NAME${NC}"
+    if [ "$SERVICE_RUNNING" = "true" ]; then
+        echo -e "${GREEN}Service is running ✅${NC}"
+    else
+        echo -e "${YELLOW}Service may need manual start ⚠️${NC}"
+    fi
+    echo ""
+    echo -e "${CYAN}常用管理命令:${NC}"
+    case "$SERVICE_MODE" in
+        systemd-user)
+            echo -e "  ${GRAY}systemctl --user status $SERVICE_NAME${NC}"
+            echo -e "  ${GRAY}systemctl --user restart $SERVICE_NAME${NC}"
+            echo -e "  ${GRAY}journalctl --user -u $SERVICE_NAME -f${NC}"
+            ;;
+        systemd-system)
+            echo -e "  ${GRAY}sudo systemctl status $SERVICE_NAME${NC}"
+            echo -e "  ${GRAY}sudo systemctl restart $SERVICE_NAME${NC}"
+            echo -e "  ${GRAY}sudo journalctl -u $SERVICE_NAME -f${NC}"
+            ;;
+        launchd-user)
+            echo -e "  ${GRAY}launchctl list | grep $SERVICE_NAME${NC}"
+            echo -e "  ${GRAY}launchctl bootout gui/\$UID ~/Library/LaunchAgents/$SERVICE_NAME.plist${NC}"
+            echo -e "  ${GRAY}launchctl bootstrap gui/\$UID ~/Library/LaunchAgents/$SERVICE_NAME.plist${NC}"
+            ;;
+        launchd-system)
+            echo -e "  ${GRAY}sudo launchctl list | grep $SERVICE_NAME${NC}"
+            echo -e "  ${GRAY}sudo launchctl bootout system /Library/LaunchDaemons/$SERVICE_NAME.plist${NC}"
+            echo -e "  ${GRAY}sudo launchctl bootstrap system /Library/LaunchDaemons/$SERVICE_NAME.plist${NC}"
+            ;;
+    esac
+fi
 echo ""

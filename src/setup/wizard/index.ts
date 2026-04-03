@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import ora from 'ora';
 import boxen from 'boxen';
 import { homedir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import { showWelcome } from './welcome.js';
@@ -78,6 +79,25 @@ export async function runWizard(): Promise<void> {
     process.exit(1);
   }
 
+  // Build project before installing service (ensures dist/main.js exists)
+  const buildSpinner = ora('构建项目中...').start();
+  try {
+    const { execa } = await import('execa');
+    const { exitCode } = await execa('npm', ['run', 'build'], { cwd: process.cwd() });
+    if (exitCode === 0) {
+      buildSpinner.succeed('项目构建成功');
+    } else {
+      buildSpinner.fail('项目构建失败');
+      process.exit(1);
+    }
+  } catch (error) {
+    buildSpinner.fail('项目构建失败');
+    console.error(error);
+    process.exit(1);
+  }
+
+  let serviceRunning = false;
+
   // Install service if not foreground
   if (serviceResult.mode !== 'foreground') {
     const installSpinner = ora('安装系统服务...').start();
@@ -91,6 +111,7 @@ export async function runWizard(): Promise<void> {
       startSpinner.stop();
       if (startResult.success) {
         console.log(chalk.green('服务启动成功 ✅'));
+        serviceRunning = true;
       } else {
         console.log(chalk.yellow(`服务启动失败: ${startResult.error || '未知错误'}`));
       }
@@ -99,15 +120,29 @@ export async function runWizard(): Promise<void> {
     }
   }
 
+  // Write setup result for setup.sh / setup.ps1 to consume
+  const setupResult = {
+    mode: serviceResult.mode,
+    serviceName: serviceResult.config.serviceName,
+    serviceRunning,
+    projectDir: process.cwd(),
+  };
+  try {
+    writeFileSync('.setup_result.json', JSON.stringify(setupResult, null, 2));
+  } catch {
+    // ignore write failure
+  }
+
   // Summary
-  printSummary(configPath, feishuConfig, cliResult.config.default_model as string, serviceResult);
+  printSummary(configPath, feishuConfig, cliResult.config.default_model as string, serviceResult, serviceRunning);
 }
 
 function printSummary(
   configPath: string,
   feishu: FeishuConfig,
   model: string,
-  service: ServiceSetupResult
+  service: ServiceSetupResult,
+  serviceRunning: boolean
 ): void {
   const lines = [
     chalk.bold('🎉 安装完成！'),
@@ -120,9 +155,39 @@ function printSummary(
 
   if (service.mode !== 'foreground') {
     lines.push(`服务名称: ${chalk.cyan(service.config.serviceName)}`);
+    if (serviceRunning) {
+      lines.push(chalk.green('服务状态: 正在运行 ✅'));
+    } else {
+      lines.push(chalk.yellow('服务状态: 启动失败，请手动检查 ⚠️'));
+    }
+    lines.push('');
+    lines.push(chalk.dim('常用命令:'));
+    const name = service.config.serviceName;
+    switch (service.mode) {
+      case 'systemd-user':
+        lines.push(chalk.dim(`  systemctl --user status ${name}`));
+        lines.push(chalk.dim(`  systemctl --user restart ${name}`));
+        lines.push(chalk.dim(`  journalctl --user -u ${name} -f`));
+        break;
+      case 'systemd-system':
+        lines.push(chalk.dim(`  sudo systemctl status ${name}`));
+        lines.push(chalk.dim(`  sudo systemctl restart ${name}`));
+        lines.push(chalk.dim(`  sudo journalctl -u ${name} -f`));
+        break;
+      case 'launchd-user':
+        lines.push(chalk.dim(`  launchctl list | grep ${name}`));
+        lines.push(chalk.dim(`  launchctl bootout gui/$UID ~/Library/LaunchAgents/${name}.plist`));
+        lines.push(chalk.dim(`  launchctl bootstrap gui/$UID ~/Library/LaunchAgents/${name}.plist`));
+        break;
+      case 'launchd-system':
+        lines.push(chalk.dim(`  sudo launchctl list | grep ${name}`));
+        lines.push(chalk.dim(`  sudo launchctl bootout system /Library/LaunchDaemons/${name}.plist`));
+        lines.push(chalk.dim(`  sudo launchctl bootstrap system /Library/LaunchDaemons/${name}.plist`));
+        break;
+    }
   } else {
     lines.push('');
-    lines.push(chalk.dim('前台运行方式:'));
+    lines.push(chalk.dim('前台运行命令:'));
     lines.push(chalk.dim('  npm start'));
   }
 
