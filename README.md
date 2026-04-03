@@ -389,8 +389,8 @@ The script will:
 For developers or those who need custom configuration.
 
 ```bash
-# Clone repository
-git clone <repo_url>
+# Clone repository from GitHub
+git clone https://github.com/403-Forbidde/feishu-cli-bridge.git
 cd feishu-cli-bridge
 
 # Install dependencies

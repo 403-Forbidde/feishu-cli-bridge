@@ -383,8 +383,8 @@ powershell -ExecutionPolicy Bypass -Command "iex (irm https://raw.githubusercont
 ### 第二步：克隆项目 & 安装依赖
 
 ```bash
-# 克隆仓库
-git clone <仓库地址>
+# 从 GitHub 克隆仓库
+git clone https://github.com/403-Forbidde/feishu-cli-bridge.git
 cd feishu-cli-bridge
 
 # 安装依赖
