@@ -8,16 +8,16 @@
 </h1>
 
 <p align="center">
-  <b>A Node.js/TypeScript bridge connecting Feishu (Lark) to OpenCode CLI</b><br>
-  <i>Delivering a streaming "typewriter" chat experience inside Feishu</i>
+  <b>程序员专属：用飞书私聊向本地 CLI AI 工具下达指令，享受流式打字机输出体验</b><br>
+  <i>当前已接入 OpenCode，Codex 与 Kimi CLI 支持规划中</i>
 </p>
 
 <!-- Language Switch -->
 <p>
-  <a href="#-feishu-cli-bridge">
+  <a href="doc/README_EN.md">
     <img src="https://img.shields.io/badge/🇬🇧-English-white?style=flat-square&color=3498db" height="20">
   </a>
-  <a href="doc/README_CN.md">
+  <a href="#feishu-cli-bridge">
     <img src="https://img.shields.io/badge/🇨🇳-简体中文-white?style=flat-square&color=2ecc71" height="20">
   </a>
 </p>
@@ -46,76 +46,74 @@
 
 ---
 
-## 📑 Table of Contents
+## 📑 目录
 
-- [🎯 Use Cases](#-use-cases)
-- [✨ Features](#-features)
-- [🗺️ Roadmap](#️-roadmap)
-- [⚡ Quick Start](#-quick-start)
-- [📖 Usage](#-usage)
-- [⚙️ Configuration](#️-configuration)
-- [🏗️ Project Structure](#️-project-structure)
-- [🔧 Development Commands](#-development-commands)
-- [📝 Changelog](#-changelog)
-- [📄 License](#-license)
+- [🎯 使用场景](#-使用场景)
+- [✨ 功能特性](#-功能特性)
+- [⚡ 快速开始](#-快速开始)
+- [📖 使用方法](#-使用方法)
+- [🏗️ 项目结构](#️-项目结构)
+- [🔧 开发命令](#-开发命令)
+- [📝 更新日志](#-更新日志)
+- [📄 许可证](#-许可证)
 
 ---
 
-## 🎯 Use Cases
+## 🎯 使用场景
 
-**Personal programming assistant.** Send programming instructions to your bot via Feishu private chat from any device, and the bridge forwards commands to local CLI AI tools, streaming results back.
+**单人编程辅助。** 在任意设备上打开飞书，向自己的机器人发送编程指令，机器人将指令转发给运行在本地的 CLI AI 工具执行，流式返回结果。
 
-**Supported Platforms**: Windows, Linux, macOS (Apple Silicon / Intel)
+**支持平台**：Windows、Linux、macOS（Apple Silicon / Intel）
 
-### Typical Scenarios
+### 典型场景
 
-| Scenario | Description |
-|:---------|:------------|
-| 📱 **Mobile Review** | Review code or ask AI for explanations on your phone |
-| 💼 **Meeting Tasks** | Initiate background refactoring tasks during meetings |
-| 🔄 **Context Switching** | Switch between project directories for AI context-aware work |
-| 🪟 **Windows Access** | Access local OpenCode through Feishu in Windows development environments |
+| 场景 | 描述 |
+|:-----|:-----|
+| 📱 **手机查看** | 在手机上查看代码或让 AI 解释某个实现 |
+| 💼 **会议间隙** | 在会议间隙发起一个后台重构任务 |
+| 🔄 **上下文切换** | 切换不同项目目录，让 AI 在对应上下文中工作 |
+| 🪟 **Windows 环境** | 在 Windows 开发环境中通过飞书调用本地 OpenCode |
 
 ---
 
-## ✨ Features
+## ✨ 功能特性
 
 <table>
 <tr>
 <td width="50%">
 
-### 🤖 **OpenCode Integration**
-HTTP/SSE protocol, auto-start and manage `opencode serve`, pre-authorize external directory access (no blocking in headless mode)
+### 🤖 **OpenCode 接入**
+HTTP/SSE 方式，自动启动并管理 `opencode serve`，自动预授权外部目录访问（无头模式工具调用不阻塞）
 
-### 🎭 **Agent Modes**
-Built-in Build / Plan modes; auto-detect oh-my-openagent, switch to 7 professional agents when installed, `/mode` card for quick switching
+### 🎭 **Agent 模式**
+内置 Build / Plan 模式；自动检测 oh-my-openagent，已安装时切换为 7 个专业 Agent，`/mode` 卡片一键切换
 
-### 🔀 **Model Switching**
-`/model` card displays models from `config.yaml`, click to switch instantly without restart
+### 🔀 **模型切换**
+`/model` 卡片展示 `config.yaml` 中配置的模型列表，点击按钮即时切换，无需重启
 
-### 💬 **CardKit Streaming**
-True typewriter effect, 100ms throttled updates; auto-fallback to IM Patch (1500ms) when CardKit unavailable
+### 💬 **CardKit 流式输出**
+真正的打字机效果，100ms 节流推送；CardKit 不可用时自动降级 IM Patch（1500ms）
 
-### 💭 **Thinking Process**
-Collapsible thinking panel, real-time AI reasoning display, continues waiting for text replies after tool calls
+### 💭 **思考过程展示**
+可折叠思考面板，实时显示 AI 推理过程，工具调用步骤完成后继续等待文字回复
 
 </td>
 <td width="50%">
 
-### 📊 **Token Statistics**
-Right-aligned footer displaying elapsed time, token usage, context percentage, and model name
+### 📊 **Token 统计**
+右对齐 Footer 紧凑显示耗时、Token 消耗、上下文占用率、模型名
 
-### 🖼️ **Image/File Input**
-Automatic download and base64 encoding of images/files sent, passed as FilePart for vision model recognition
+### 🖼️ **图片/文件输入**
+发送图片或文件自动下载并 base64 编码，作为 FilePart 传给模型视觉识别
 
-### 📁 **Project Management**
-`/pl` interactive card for managing multiple working directories, with pagination, "Switch" button, and delete confirmation
+### 📁 **项目管理**
+`/pl` 交互式卡片管理多个工作目录，支持分页，点击「切换」按钮直接切换，带删除二次确认
 
-### 🔄 **Working Directory Isolation**
-Each project has independent OpenCode session (via `directory` parameter), tool calls execute in precise CWD isolation
+### 🔄 **工作目录隔离**
+每个项目对应独立 OpenCode session（通过 `directory` 参数），工具调用 CWD 精确隔离
 
-### ⚡ **Smart Throttling**
-Batch processing after long gaps to avoid sparse initial updates
+### ⚡ **智能节流**
+长间隙后先批处理再刷新，避免首次更新内容过少
 
 </td>
 </tr>
@@ -123,197 +121,111 @@ Batch processing after long gaps to avoid sparse initial updates
 
 ---
 
-## 🗺️ Roadmap
+## ⚡ 快速开始
 
-### Milestone Overview
+### 第一步：安装前置依赖
 
-| Milestone | Core Deliverables | Status |
-|:----------|:------------------|:------:|
-| **v0.2.0** | TypeScript Rewrite · Architecture Optimization · Performance Improvements | ✅ Completed |
-| **v0.3.0** | Claude Code Adapter | 🔜 Planned |
-| **v0.4.0** | Kimi CLI Adapter (Wire Protocol) | 🔜 Planned |
-| **v0.5.0** | Codex CLI Adapter | 🔜 Planned |
-| **v1.0.0** | First Stable Release | 🔜 Planned |
+在开始之前，请确保已安装以下软件：
 
----
+| 依赖 | 最低版本 | 用途 | 安装方式 |
+|:-----|:--------|:-----|:---------|
+| **Node.js** | 20+ LTS | 运行环境 | [官网下载](https://nodejs.org/) 或包管理器 |
+| **Git** | 任意 | 克隆仓库 | [官网下载](https://git-scm.com/) 或包管理器 |
+| **OpenCode CLI** | 0.5.0+ | AI 编程助手 | `npm install -g opencode-ai` |
 
-### ✅ v0.2.0 (Current) — TypeScript Rewrite Complete
+> 💡 **重要说明**：本项目是**桥接工具**，专注于连接飞书和本地 CLI 工具。**不会自动安装** OpenCode 等 CLI 工具，配置向导只负责检测和引导。
 
-- [x] Full migration to TypeScript/Node.js stack
-- [x] Layered architecture: Core → Platform → Adapter
-- [x] Type safety: Strict TypeScript type definitions
-- [x] Performance optimization: HTTP connection pooling, smart throttling
-- [x] Security hardening: Path traversal protection, input validation
-- [x] Feature complete: 100% parity with Python version
-- [x] CardKit streaming (typewriter effect + loading animation, 100ms throttle)
-- [x] IM Patch fallback (auto-switch when CardKit unavailable, 1500ms throttle)
-- [x] Collapsible thinking panel (real-time reasoning display)
-- [x] Image / file input (base64 FilePart, vision model recognition)
-- [x] Multi-project management (`/pl` interactive card with pagination and delete confirmation)
-- [x] TUI commands (`/new` `/session` `/model` `/mode` `/reset` `/help` `/stop`), all replied as interactive cards
-- [x] OpenCode Server session management (fully delegated to OpenCode server, zero local persistence)
-- [x] Cross-platform support: Windows / Linux / macOS
-
----
-
-### 🔜 v0.3.0 — Claude Code Adapter
-
-**Goal**: Integrate Claude Code CLI via subprocess mode, invoked with `@claude` prefix.
-
-| Feature | Description |
-|:--------|:------------|
-| Subprocess Streaming Output | Real-time stdout/stderr parsing for streaming responses |
-| Session Management | Isolated sessions from OpenCode, LRU-based reuse |
-| Dual Parallel Enablement | `@opencode` / `@claude` free switching |
-| Image Input Support | Unified attachment preprocessing pipeline |
-
----
-
-### 🔜 v0.4.0 — Kimi CLI Adapter (Wire Protocol)
-
-**Goal**: Integrate [Kimi CLI](https://kimi.moonshot.cn) via Wire protocol, invoked with `@kimi` prefix.
-
-| Feature | Description |
-|:--------|:------------|
-| Wire Protocol (JSON-RPC 2.0 over stdin/stdout) | Lower latency than HTTP/SSE, no standalone HTTP server needed |
-| Persistent Subprocess Pool | Each session corresponds to a long-running kimi process, full context retention |
-| Thinking Chain Streaming | `--thinking` mode reasoning displayed in real-time in collapsible panel |
-| `--yolo` Fully Automatic Mode | Tool calls without manual confirmation, controlled by config switch |
-| Triple Parallel Enablement | `@opencode` / `@claude` / `@kimi` free switching |
-
----
-
-### 🔜 v0.5.0 — Codex CLI Adapter
-
-**Goal**: Integrate [Codex CLI](https://github.com/openai/codex) via subprocess mode, invoked with `@codex` prefix.
-
-| Feature | Description |
-|:--------|:------------|
-| Subprocess Streaming Output | `codex --stream` mode, line-by-line stdout parsing |
-| Independent Session Management | Isolated from other CLI sessions, LRU reuse |
-| Quadruple Parallel Enablement | `@opencode` / `@claude` / `@kimi` / `@codex` free switching |
-| Image Input Support | Aligned with OpenCode path, unified attachment preprocessing |
-
----
-
-### 🔜 v1.0.0 — First Stable Release
-
-**Goal**: Production-ready stable release after extensive testing and refinement.
-
-| Focus Area | Description |
-|:-----------|:------------|
-| Stability & Reliability | Comprehensive error handling, graceful degradation |
-| Performance Optimization | Connection pooling, caching, memory optimization |
-| Documentation | Complete API docs, deployment guides, troubleshooting |
-| Testing | High test coverage, integration tests, E2E validation |
-
----
-
-## ⚡ Quick Start
-
-### Prerequisites (All Platforms)
-
-Before starting, ensure you have the following installed:
-
-| Dependency | Minimum Version | Purpose | Installation |
-|:-----------|:----------------|:--------|:-------------|
-| **Node.js** | 20+ LTS | Runtime | [Download](https://nodejs.org/) or package manager |
-| **Git** | Any | Clone repository | [Download](https://git-scm.com/) or package manager |
-| **OpenCode CLI** | 0.5.0+ | AI coding assistant | `npm install -g opencode-ai` |
-
-> 💡 **Important**: This project is a **bridge tool** connecting Feishu to local CLI tools. It **does NOT automatically install** OpenCode or other CLI tools. The wizard only detects and guides.
+#### 各平台安装指南
 
 <details>
-<summary><b>🐧 Linux — Install Prerequisites</b></summary>
+<summary><b>🐧 Linux（Ubuntu/Debian）</b></summary>
 
 ```bash
-# 1. Install Node.js LTS
+# 1. 安装 Node.js LTS
 curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
 sudo apt-get install -y nodejs
 
-# 2. Verify Node.js version
-node --version  # Should show v20.x.x or higher
+# 2. 验证 Node.js 版本
+node --version  # 应显示 v20.x.x 或更高
 
-# 3. Install OpenCode CLI (manual installation)
+# 3. 安装 OpenCode CLI（需手动安装）
 npm install -g opencode-ai
 
-# 4. Verify OpenCode
+# 4. 验证 OpenCode
 opencode --version
 ```
 
-**Troubleshooting**:
-- If `npm` shows permission errors, try: `sudo npm install -g opencode-ai`
-- Or change npm global directory: [npm docs](https://docs.npmjs.com/resolving-eacces-permissions-errors-when-installing-packages-globally)
+**常见问题**：
+- 如果 `npm` 提示权限错误，尝试：`sudo npm install -g opencode-ai`
+- 或者更改 npm 全局目录：[npm 文档](https://docs.npmjs.com/resolving-eacces-permissions-errors-when-installing-packages-globally)
 
 </details>
 
 <details>
-<summary><b>🍎 macOS — Install Prerequisites</b></summary>
+<summary><b>🍎 macOS</b></summary>
 
 ```bash
-# 1. Install Homebrew (if not installed)
-# Visit https://brew.sh for installation command
+# 1. 安装 Homebrew（如未安装）
+# 访问 https://brew.sh 获取安装命令
 
-# 2. Install Node.js
+# 2. 安装 Node.js
 brew install node
 
-# 3. Verify version
-node --version  # Should show v20.x.x or higher
+# 3. 验证版本
+node --version  # 应显示 v20.x.x 或更高
 
-# 4. Install OpenCode CLI (manual installation)
+# 4. 安装 OpenCode CLI（需手动安装）
 npm install -g opencode-ai
 
-# 5. Verify
+# 5. 验证
 opencode --version
 ```
 
 </details>
 
 <details>
-<summary><b>🪟 Windows — Install Prerequisites</b></summary>
+<summary><b>🪟 Windows</b></summary>
 
-**Install in the following order:**
+**依次安装以下软件：**
 
 1. **[Node.js LTS (v20+)](https://nodejs.org/en/download)**
-   - Download Windows Installer (.msi)
-   - **Important**: Check "**Add to PATH**" during installation
+   - 下载 Windows Installer (.msi)
+   - **关键**：安装过程中勾选「**Add to PATH**」
 
 2. **[Git for Windows](https://git-scm.com/download/win)**
-   - Download 64-bit Git for Windows Setup
-   - Use default options for installation
+   - 下载 64-bit Git for Windows Setup
+   - 使用默认选项安装即可
 
 3. **OpenCode CLI**
    ```powershell
    npm install -g opencode-ai
    ```
 
-**Important Step**:
-> After installation, **restart PowerShell** (or CMD) for environment variables to take effect.
+**重要步骤**：
+> 安装完成后，**重启 PowerShell**（或 CMD），使环境变量生效。
 
-Verify installation:
+验证安装：
 ```powershell
-node --version      # Should show v20.x.x
-opencode --version  # Should show 0.5.0+
+node --version      # 应显示 v20.x.x
+opencode --version  # 应显示 0.5.0+
 ```
 
 </details>
 
 ---
 
-### Installation Methods
+### 安装方式选择
 
-Choose the method that suits you:
+安装本项目有两种方式，选择适合你的：
 
-| Method | Use Case | Complexity |
-|:-------|:---------|:-----------|
-| **One-line Install Script** | Quick start, automated configuration | ⭐ Easy |
-| **Manual Clone & Install** | Developers, custom configuration | ⭐⭐ Medium |
+| 方式 | 适用场景 | 复杂度 |
+|:-----|:---------|:-------|
+| **一键安装脚本** | 快速开始，自动完成大部分配置 | ⭐ 简单 |
+| **手动克隆安装** | 开发者，需要自定义配置 | ⭐⭐ 中等 |
 
-#### Option 1: One-line Install Script (Recommended 🌟)
+#### 方式一：一键安装脚本（推荐）
 
-Copy and paste **one line** into your terminal. The script **checks** prerequisites (does NOT auto-install), clones the repo, installs dependencies, and launches the interactive wizard.
-
-> ⚠️ **Prerequisites Required**: Node.js 20+ and Git must be installed **before** running this script.
+> ⚠️ **前置要求**：运行脚本前必须先安装 Node.js 20+ 和 Git，脚本**仅检测**不会自动安装。
 
 <details>
 <summary><b>🐧 Linux / 🍎 macOS</b></summary>
@@ -323,14 +235,14 @@ curl -fsSL -o /tmp/setup.sh https://raw.githubusercontent.com/403-Forbidde/feish
 bash /tmp/setup.sh
 ```
 
-The script will:
-1. **Check** Node.js version (required: 20+)
-2. **Check** if Git is installed
-3. Clone repository to `~/feishu-cli-bridge`
-4. Install npm dependencies
-5. Launch interactive setup wizard
+脚本会：
+1. **检测** Node.js 版本（要求 20+）
+2. **检测** Git 是否安装
+3. 克隆仓库到 `~/feishu-cli-bridge`
+4. 安装 npm 依赖
+5. 启动交互式配置向导
 
-> If prerequisites are missing, the script will display installation instructions and exit.
+> 如果缺少前置依赖，脚本会显示安装指南并退出。
 
 </details>
 
@@ -341,134 +253,151 @@ The script will:
 powershell -ExecutionPolicy Bypass -Command "iex (irm https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main/scripts/setup.ps1)"
 ```
 
-> `-ExecutionPolicy Bypass` applies only to the current process, allowing remote script execution.
+> `-ExecutionPolicy Bypass` 仅作用于当前进程，用于允许执行远程脚本。
 
-The script will:
-1. **Check** if Node.js and Git are installed (required before running)
-2. Clone the repository
-3. Install npm dependencies
-4. Launch interactive setup wizard
+脚本会：
+1. **检测** Node.js 和 Git 是否已安装（运行前必须先安装）
+2. 克隆仓库
+3. 安装 npm 依赖
+4. 启动交互式配置向导
 
-> If prerequisites are missing, the script will display installation instructions and exit.
+> 如果缺少前置依赖，脚本会显示安装指南并退出。
 
 </details>
 
-**Wizard Flow**:
+**配置向导流程**：
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  1. CLI Tool Detection                                   │
-│     └─ Not installed → Show install command → Wait for   │
-│        manual install → Re-detect                        │
-│     └─ Installed → Check login status → Prompt login     │
-│        (if not logged in)                                │
-│                                                          │
-│  2. Model Selection (REQUIRED)                           │
-│     ├─ Read user OpenCode config → Has default model?    │
-│     │   ├─ Yes → Ask use existing or select new          │
-│     │   └─ No  → Fetch available models from OpenCode    │
-│     └─ User must select a model (no hardcoded default)   │
-│                                                          │
-│  3. Feishu Configuration                                 │
-│     └─ Enter App ID / App Secret → Validate format       │
-│                                                          │
-│  4. Service Configuration (Optional)                     │
-│     └─ Generate systemd/launchd/Windows service config   │
+│  1. CLI 工具检测                                         │
+│     └─ 未安装 → 显示安装命令 → 等待手动安装 → 重新检测    │
+│     └─ 已安装 → 检查登录状态 → 提示登录（如未登录）        │
+│                                                         │
+│  2. 模型选择（**必须选择**）                              │
+│     ├─ 读取用户 OpenCode 配置 → 是否已有默认模型？        │
+│     │   ├─ 是 → 询问使用现有配置或重新选择                │
+│     │   └─ 否 → 从 OpenCode 获取当前可用模型列表          │
+│     └─ 用户必须选择模型（无硬编码默认值）                 │
+│                                                         │
+│  3. 飞书配置                                            │
+│     └─ 输入 App ID / App Secret → 验证格式              │
+│                                                         │
+│  4. 服务配置（可选）                                     │
+│     └─ 生成 systemd/launchd/Windows 服务配置             │
 └─────────────────────────────────────────────────────────┘
 ```
 
-> 💡 **Note**: The wizard **does NOT automatically install CLI tools**, only detects and guides. If not detected, it displays installation commands for manual execution.
+> 💡 **注意**：配置向导**不会自动安装 CLI 工具**，只负责检测和引导。如果未检测到，会显示安装命令供你手动执行。
 >
-> 💡 **Model Selection**: The wizard will first check your existing OpenCode default model configuration. If not set, you **must** select from the current available models. The free model list is fetched dynamically and may change over time - no hardcoded default is used.
-
-> 💡 **Tip**: The generated config is saved to `~/.config/feishu-cli-bridge/config.yaml` (Linux/macOS) or `%APPDATA%\feishu-cli-bridge\config.yaml` (Windows).
+> 💡 **模型选择**：向导首先会读取你现有的 OpenCode 默认模型配置。如果未设置，则**必须**从当前可用模型列表中选择。免费模型列表是动态获取的，可能随时间变化——不会使用任何硬编码默认值。
 
 ---
 
-#### Option 2: Manual Clone & Install
-
-For developers or those who need custom configuration.
+### 第二步：克隆项目 & 安装依赖
 
 ```bash
-# Clone repository from GitHub
+# 从 GitHub 克隆仓库
 git clone https://github.com/403-Forbidde/feishu-cli-bridge.git
 cd feishu-cli-bridge
 
-# Install dependencies
+# 安装依赖
 npm install
-
-# Launch setup wizard (development mode with hot reload)
-npm run setup:dev
 ```
 
-The wizard content is the same as one-line install, but it won't auto-check/install Node.js prerequisites.
+> 💡 **手动安装 vs 一键安装**：如果你使用了一键安装脚本，这一步已经完成，直接进入第三步。
 
 ---
 
-### Step 1: Create Feishu Custom App
+### 关于 CLI 工具的重要说明
 
-#### 1.1 Create Application
+本项目是一个**桥接工具**，负责连接飞书和本地 CLI 工具。
 
-1. Go to [Feishu Developer Console](https://open.feishu.cn/app), create an **Enterprise Custom App**
-2. Fill in basic information (app name, description, icon)
+- ✅ **我们会做的**：
+  - 检测 CLI 工具是否已安装
+  - 读取你现有的 OpenCode 模型配置
+  - **引导你选择默认模型**（强制选择，无硬编码默认值）
+  - 启动桥接服务
+- ❌ **我们不会做的**：
+  - 自动执行 `npm install -g opencode-ai` 等安装命令
+  - 自动选择模型或预设固定模型
 
-#### 1.2 Configure Permissions
+**为什么？**
+- 全局安装需要 sudo 权限，可能与你现有的 Node.js 环境冲突
+- 免费模型列表会随时间变化，使用硬编码默认值可能导致配置失效
+- 我们相信你应该完全掌控自己的开发环境，包括选择使用哪个 AI 模型
 
-**Option A: Import from JSON (Recommended)**
+**配置向导流程说明**：
+1. **如果未检测到 CLI 工具** → 显示安装命令供你手动执行
+2. **如果检测到 CLI 工具** → 读取你的 OpenCode 默认模型配置
+   - 已有配置 → 询问是否使用该模型
+   - 无配置 → **必须**从当前可用免费模型列表中选择
 
-The repository includes a pre-configured permission file. Download [`doc/feishu_permissions.json`](./doc/feishu_permissions.json) from this repo, then in the Developer Console:
+---
+
+### 第三步：创建飞书自建应用
+
+#### 3.1 创建应用
+
+1. 进入[飞书开发者控制台](https://open.feishu.cn/app)，点击「创建企业自建应用」
+2. 填写应用信息（名称、描述、图标）
+
+#### 3.2 配置权限
+
+**方式一：JSON 批量导入（推荐）**
+
+本项目提供了完整的权限配置文件 [`doc/feishu_permissions.json`](./doc/feishu_permissions.json)，包含所有必需的权限。操作步骤：
 
 ```
-Permission Management → Import from JSON → Select feishu_permissions.json
+权限管理 → 批量导入 → 选择 feishu_permissions.json 文件 → 确认导入
 ```
 
-This automatically enables all required permissions including messaging, cards, and file access.
+导入后将自动启用消息、卡片、文件下载等所有必需权限。
 
-**Option B: Manual Configuration**
+**方式二：手动开启**
 
-If you prefer manual setup, enable these required permissions:
+如需手动配置，请开启以下权限：
 
-| Permission Scope | Purpose | Required |
-|:-----------------|:--------|:--------:|
-| `im:message` | Read messages | ✅ |
-| `im:message:send_as_bot` | Send messages as bot | ✅ |
-| `im:message.reactions:read` | ✏️ Typing indicator | ✅ |
-| `im:message.reactions:write_only` | Add/remove reactions | ✅ |
-| `im:resource` | Download images/files | ✅ |
-| `contact:user.id:readonly` | Read user ID | ✅ |
-| `cardkit:card:read` / `cardkit:card:write` | CardKit streaming cards | ❌ |
+| 权限 scope | 用途 | 是否必需 |
+|:-----------|:-----|:--------:|
+| `im:message` | 读取消息 | ✅ |
+| `im:message:send_as_bot` | 以机器人身份发消息 | ✅ |
+| `im:message.reactions:read` | ✏️ 打字提示 | ✅ |
+| `im:message.reactions:write_only` | 添加/删除 Reaction | ✅ |
+| `im:resource` | 下载图片/文件 | ✅ |
+| `contact:user.id:readonly` | 读取用户 ID | ✅ |
+| `cardkit:card:read` / `cardkit:card:write` | CardKit 流式卡片 | ❌ |
 
-> ⚠️ **Note**: If CardKit permissions are not granted, the system will automatically fall back to IM Patch mode with 1500ms update intervals. Core functionality still works.
+> 💡 **提示**：如果不开启 CardKit 权限，系统会自动降级使用 IM Patch 模式（1500ms 刷新间隔），核心功能不受影响。
 
-#### 1.3 Configure Event Subscription
+#### 3.3 配置事件订阅
 
-**Events & Callbacks** → Connection mode: "**Long Connection**" → Add event `im.message.receive_v1`
+**事件与回调** → 连接方式选择「**长连接**」→ 添加事件 `im.message.receive_v1`
 
-> Do not fill in card callback URL, long connection automatically receives card button callbacks.
+> 不要填写卡片回调 URL，长连接模式会自动接收卡片按钮点击事件。
 
-#### 1.4 Publish Application
+#### 3.4 发布应用
 
-**Version Management & Release** → Create version → Release
+**版本管理与发布** → 创建版本 → 填写版本信息 → 发布
 
-> Internal apps don't require review and are effective immediately.
+> 内部应用无需审核，发布后立即生效。
 
-#### 1.5 Record Credentials
+#### 3.5 记录凭证
 
-From "Credentials & Basic Info", record:
-- **App ID** (format: `cli_xxxxxxxxxxxxxxxx`)
+进入「凭证与基础信息」页面，记录以下信息（后续配置需要）：
+- **App ID**（格式：`cli_xxxxxxxxxxxxxxxx`）
 - **App Secret**
 
-> 📝 **Important**: Every time you change permissions or event subscriptions in the console, you must create a new version and release it for changes to take effect.
+> 📝 **重要提示**：每次修改权限或事件订阅后，必须创建新版本并发布才能生效。
 
 ---
 
-### Step 2: Manual Configuration (Skip if you used the wizard)
+### 第四步：配置
 
 ```bash
 cp config.example.yaml config.yaml   # Windows: copy config.example.yaml config.yaml
 ```
 
-Open `config.yaml` and fill in Feishu credentials (**only these two are required**):
+打开 `config.yaml`，填写飞书凭据（**只有这两项是必填的**）：
 
 ```yaml
 feishu:
@@ -476,7 +405,7 @@ feishu:
   app_secret: "xxxxxxxxxxxxxx"
 ```
 
-Or use environment variables instead of config file:
+也可以不创建配置文件，直接用环境变量：
 
 <details>
 <summary><b>🐧 Linux / macOS</b></summary>
@@ -489,7 +418,7 @@ export FEISHU_APP_SECRET="xxx"
 </details>
 
 <details>
-<summary><b>🪟 Windows CMD (temporary)</b></summary>
+<summary><b>🪟 Windows CMD（临时）</b></summary>
 
 ```cmd
 set FEISHU_APP_ID=cli_xxx
@@ -500,46 +429,63 @@ set FEISHU_APP_SECRET=xxx
 
 ---
 
-### Step 3: Start
+### 第五步：启动
 
-#### Development mode (hot reload)
+#### 开发模式（热重载）
 
 ```bash
 npm run dev
 ```
 
-#### Production mode
+#### 生产模式
 
 ```bash
 npm run build
 npm start
 ```
 
-On successful startup, logs will show `🚀 Feishu CLI Bridge started successfully!`. Upon receiving the first Feishu message, the bridge will automatically start `opencode serve`, no manual operation needed.
+启动成功后日志会显示 `🚀 Feishu CLI Bridge 启动成功！`。收到第一条飞书消息时，桥接程序会自动启动 `opencode serve`，无需手动操作。
 
-> 💡 **About Model Selection**: The setup wizard detects your existing OpenCode configuration. If you have a default model set, it will ask if you want to use it. Otherwise, you **must** select from the current available free models. The model list is fetched dynamically from OpenCode and may change over time - no hardcoded defaults are used.
+> 💡 **关于 CLI 工具安装**：本项目专注于桥接飞书与本地 CLI 工具，**不会自动安装** OpenCode 等 CLI 工具。首次运行配置向导时，如果未检测到 CLI 工具，向导会显示安装命令供你手动执行。这样可以避免权限问题和环境冲突，让你完全掌控自己的开发环境。
 
 ---
 
-### Background Running (Optional)
+### 后台运行（可选）
 
 <details>
-<summary><b>🐧 Linux — systemd user service (recommended, auto-start on boot)</b></summary>
+<summary><b>🐧 Linux — systemd 用户服务（推荐，开机自启）</b></summary>
+
+创建 `~/.config/systemd/user/feishu-cli-bridge.service`：
+
+```ini
+[Unit]
+Description=Feishu CLI Bridge
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/feishu-cli-bridge
+ExecStart=/usr/bin/npm start
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+```
+
+然后执行：
 
 ```bash
-# Create service file ~/.config/systemd/user/feishu-cli-bridge.service
-# Refer to pm2 or manual npm start configuration
-
-systemctl --user enable --now feishu-cli-bridge   # Start and enable auto-start
-systemctl --user status  feishu-cli-bridge        # Check status
-systemctl --user restart feishu-cli-bridge        # Restart
-journalctl --user -u feishu-cli-bridge -f         # Real-time logs
+systemctl --user daemon-reload
+systemctl --user enable --now feishu-cli-bridge
+systemctl --user status feishu-cli-bridge
+journalctl --user -u feishu-cli-bridge -f
 ```
 
 </details>
 
 <details>
-<summary><b>📦 Using PM2</b></summary>
+<summary><b>📦 使用 PM2</b></summary>
 
 ```bash
 npm install -g pm2
@@ -551,7 +497,7 @@ pm2 startup
 </details>
 
 <details>
-<summary><b>🍎 macOS — nohup (recommended with tmux)</b></summary>
+<summary><b>🍎 macOS — nohup（推荐配合 tmux）</b></summary>
 
 ```bash
 npm run build
@@ -561,180 +507,119 @@ nohup npm start > bridge.log 2>&1 &
 </details>
 
 <details>
-<summary><b>🪟 Windows — Task Scheduler (auto-start on boot)</b></summary>
+<summary><b>🪟 Windows — 任务计划程序（开机自启）</b></summary>
 
 ```cmd
-schtasks /create /tn "FeiShuBridge" /tr "npm start" /sc onlogon /ru %USERNAME% /sd C:\path\to\feishu-cli-bridge /f
-schtasks /end    /tn "FeiShuBridge"   & REM Stop
-schtasks /delete /tn "FeiShuBridge" /f  & REM Uninstall
+schtasks /create /tn "FeiShuBridge" /tr "cmd /c cd /d C:\path\to\feishu-cli-bridge && npm start" /sc onlogon /ru %USERNAME% /f
+schtasks /end    /tn "FeiShuBridge"   & REM 停止
+schtasks /delete /tn "FeiShuBridge" /f  & REM 卸载
 ```
 
-> Run `chcp 65001` before `npm start` in CMD/PowerShell to prevent Chinese garbled text.
+> 在 CMD/PowerShell 中运行 `npm start` 前，先执行 `chcp 65001`，可避免中文日志乱码。
 
 </details>
 
 ---
 
-## 📖 Usage
+## 📖 使用方法
 
-Open a **private chat** with the bot in Feishu, send messages directly:
-
-```
-Help me write a Python script to process CSV files
-```
-
-### Specify CLI Tool
-
-Use `@` prefix to specify tool (defaults to OpenCode):
+在飞书中打开与机器人的**私聊**，直接发送消息即可：
 
 ```
-@codex Generate a React component
+帮我写一个 Python 脚本来处理 CSV 文件
 ```
 
----
+### 指定 CLI 工具
 
-### 🎮 TUI Commands
-
-#### Session & Model
-
-| Command | Description |
-|:--------|:------------|
-| `/new` | Create new session |
-| `/session` | List recent sessions as an interactive card with switch/rename/delete buttons |
-| `/model` | List available models (card), click button to switch; model list maintained in `config.yaml` |
-| `/mode` | List agent modes, click card button to switch (Build / Plan / oh-my-openagent) |
-| `/mode <agent>` | Directly switch to specified agent mode |
-| `/reset` or `/clear` | Clear current session context |
-| `/stop` | Force stop current AI output |
-| `/help` | Display help |
-
-#### Project Management
-
-| Command | Description |
-|:--------|:------------|
-| `/pa <path> [name]` | Add existing directory as project |
-| `/pc <path> [name]` | Create new directory and add as project |
-| `/pl` | List all projects (interactive card with pagination and switch button) |
-| `/ps <identifier>` | Switch to specified project |
-| `/prm <identifier>` | Remove project from list (does not delete directory) |
-| `/pi [identifier]` | View project info |
-
-After switching projects, all AI tool calls (bash/read_file etc.) execute in that directory. `/pl` returns an interactive card, click buttons to switch directly without manual command input.
-
-**Example:**
+通过 `@` 前缀指定工具。目前仅支持 **OpenCode**（`@opencode`），Claude、Kimi、Codex 适配器正在规划中，详见 [Roadmap](./doc/ROADMAP.md)。
 
 ```
-/pa ~/code/my-app myapp My Application   # Add and name
-/pl                                      # View project list (card with switch button)
-/ps myapp                                # Command line switch
-/pi                                      # View current project info
+@opencode 生成一个 React 组件
 ```
 
 ---
 
-## ⚙️ Configuration
+### 🎮 TUI 命令
 
-Complete `config.yaml` example:
+#### 会话 & 模型
 
-```yaml
-# ═══════════════════════════════════════════════════════════════
-# Feishu Configuration
-# ═══════════════════════════════════════════════════════════════
-feishu:
-  app_id: "your_app_id"
-  app_secret: "your_app_secret"
+| 命令 | 说明 |
+|:-----|:-----|
+| `/new` | 创建新会话 |
+| `/session` | 列出最近会话，以交互式卡片回复，支持切换/重命名/删除 |
+| `/model` | 列出可用模型（卡片），点击按钮切换；模型列表在 `config.yaml` 中维护 |
+| `/mode` | 列出 Agent 模式，点击卡片按钮切换（Build / Plan / oh-my-openagent） |
+| `/mode <agent>` | 直接切换到指定 Agent 模式 |
+| `/reset` 或 `/clear` | 清空当前会话上下文 |
+| `/stop` | 强制停止当前 AI 输出 |
+| `/help` | 显示帮助 |
 
-# ═══════════════════════════════════════════════════════════════
-# Session Configuration
-# ═══════════════════════════════════════════════════════════════
-session:
-  max_sessions: 15          # Max sessions to retain (LRU, local memory cache)
-  max_history: 20           # Max history rounds per session
+#### 项目管理
 
-# ═══════════════════════════════════════════════════════════════
-# CLI Tool Configuration
-# ═══════════════════════════════════════════════════════════════
-cli:
-  opencode:
-    enabled: true
-    command: "opencode"
-    default_model: "kimi"
-    default_agent: "build"
-    timeout: 300
-    models:                        # Model list for /model command
-      - id: "kimi"
-        name: "Kimi"
-      - id: "opencode/mimo-v2-pro-free"
-        name: "MiMo V2 Pro Free"
+| 命令 | 说明 |
+|:-----|:-----|
+| `/pa <路径> [名称]` | 添加已有目录为项目 |
+| `/pc <路径> [名称]` | 创建新目录并添加为项目 |
+| `/pl` | 列出所有项目（交互式卡片，支持分页与切换按钮） |
+| `/ps <标识>` | 切换到指定项目 |
+| `/prm <标识>` | 从列表移除项目（不删除目录） |
+| `/pi [标识]` | 查看项目信息 |
 
-# ═══════════════════════════════════════════════════════════════
-# Project Management
-# ═══════════════════════════════════════════════════════════════
-project:
-  storage_path: ""    # Leave empty for default ~/.config/feishu-cli-bridge/projects.json (Linux/macOS) or %APPDATA%\feishu-cli-bridge\projects.json (Windows)
-  max_projects: 50
+切换项目后，AI 工具调用（`bash`/`read_file` 等）将在对应目录执行。`/pl` 返回交互式卡片，点击按钮可直接切换，无需手动输入命令。
 
-# ═══════════════════════════════════════════════════════════════
-# Security Configuration
-# ═══════════════════════════════════════════════════════════════
-security:
-  allowed_project_root: ""    # Allowed project root directory (empty = user home)
-  max_attachment_size: 52428800   # Max attachment size (50MB)
-  max_prompt_length: 100000       # Max prompt length
+**示例：**
 
-# ═══════════════════════════════════════════════════════════════
-# Debug Configuration
-# ═══════════════════════════════════════════════════════════════
-debug:
-  log_level: "info"       # debug | info | warn | error
-  save_logs: true         # Whether to save logs to file
-  log_dir: ""            # Log directory (empty = default)
+```
+/pa ~/code/my-app myapp 我的应用   # 添加并命名
+/pl                                 # 查看项目列表（卡片带切换按钮）
+/ps myapp                           # 命令行方式切换
+/pi                                 # 查看当前项目信息
 ```
 
 ---
 
-## 🏗️ Project Structure
+## 🏗️ 项目结构
 
 ```
 feishu-cli-bridge/
 ├── src/
-│   ├── core/                  # 🔧 Core infrastructure
-│   │   ├── config.ts          # Configuration (YAML + env)
-│   │   ├── logger.ts          # Pino logging
-│   │   ├── retry.ts           # Exponential backoff retry
-│   │   └── types/             # Shared type definitions
+│   ├── core/                  # 🔧 核心基础设施
+│   │   ├── config.ts          # 配置管理（YAML + 环境变量）
+│   │   ├── logger.ts          # Pino 日志
+│   │   ├── retry.ts           # 指数退避重试
+│   │   └── types/             # 共享类型定义
 │   │       ├── config.ts
 │   │       ├── stream.ts
 │   │       └── index.ts
 │   │
-│   ├── adapters/              # 🔌 CLI Adapter layer
-│   │   ├── interface/         # Abstract interface
+│   ├── adapters/              # 🔌 CLI 适配器层
+│   │   ├── interface/         # 抽象接口
 │   │   │   ├── base-adapter.ts
 │   │   │   └── types.ts
-│   │   ├── factory.ts         # Adapter factory
-│   │   ├── index.ts           # Adapter registration
-│   │   └── opencode/          # OpenCode adapter
-│   │       ├── adapter.ts
-│   │       ├── http-client.ts
-│   │       ├── sse-parser.ts
+│   │   ├── factory.ts         # 适配器工厂
+│   │   ├── index.ts           # 适配器注册
+│   │   └── opencode/          # OpenCode 适配器
+│   │       ├── adapter.ts     # 主适配器
+│   │       ├── http-client.ts # HTTP 客户端
+│   │       ├── sse-parser.ts  # SSE 流解析
 │   │       ├── server-manager.ts
 │   │       ├── session-manager.ts
 │   │       └── types.ts
 │   │
-│   ├── platform/              # 📱 Feishu platform layer
-│   │   ├── feishu-client.ts   # WebSocket client
-│   │   ├── feishu-api.ts      # HTTP API wrapper
-│   │   ├── message-processor/ # Message processing
+│   ├── platform/              # 📱 飞书平台层
+│   │   ├── feishu-client.ts   # WebSocket 客户端
+│   │   ├── feishu-api.ts      # HTTP API 封装
+│   │   ├── message-processor/ # 消息处理
 │   │   │   ├── index.ts
 │   │   │   ├── router.ts
 │   │   │   ├── ai-processor.ts
 │   │   │   ├── command-processor.ts
 │   │   │   └── attachment-processor.ts
-│   │   ├── streaming/         # Streaming system
+│   │   ├── streaming/         # 流式系统
 │   │   │   ├── controller.ts
 │   │   │   ├── flush-controller.ts
 │   │   │   └── types.ts
-│   │   └── cards/             # Card builder
+│   │   └── cards/             # 卡片构建
 │   │       ├── streaming.ts
 │   │       ├── complete.ts
 │   │       ├── session-cards.ts
@@ -742,7 +627,7 @@ feishu-cli-bridge/
 │   │       ├── error.ts
 │   │       └── utils.ts
 │   │
-│   ├── card-builder/          # 🎨 TUI card builder
+│   ├── card-builder/          # 🎨 TUI 卡片构建
 │   │   ├── base.ts
 │   │   ├── interactive-cards.ts
 │   │   ├── project-cards.ts
@@ -750,96 +635,82 @@ feishu-cli-bridge/
 │   │   ├── constants.ts
 │   │   └── utils.ts
 │   │
-│   ├── tui-commands/          # ⌨️ TUI commands
+│   ├── tui-commands/          # ⌨️ TUI 命令
 │   │   ├── index.ts
 │   │   ├── base.ts
 │   │   ├── opencode.ts
 │   │   └── project.ts
 │   │
-│   ├── project/               # 📁 Project management
+│   ├── project/               # 📁 项目管理
 │   │   ├── manager.ts
 │   │   ├── types.ts
 │   │   └── index.ts
 │   │
-│   ├── session/               # 💾 Session management
+│   ├── session/               # 💾 会话管理
 │   │   ├── manager.ts
 │   │   ├── types.ts
 │   │   └── index.ts
 │   │
-│   └── main.ts                # 🚀 Entry point
+│   └── main.ts                # 🚀 入口
 │
+├── scripts/                   # 🛠️ 脚本工具
+├── config.example.yaml        # 📝 配置模板
 ├── package.json
 ├── tsconfig.json
 ├── vitest.config.ts
-├── README.md                  # This file (English)
-└── doc/                       # Documentation directory
-    ├── CHANGELOG.md           # Version changelog
-    ├── README_CN.md           # Chinese version
-    └── feishu_permissions.json # Feishu bot permissions (import in Developer Console)
+├── README.md                  # 🇨🇳 中文文档（本文件）
+└── doc/                       # 文档目录
+    ├── CHANGELOG.md           # 版本更新日志
+    ├── README_EN.md           # 🇬🇧 英文文档
+    ├── ROADMAP.md             # 项目路线图
+    └── feishu_permissions.json # 飞书机器人权限配置（开发者后台导入）
 ```
 
 ---
 
-## 🔧 Development Commands
+## 🔧 开发命令
 
 ```bash
-# 📦 Install dependencies
+# 📦 安装依赖
 npm install
 
-# 🔥 Development mode (hot reload)
+# 🔥 开发模式（热重载）
 npm run dev
 
-# 🔄 Development mode (IM Patch fallback)
-npm run dev:legacy
-
-# ✅ Type checking
+# ✅ 类型检查
 npm run typecheck
 
-# 🔍 Linting
+# 🔍 代码检查
 npm run lint
 
-# 🏗️ Build
+# 🏗️ 构建
 npm run build
 
-# 🚀 Production run
+# 🚀 生产运行
 npm start
 
-# 🧪 Tests
+# 🧪 测试
 npm run test
 ```
 
 ---
 
-## 📝 Changelog
+## 📝 更新日志
 
-### v0.2.0 (2026-04-02) — TypeScript Rewrite
+### v0.2.0 (2026-04-02) — TypeScript 重写（当前版本）
 
-- 🔧 **Full Migration** — Migrated from Python to TypeScript/Node.js
-- 🏗️ **Architecture Upgrade** — Layered architecture: Core → Platform → Adapter
-- 🔒 **Type Safety** — Strict TypeScript type definitions
-- ⚡ **Performance Optimization** — HTTP connection pooling, smart throttling
-- 🛡️ **Security Hardening** — Path traversal protection, input validation
-- 🎯 **Feature Complete** — 100% parity with Python version
-- 🎴 **Unified TUI Cards** — All TUI commands (`/session`, `/model`, `/pl`, etc.) reply as interactive cards
-- 📁 **Project Management Improvements** — Pagination and delete confirmation in `/pl` cards
-- 🧙 **Interactive Setup Wizard** — One-command setup for environment, credentials, and system services
-
----
-
-## 🌐 Environment Variables
-
-| Variable | Description |
-|:---------|:------------|
-| `FEISHU_APP_ID` | Feishu App ID |
-| `FEISHU_APP_SECRET` | Feishu App Secret |
-| `CONFIG_FILE` | Explicit config file path (overrides auto-discovery) |
-| `LOG_LEVEL` | Log level (default: info) |
-| `LOG_DIR` | Log directory (empty = default `logs/` next to config) |
-| `DISABLE_CARDKIT` | Set to `1` to force IM Patch mode |
+- 🔧 **全面迁移** — 从 Python 迁移至 TypeScript/Node.js
+- 🏗️ **架构升级** — 分层架构：Core → Platform → Adapter
+- 🔒 **类型安全** — 严格的 TypeScript 类型定义
+- ⚡ **性能优化** — HTTP 连接池复用、智能节流
+- 🛡️ **安全加固** — 路径遍历防护、输入验证
+- 🎯 **功能完整** — 100% 功能对标 Python 版本
+- 🎴 **TUI 统一卡片化** — 所有 TUI 命令（`/session`、`/model`、`/pl` 等）均以交互式卡片回复
+- 📁 **项目管理增强** — `/pl` 卡片支持分页与删除二次确认
 
 ---
 
-## 📄 License
+## 📄 许可证
 
 <p align="center">
   <img src="https://img.shields.io/badge/License-MIT-4ECDC4?style=for-the-badge&logo=opensourceinitiative&logoColor=white" alt="MIT License">
@@ -847,7 +718,7 @@ npm run test
 
 ---
 
-## 🙏 Acknowledgements
+## 🙏 致谢
 
 <table>
 <tr>
@@ -857,7 +728,7 @@ npm run test
   </a>
 </td>
 <td>
-  <a href="https://github.com/larksuite/oapi-sdk-nodejs">Feishu OpenAPI SDK</a> — Feishu Node.js SDK
+  <a href="https://github.com/larksuite/oapi-sdk-nodejs">Feishu OpenAPI SDK</a> — 飞书 Node.js SDK
 </td>
 </tr>
 <tr>
@@ -867,7 +738,7 @@ npm run test
   </a>
 </td>
 <td>
-  <a href="https://github.com/larksuite/openclaw-lark">OpenClaw Feishu Plugin</a> — Reference implementation for Feishu card interactions
+  <a href="https://github.com/larksuite/openclaw-lark">OpenClaw Feishu Plugin</a> — 飞书卡片交互参考实现
 </td>
 </tr>
 <tr>
@@ -877,7 +748,7 @@ npm run test
   </a>
 </td>
 <td>
-  <a href="https://opencode.ai">OpenCode</a> — AI Programming Assistant
+  <a href="https://opencode.ai">OpenCode</a> — AI 编程助手
 </td>
 </tr>
 </table>
@@ -890,6 +761,6 @@ npm run test
   <img src="https://img.shields.io/badge/Made%20with%20❤️%20by-ERROR403-FF6B6B?style=flat-square" alt="Author">
 </p>
 
-<p><i>⭐ Star this repo if you find it helpful!</i></p>
+<p><i>⭐ 如果这个项目对你有帮助，请给它点个星！</i></p>
 
 </div>
