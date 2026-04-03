@@ -76,11 +76,15 @@ export class OpenCodeServerManager {
 
     logger.info(`Starting opencode serve on port ${this.config.serverPort}`);
 
+    // Windows: 执行 .cmd/.bat 文件需要 shell: true
+    const isCmdFile = process.platform === 'win32' && /\.(cmd|bat)$/i.test(opencodePath);
+
     try {
       this.process = spawn(opencodePath, args, {
         detached: true,
         stdio: ['ignore', 'pipe', 'pipe'],
         env,
+        shell: isCmdFile,
       });
 
       // 收集 stderr 用于诊断
