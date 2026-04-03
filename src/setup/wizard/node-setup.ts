@@ -114,7 +114,7 @@ async function promptInstallNode(): Promise<boolean> {
 async function promptNpmRegistry(currentRegistry?: string): Promise<string | undefined> {
   const isTaoBao = currentRegistry?.includes('taobao') || currentRegistry?.includes('npmmirror');
   const switchMirror = await confirm({
-    message: isTaoBao ? '当前使用的是国内镜像，是否切换回官方镜像？' : '是否切换到 npm 国内镜像（淘宝）？',
+    message: isTaoBao ? '当前使用的是国内镜像，是否切换回官方镜像？' : '是否切换到 npm 国内镜像（阿里云 / npmmirror）？',
     default: false,
   });
 
