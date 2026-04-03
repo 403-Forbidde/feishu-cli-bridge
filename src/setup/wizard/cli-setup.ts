@@ -101,10 +101,13 @@ async function selectModelAndComplete(provider: OpenCodeProvider): Promise<CliSe
   } else {
     // 用户没有配置默认模型，从列表选择
     console.log(chalk.yellow('  未检测到 OpenCode 默认模型配置'));
+    console.log(chalk.cyan('  ℹ️  您需要选择一个模型作为桥接服务的默认模型'));
+    console.log(chalk.dim('     （选择后可在配置文件中随时修改）'));
+    console.log('');
     selectedModel = await promptModelSelection(provider);
   }
 
-  const defaultConfig = await provider.getDefaultConfig();
+  const defaultConfig = provider.getDefaultConfig();
   const config = {
     ...defaultConfig,
     default_model: selectedModel,
@@ -126,16 +129,18 @@ async function promptModelSelection(provider: OpenCodeProvider): Promise<string>
   modelSpinner.stop();
 
   if (freeModels.length === 0) {
-    // 如果没有获取到免费模型，使用默认配置
-    const defaultConfig = await provider.getDefaultConfig();
-    const selectedModel = defaultConfig.default_model;
-    console.log(chalk.yellow('  未找到免费模型，使用默认模型'));
-    console.log(chalk.dim(`  默认模型: ${selectedModel}（如需更改可后续手动修改配置文件）\n`));
-    return selectedModel;
+    // 如果没有获取到免费模型，提示用户并退出
+    console.log(chalk.red('  错误：无法获取可用模型列表'));
+    console.log(chalk.dim('  请检查 OpenCode CLI 是否已正确安装和登录'));
+    console.log(chalk.dim('  或者稍后手动编辑配置文件设置模型'));
+    process.exit(1);
   }
 
   // 显示找到的免费模型数量
   console.log(chalk.green(`  找到 ${freeModels.length} 个免费模型`));
+  console.log('');
+  console.log(chalk.cyan('  ℹ️  请从列表中选择默认使用的模型'));
+  console.log(chalk.dim('     （免费模型列表可能随时间变化，建议定期查看最新可用模型）'));
   console.log('');
 
   // 让用户选择模型

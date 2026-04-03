@@ -54,5 +54,5 @@ export interface ICLIProvider {
   getAuthStatus(): Promise<AuthStatus>;
   login(): Promise<boolean>;
   fetchModels(): Promise<Array<{ id: string; name: string; provider?: string; isFree?: boolean }>>;
-  getDefaultConfig(): Promise<CLIConfig> | CLIConfig;
+  getDefaultConfig(): CLIConfig;
 }

@@ -201,15 +201,13 @@ export class OpenCodeProvider implements ICLIProvider {
       .replace(/\b\w/g, (c) => c.toUpperCase());
   }
 
-  async getDefaultConfig(): Promise<CLIConfig> {
-    // 获取第一个可用的免费模型作为默认模型
-    const models = await this.fetchModels();
-    const defaultModel = models.length > 0 ? models[0].id : 'opencode/mimo-v2-omni-free';
-
+  getDefaultConfig(): CLIConfig {
+    // 返回空默认模型，强制用户在配置过程中明确选择
+    // 避免使用硬编码模型ID（免费模型列表可能变化）
     return {
       enabled: true,
       command: 'opencode',
-      default_model: defaultModel,
+      default_model: '',
     };
   }
 
