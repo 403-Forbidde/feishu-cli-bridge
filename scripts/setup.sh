@@ -2,7 +2,9 @@
 set -euo pipefail
 
 # Feishu CLI Bridge Installer for Linux and macOS
-# Usage: curl -fsSL https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main/scripts/setup.sh | bash
+# Recommended usage:
+#   curl -fsSL -o /tmp/setup.sh https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main/scripts/setup.sh
+#   bash /tmp/setup.sh
 #
 # This script ONLY checks prerequisites and does NOT auto-install Node.js or Git.
 # Users must manually install them before running this script.
@@ -82,6 +84,19 @@ check_git() {
     ui_error "Git not found"
     return 1
 }
+
+# ===== TTY check =====
+# This script launches an interactive wizard; stdin must be a TTY.
+if [ ! -t 0 ]; then
+    ui_error "Interactive setup requires a terminal."
+    echo ""
+    echo -e "${YELLOW}Please download the script first, then run it:${NC}"
+    echo ""
+    echo "  curl -fsSL -o /tmp/setup.sh https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main/scripts/setup.sh"
+    echo "  bash /tmp/setup.sh"
+    echo ""
+    exit 1
+fi
 
 # ===== Main flow =====
 echo ""
