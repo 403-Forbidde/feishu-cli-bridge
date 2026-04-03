@@ -204,9 +204,17 @@ export class OpenCodeServerManager {
         process.platform === 'win32' ? 'where opencode' : 'which opencode',
         { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] }
       );
-      // 清理 Windows 换行符 \r\n，取第一行
-      const path = result.trim().split('\n')[0]?.replace(/\r/g, '');
-      return path || null;
+      // 清理 Windows 换行符 \r\n，分割多行
+      const lines = result.trim().split('\n').map(l => l.replace(/\r/g, '').trim()).filter(Boolean);
+
+      // Windows: where 命令可能返回无扩展名的 shim 和带扩展名的 .cmd/.exe
+      // 优先选择有扩展名的可执行文件
+      if (process.platform === 'win32') {
+        const exeWithExt = lines.find(l => /\.(exe|cmd|bat|ps1)$/i.test(l));
+        if (exeWithExt) return exeWithExt;
+      }
+
+      return lines[0] || null;
     } catch {
       return null;
     }
