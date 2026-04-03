@@ -314,6 +314,8 @@ opencode --version  # 应显示 0.5.0+
 
 #### 方式一：一键安装脚本（推荐）
 
+> ⚠️ **前置要求**：运行脚本前必须先安装 Node.js 20+ 和 Git，脚本**仅检测**不会自动安装。
+
 <details>
 <summary><b>🐧 Linux / 🍎 macOS</b></summary>
 
@@ -321,12 +323,14 @@ opencode --version  # 应显示 0.5.0+
 curl -fsSL https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main/scripts/setup.sh | bash
 ```
 
-脚本会自动：
-1. 检查 Node.js 版本（如低于 20 会尝试安装）
-2. 检查 Git 是否安装
+脚本会：
+1. **检测** Node.js 版本（要求 20+）
+2. **检测** Git 是否安装
 3. 克隆仓库到 `~/feishu-cli-bridge`
 4. 安装 npm 依赖
 5. 启动交互式配置向导
+
+> 如果缺少前置依赖，脚本会显示安装指南并退出。
 
 </details>
 
@@ -340,10 +344,12 @@ powershell -ExecutionPolicy Bypass -Command "iex (irm https://raw.githubusercont
 > `-ExecutionPolicy Bypass` 仅作用于当前进程，用于允许执行远程脚本。
 
 脚本会：
-1. 检查 Node.js 和 Git 是否已安装（**不会自动安装**，如未安装会提示）
+1. **检测** Node.js 和 Git 是否已安装（运行前必须先安装）
 2. 克隆仓库
 3. 安装 npm 依赖
 4. 启动交互式配置向导
+
+> 如果缺少前置依赖，脚本会显示安装指南并退出。
 
 </details>
 

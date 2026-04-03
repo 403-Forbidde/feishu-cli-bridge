@@ -311,7 +311,9 @@ Choose the method that suits you:
 
 #### Option 1: One-line Install Script (Recommended 🌟)
 
-Copy and paste **one line** into your terminal. The script checks prerequisites, clones the repo, installs dependencies, and launches the interactive wizard.
+Copy and paste **one line** into your terminal. The script **checks** prerequisites (does NOT auto-install), clones the repo, installs dependencies, and launches the interactive wizard.
+
+> ⚠️ **Prerequisites Required**: Node.js 20+ and Git must be installed **before** running this script.
 
 <details>
 <summary><b>🐧 Linux / 🍎 macOS</b></summary>
@@ -321,11 +323,13 @@ curl -fsSL https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main
 ```
 
 The script will:
-1. Check Node.js version (install if < 20)
-2. Check if Git is installed
+1. **Check** Node.js version (required: 20+)
+2. **Check** if Git is installed
 3. Clone repository to `~/feishu-cli-bridge`
 4. Install npm dependencies
 5. Launch interactive setup wizard
+
+> If prerequisites are missing, the script will display installation instructions and exit.
 
 </details>
 
@@ -339,10 +343,12 @@ powershell -ExecutionPolicy Bypass -Command "iex (irm https://raw.githubusercont
 > `-ExecutionPolicy Bypass` applies only to the current process, allowing remote script execution.
 
 The script will:
-1. Check if Node.js and Git are installed (**will NOT auto-install**, prompts if missing)
+1. **Check** if Node.js and Git are installed (required before running)
 2. Clone the repository
 3. Install npm dependencies
 4. Launch interactive setup wizard
+
+> If prerequisites are missing, the script will display installation instructions and exit.
 
 </details>
 
