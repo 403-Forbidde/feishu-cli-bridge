@@ -3,13 +3,13 @@ import chalk from 'chalk';
 import ora from 'ora';
 
 import { OpenCodeProvider } from '../cli-provider/providers/opencode.js';
-import type { ICLIProvider, CLICheckResult, AuthStatus, InstallMethod } from '../cli-provider/interface.js';
+import type { ICLIProvider, CLICheckResult, AuthStatus, InstallMethod, CLIConfig } from '../cli-provider/interface.js';
 import { safeSelect } from './safe-select.js';
 
 export interface CliSetupResult {
   success: boolean;
   provider?: ICLIProvider;
-  config?: ReturnType<ICLIProvider['getDefaultConfig']>;
+  config?: CLIConfig;
 }
 
 export async function runCliSetup(): Promise<CliSetupResult> {
@@ -104,7 +104,7 @@ async function selectModelAndComplete(provider: OpenCodeProvider): Promise<CliSe
     selectedModel = await promptModelSelection(provider);
   }
 
-  const defaultConfig = provider.getDefaultConfig();
+  const defaultConfig = await provider.getDefaultConfig();
   const config = {
     ...defaultConfig,
     default_model: selectedModel,
@@ -127,7 +127,7 @@ async function promptModelSelection(provider: OpenCodeProvider): Promise<string>
 
   if (freeModels.length === 0) {
     // 如果没有获取到免费模型，使用默认配置
-    const defaultConfig = provider.getDefaultConfig();
+    const defaultConfig = await provider.getDefaultConfig();
     const selectedModel = defaultConfig.default_model;
     console.log(chalk.yellow('  未找到免费模型，使用默认模型'));
     console.log(chalk.dim(`  默认模型: ${selectedModel}（如需更改可后续手动修改配置文件）\n`));

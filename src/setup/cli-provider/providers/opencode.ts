@@ -201,11 +201,15 @@ export class OpenCodeProvider implements ICLIProvider {
       .replace(/\b\w/g, (c) => c.toUpperCase());
   }
 
-  getDefaultConfig(): CLIConfig {
+  async getDefaultConfig(): Promise<CLIConfig> {
+    // 获取第一个可用的免费模型作为默认模型
+    const models = await this.fetchModels();
+    const defaultModel = models.length > 0 ? models[0].id : 'opencode/mimo-v2-omni-free';
+
     return {
       enabled: true,
       command: 'opencode',
-      default_model: 'kimi',
+      default_model: defaultModel,
     };
   }
 
