@@ -83,9 +83,6 @@
 ### 🤖 **OpenCode 接入**
 HTTP/SSE 方式，自动启动并管理 `opencode serve`，自动预授权外部目录访问（无头模式工具调用不阻塞）
 
-### 🎭 **Claude Code 接入**
-`child_process.spawn` + JSON Lines 流式解析，支持 `@filepath` 文件引用，模型动态检测（兼容 Kimi 等第三方 Provider）
-
 ### 🎭 **Agent 模式**
 内置 Build / Plan 模式；自动检测 oh-my-openagent，已安装时切换为 7 个专业 Agent，`/mode` 卡片一键切换
 
@@ -100,6 +97,9 @@ HTTP/SSE 方式，自动启动并管理 `opencode serve`，自动预授权外部
 
 </td>
 <td width="50%">
+
+### 🎭 **Claude Code 接入**
+`child_process.spawn` + JSON Lines 流式解析，支持 `@filepath` 文件引用，模型动态检测（兼容 Kimi 等第三方 Provider）
 
 ### 📊 **Token 统计**
 右对齐 Footer 紧凑显示耗时、Token 消耗、上下文占用率、模型名

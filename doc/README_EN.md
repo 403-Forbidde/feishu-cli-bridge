@@ -81,9 +81,6 @@
 ### 🤖 **OpenCode Integration**
 HTTP/SSE protocol, auto-start and manage `opencode serve`, pre-authorize external directory access (no blocking in headless mode)
 
-### 🎭 **Claude Code Integration**
-`child_process.spawn` + JSON Lines streaming, supports `@filepath` file references, dynamic model detection (compatible with third-party providers like Kimi)
-
 ### 🎭 **Agent Modes**
 Built-in Build / Plan modes; auto-detect oh-my-openagent, switch to 7 professional agents when installed, `/mode` card for quick switching
 
@@ -98,6 +95,9 @@ Collapsible thinking panel, real-time AI reasoning display, continues waiting fo
 
 </td>
 <td width="50%">
+
+### 🎭 **Claude Code Integration**
+`child_process.spawn` + JSON Lines streaming, supports `@filepath` file references, dynamic model detection (compatible with third-party providers like Kimi)
 
 ### 📊 **Token Statistics**
 Right-aligned footer displaying elapsed time, token usage, context percentage, and model name
