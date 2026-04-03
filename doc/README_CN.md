@@ -214,21 +214,39 @@ HTTP/SSE 方式，自动启动并管理 `opencode serve`，自动预授权外部
 
 ### 第一步：安装前置依赖
 
-需要 **Node.js 20+ LTS** 和 **opencode CLI**。
+在开始之前，请确保已安装以下软件：
 
-> 💡 **重要说明**：本项目专注于桥接飞书与本地 CLI 工具，**不会自动安装** OpenCode 等 CLI 工具。你需要先手动安装 CLI 工具，配置向导只负责检测和引导。
+| 依赖 | 最低版本 | 用途 | 安装方式 |
+|:-----|:--------|:-----|:---------|
+| **Node.js** | 20+ LTS | 运行环境 | [官网下载](https://nodejs.org/) 或包管理器 |
+| **Git** | 任意 | 克隆仓库 | [官网下载](https://git-scm.com/) 或包管理器 |
+| **OpenCode CLI** | 0.5.0+ | AI 编程助手 | `npm install -g opencode-ai` |
+
+> 💡 **重要说明**：本项目是**桥接工具**，专注于连接飞书和本地 CLI 工具。**不会自动安装** OpenCode 等 CLI 工具，配置向导只负责检测和引导。
+
+#### 各平台安装指南
 
 <details>
 <summary><b>🐧 Linux（Ubuntu/Debian）</b></summary>
 
 ```bash
-# Node.js LTS
+# 1. 安装 Node.js LTS
 curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
 sudo apt-get install -y nodejs
 
-# opencode（需手动安装，本项目不会自动安装）
+# 2. 验证 Node.js 版本
+node --version  # 应显示 v20.x.x 或更高
+
+# 3. 安装 OpenCode CLI（需手动安装）
 npm install -g opencode-ai
+
+# 4. 验证 OpenCode
+opencode --version
 ```
+
+**常见问题**：
+- 如果 `npm` 提示权限错误，尝试：`sudo npm install -g opencode-ai`
+- 或者更改 npm 全局目录：[npm 文档](https://docs.npmjs.com/resolving-eacces-permissions-errors-when-installing-packages-globally)
 
 </details>
 
@@ -236,87 +254,203 @@ npm install -g opencode-ai
 <summary><b>🍎 macOS</b></summary>
 
 ```bash
-# 需先安装 Homebrew: https://brew.sh
+# 1. 安装 Homebrew（如未安装）
+# 访问 https://brew.sh 获取安装命令
+
+# 2. 安装 Node.js
 brew install node
 
-# opencode（需手动安装，本项目不会自动安装）
+# 3. 验证版本
+node --version  # 应显示 v20.x.x 或更高
+
+# 4. 安装 OpenCode CLI（需手动安装）
 npm install -g opencode-ai
+
+# 5. 验证
+opencode --version
 ```
 
 </details>
 
 <details>
-<summary><b>🪟 Windows（PowerShell 一键安装，推荐）</b></summary>
+<summary><b>🪟 Windows</b></summary>
 
-**安装前请确保已安装：**
-- [Node.js LTS (v20+)](https://nodejs.org/en/download) — 安装时勾选「**Add to PATH**」
-- [Git for Windows](https://git-scm.com/download/win) — 下载 64 位独立安装包，使用默认选项安装即可
-- **opencode CLI** — 安装命令：`npm install -g opencode-ai`
+**依次安装以下软件：**
 
-> 安装完成后，**重启 PowerShell**，使环境变量生效。
+1. **[Node.js LTS (v20+)](https://nodejs.org/en/download)**
+   - 下载 Windows Installer (.msi)
+   - **关键**：安装过程中勾选「**Add to PATH**」
 
-然后执行：
+2. **[Git for Windows](https://git-scm.com/download/win)**
+   - 下载 64-bit Git for Windows Setup
+   - 使用默认选项安装即可
+
+3. **OpenCode CLI**
+   ```powershell
+   npm install -g opencode-ai
+   ```
+
+**重要步骤**：
+> 安装完成后，**重启 PowerShell**（或 CMD），使环境变量生效。
+
+验证安装：
+```powershell
+node --version      # 应显示 v20.x.x
+opencode --version  # 应显示 0.5.0+
+```
+
+</details>
+
+---
+
+### 安装方式选择
+
+安装本项目有两种方式，选择适合你的：
+
+| 方式 | 适用场景 | 复杂度 |
+|:-----|:---------|:-------|
+| **一键安装脚本** | 快速开始，自动完成大部分配置 | ⭐ 简单 |
+| **手动克隆安装** | 开发者，需要自定义配置 | ⭐⭐ 中等 |
+
+#### 方式一：一键安装脚本（推荐）
+
+<details>
+<summary><b>🐧 Linux / 🍎 macOS</b></summary>
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main/scripts/setup.sh | bash
+```
+
+脚本会自动：
+1. 检查 Node.js 版本（如低于 20 会尝试安装）
+2. 检查 Git 是否安装
+3. 克隆仓库到 `~/feishu-cli-bridge`
+4. 安装 npm 依赖
+5. 启动交互式配置向导
+
+</details>
+
+<details>
+<summary><b>🪟 Windows (PowerShell)</b></summary>
 
 ```powershell
 powershell -ExecutionPolicy Bypass -Command "iex (irm https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main/scripts/setup.ps1)"
 ```
 
-> 脚本不再自动安装 Node.js/Git。它会先检查前置环境，随后拉取仓库、安装 npm 依赖并启动交互式配置向导。
-> 
-> 💡 **注意**：配置向导不会自动安装 CLI 工具（如 OpenCode），而是检测后提供安装命令供你手动执行，以避免权限问题和环境冲突。
->
-> `-ExecutionPolicy Bypass` 仅作用于当前进程，避免系统执行策略拦截 `npm` 的 PowerShell 脚本。
+> `-ExecutionPolicy Bypass` 仅作用于当前进程，用于允许执行远程脚本。
+
+脚本会：
+1. 检查 Node.js 和 Git 是否已安装（**不会自动安装**，如未安装会提示）
+2. 克隆仓库
+3. 安装 npm 依赖
+4. 启动交互式配置向导
 
 </details>
 
-<details>
-<summary><b>✅ 验证</b></summary>
+**配置向导流程**：
 
-```bash
-node --version      # 需 20+
-npm --version
-opencode --version
+```
+┌─────────────────────────────────────────────────────────┐
+│  1. CLI 工具检测                                         │
+│     └─ 未安装 → 显示安装命令 → 等待手动安装 → 重新检测    │
+│     └─ 已安装 → 检查登录状态 → 提示登录（如未登录）        │
+│                                                         │
+│  2. 模型选择                                            │
+│     └─ 获取可用模型列表 → 选择默认模型                    │
+│                                                         │
+│  3. 飞书配置                                            │
+│     └─ 输入 App ID / App Secret → 验证格式              │
+│                                                         │
+│  4. 服务配置（可选）                                     │n│     └─ 生成 systemd/launchd/Windows 服务配置             │
+└─────────────────────────────────────────────────────────┘
 ```
 
-</details>
+> 💡 **注意**：配置向导**不会自动安装 CLI 工具**，只负责检测和引导。如果未检测到，会显示安装命令供你手动执行。
 
 ---
 
 ### 第二步：克隆项目 & 安装依赖
 
 ```bash
-git clone <repo_url>
+# 克隆仓库
+git clone <仓库地址>
 cd feishu-cli-bridge
+
+# 安装依赖
 npm install
 ```
+
+> 💡 **手动安装 vs 一键安装**：如果你使用了一键安装脚本，这一步已经完成，直接进入第三步。
+
+---
+
+### 关于 CLI 工具的重要说明
+
+本项目是一个**桥接工具**，负责连接飞书和本地 CLI 工具。
+
+- ✅ **我们会做的**：检测 CLI 工具、引导你完成配置、启动桥接服务
+- ❌ **我们不会做的**：自动执行 `npm install -g opencode-ai` 等安装命令
+
+**为什么？** 全局安装需要 sudo 权限，可能与你现有的 Node.js 环境冲突。我们相信你应该完全掌控自己的开发环境。
+
+**如果未检测到 CLI 工具**，配置向导会显示安装命令供你手动执行，安装完成后继续配置。`
 
 ---
 
 ### 第三步：创建飞书自建应用
 
-1. 进入[飞书开发者控制台](https://open.feishu.cn/app)，创建**企业自建应用**
+#### 3.1 创建应用
 
-2. **权限管理** — 手动开启下表权限：
+1. 进入[飞书开发者控制台](https://open.feishu.cn/app)，点击「创建企业自建应用」
+2. 填写应用信息（名称、描述、图标）
 
-   | 权限 scope | 用途 |
-   |:-----------|:-----|
-   | `im:message` | 读取消息 |
-   | `im:message:send_as_bot` | 以机器人身份发消息 |
-   | `im:message.reactions:read` | ✏️ 打字提示 |
-   | `im:message.reactions:write_only` | 添加/删除 Reaction |
-   | `im:resource` | 下载图片/文件 |
-   | `contact:user.id:readonly` | 读取用户 ID |
-   | `cardkit:card:read` / `cardkit:card:write` | CardKit 流式卡片（不开则自动降级） |
+#### 3.2 配置权限
 
-3. **事件与回调** → 连接方式选「**长连接**」→ 添加事件 `im.message.receive_v1`
-   
-   > 不要填写卡片回调 URL，长连接会自动接收卡片按钮回调。
+**方式一：JSON 批量导入（推荐）**
 
-4. **版本管理与发布** → 创建版本 → 发布（内部应用无需审核，立即生效）
+本项目提供了完整的权限配置文件 [`doc/feishu_permissions.json`](./feishu_permissions.json)，包含所有必需的权限。操作步骤：
 
-5. 记录「凭证与基础信息」中的 **App ID** 和 **App Secret**
+```
+权限管理 → 批量导入 → 选择 feishu_permissions.json 文件 → 确认导入
+```
 
-> 📝 每次在控制台变更权限或事件订阅后，都需要重新发布版本才能生效。
+导入后将自动启用消息、卡片、文件下载等所有必需权限。
+
+**方式二：手动开启**
+
+如需手动配置，请开启以下权限：
+
+| 权限 scope | 用途 | 是否必需 |
+|:-----------|:-----|:--------:|
+| `im:message` | 读取消息 | ✅ |
+| `im:message:send_as_bot` | 以机器人身份发消息 | ✅ |
+| `im:message.reactions:read` | ✏️ 打字提示 | ✅ |
+| `im:message.reactions:write_only` | 添加/删除 Reaction | ✅ |
+| `im:resource` | 下载图片/文件 | ✅ |
+| `contact:user.id:readonly` | 读取用户 ID | ✅ |
+| `cardkit:card:read` / `cardkit:card:write` | CardKit 流式卡片 | ❌ |
+
+> 💡 **提示**：如果不开启 CardKit 权限，系统会自动降级使用 IM Patch 模式（1500ms 刷新间隔），核心功能不受影响。
+
+#### 3.3 配置事件订阅
+
+**事件与回调** → 连接方式选择「**长连接**」→ 添加事件 `im.message.receive_v1`
+
+> 不要填写卡片回调 URL，长连接模式会自动接收卡片按钮点击事件。
+
+#### 3.4 发布应用
+
+**版本管理与发布** → 创建版本 → 填写版本信息 → 发布
+
+> 内部应用无需审核，发布后立即生效。
+
+#### 3.5 记录凭证
+
+进入「凭证与基础信息」页面，记录以下信息（后续配置需要）：
+- **App ID**（格式：`cli_xxxxxxxxxxxxxxxx`）
+- **App Secret**
+
+> 📝 **重要提示**：每次修改权限或事件订阅后，必须创建新版本并发布才能生效。
 
 ---
 
@@ -651,7 +785,8 @@ feishu-cli-bridge/
 ├── README.md                  # 🇬🇧 英文文档
 └── doc/
     ├── CHANGELOG.md           # 版本更新日志
-    └── README_CN.md           # 🇨🇳 中文文档（本文件）
+    ├── README_CN.md           # 🇨🇳 中文文档（本文件）
+    └── feishu_permissions.json # 飞书机器人权限配置（开发者后台导入）
 ```
 
 ---

@@ -211,92 +211,242 @@ Batch processing after long gaps to avoid sparse initial updates
 
 ## ⚡ Quick Start
 
-### Option 1: One-line Install (Recommended 🌟)
+### Prerequisites (All Platforms)
 
-Copy and paste **one line** into your terminal. The script handles everything: Node.js check/install, repo clone, dependency install, and launches the interactive wizard.
+Before starting, ensure you have the following installed:
 
-#### 🐧 Linux / macOS
+| Dependency | Minimum Version | Purpose | Installation |
+|:-----------|:----------------|:--------|:-------------|
+| **Node.js** | 20+ LTS | Runtime | [Download](https://nodejs.org/) or package manager |
+| **Git** | Any | Clone repository | [Download](https://git-scm.com/) or package manager |
+| **OpenCode CLI** | 0.5.0+ | AI coding assistant | `npm install -g opencode-ai` |
+
+> 💡 **Important**: This project is a **bridge tool** connecting Feishu to local CLI tools. It **does NOT automatically install** OpenCode or other CLI tools. The wizard only detects and guides.
+
+<details>
+<summary><b>🐧 Linux — Install Prerequisites</b></summary>
+
+```bash
+# 1. Install Node.js LTS
+curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# 2. Verify Node.js version
+node --version  # Should show v20.x.x or higher
+
+# 3. Install OpenCode CLI (manual installation)
+npm install -g opencode-ai
+
+# 4. Verify OpenCode
+opencode --version
+```
+
+**Troubleshooting**:
+- If `npm` shows permission errors, try: `sudo npm install -g opencode-ai`
+- Or change npm global directory: [npm docs](https://docs.npmjs.com/resolving-eacces-permissions-errors-when-installing-packages-globally)
+
+</details>
+
+<details>
+<summary><b>🍎 macOS — Install Prerequisites</b></summary>
+
+```bash
+# 1. Install Homebrew (if not installed)
+# Visit https://brew.sh for installation command
+
+# 2. Install Node.js
+brew install node
+
+# 3. Verify version
+node --version  # Should show v20.x.x or higher
+
+# 4. Install OpenCode CLI (manual installation)
+npm install -g opencode-ai
+
+# 5. Verify
+opencode --version
+```
+
+</details>
+
+<details>
+<summary><b>🪟 Windows — Install Prerequisites</b></summary>
+
+**Install in the following order:**
+
+1. **[Node.js LTS (v20+)](https://nodejs.org/en/download)**
+   - Download Windows Installer (.msi)
+   - **Important**: Check "**Add to PATH**" during installation
+
+2. **[Git for Windows](https://git-scm.com/download/win)**
+   - Download 64-bit Git for Windows Setup
+   - Use default options for installation
+
+3. **OpenCode CLI**
+   ```powershell
+   npm install -g opencode-ai
+   ```
+
+**Important Step**:
+> After installation, **restart PowerShell** (or CMD) for environment variables to take effect.
+
+Verify installation:
+```powershell
+node --version      # Should show v20.x.x
+opencode --version  # Should show 0.5.0+
+```
+
+</details>
+
+---
+
+### Installation Methods
+
+Choose the method that suits you:
+
+| Method | Use Case | Complexity |
+|:-------|:---------|:-----------|
+| **One-line Install Script** | Quick start, automated configuration | ⭐ Easy |
+| **Manual Clone & Install** | Developers, custom configuration | ⭐⭐ Medium |
+
+#### Option 1: One-line Install Script (Recommended 🌟)
+
+Copy and paste **one line** into your terminal. The script checks prerequisites, clones the repo, installs dependencies, and launches the interactive wizard.
+
+<details>
+<summary><b>🐧 Linux / 🍎 macOS</b></summary>
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main/scripts/setup.sh | bash
 ```
 
-> Auto-detects your package manager (`apt`, `dnf`, `yum`, `pacman`, `brew`) to install Node.js if needed.
+The script will:
+1. Check Node.js version (install if < 20)
+2. Check if Git is installed
+3. Clone repository to `~/feishu-cli-bridge`
+4. Install npm dependencies
+5. Launch interactive setup wizard
 
-#### 🪟 Windows (PowerShell)
+</details>
 
-**Prerequisites:**
-- [Node.js LTS (v20+)](https://nodejs.org/en/download) — install with "**Add to PATH**" checked
-- [Git for Windows](https://git-scm.com/download/win) — use the 64-bit standalone installer with default options
-
-> After installing both, **restart PowerShell** so the new PATH is loaded.
-
-Then run:
+<details>
+<summary><b>🪟 Windows (PowerShell)</b></summary>
 
 ```powershell
 powershell -ExecutionPolicy Bypass -Command "iex (irm https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main/scripts/setup.ps1)"
 ```
 
-> The script no longer auto-installs Node.js/Git. It verifies they exist and then clones the repo, installs npm dependencies, and launches the interactive wizard.
->
-> `-ExecutionPolicy Bypass` applies only to the current process, preventing the system's script execution policy from blocking `npm` PowerShell scripts.
+> `-ExecutionPolicy Bypass` applies only to the current process, allowing remote script execution.
 
-The wizard will then guide you through:
-1. **OpenCode CLI setup** — detects installation, guides you through manual installation if needed, then logs in and selects default model
-2. **Feishu credentials** — validates App ID / App Secret with format checking
-3. **Service configuration** — auto-detects systemd / launchd and generates service files
+The script will:
+1. Check if Node.js and Git are installed (**will NOT auto-install**, prompts if missing)
+2. Clone the repository
+3. Install npm dependencies
+4. Launch interactive setup wizard
 
-> 💡 **Note**: The wizard does **not** automatically install CLI tools to avoid permission issues and environment conflicts. It provides installation instructions for you to execute manually.
+</details>
 
-> 💡 **Tip**: The generated config is saved to `~/.config/feishu-cli-bridge/config.yaml` (Linux/macOS) or `%APPDATA%\feishu-cli-bridge\config.yaml` (Windows). You can still manually edit it afterward.
+**Wizard Flow**:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  1. CLI Tool Detection                                   │
+│     └─ Not installed → Show install command → Wait for   │
+│        manual install → Re-detect                        │
+│     └─ Installed → Check login status → Prompt login     │
+│        (if not logged in)                                │
+│                                                          │
+│  2. Model Selection                                      │
+│     └─ Fetch available models → Select default model     │
+│                                                          │
+│  3. Feishu Configuration                                 │
+│     └─ Enter App ID / App Secret → Validate format       │
+│                                                          │
+│  4. Service Configuration (Optional)                     │
+│     └─ Generate systemd/launchd/Windows service config   │
+└─────────────────────────────────────────────────────────┘
+```
+
+> 💡 **Note**: The wizard **does NOT automatically install CLI tools**, only detects and guides. If not detected, it displays installation commands for manual execution.
+
+> 💡 **Tip**: The generated config is saved to `~/.config/feishu-cli-bridge/config.yaml` (Linux/macOS) or `%APPDATA%\feishu-cli-bridge\config.yaml` (Windows).
 
 ---
 
-### Option 2: Manual Setup (for developers / existing Node.js)
+#### Option 2: Manual Clone & Install
 
-If you already have **Node.js 20+**, you can clone and run the wizard directly:
+For developers or those who need custom configuration.
 
 ```bash
+# Clone repository
 git clone <repo_url>
 cd feishu-cli-bridge
+
+# Install dependencies
 npm install
-npm run setup:dev      # Run interactive wizard directly via tsx
+
+# Launch setup wizard (development mode with hot reload)
+npm run setup:dev
 ```
 
-At this point the wizard assumes Node.js is already available and focuses on:
-- **Version compliance check** — warns if Node.js < 20.0.0
-- **npm mirror switching** — optional taobao/official registry toggle
-- **OpenCode / Feishu / Service config** — same as Option 1
+The wizard content is the same as one-line install, but it won't auto-check/install Node.js prerequisites.
 
 ---
 
 ### Step 1: Create Feishu Custom App
 
+#### 1.1 Create Application
+
 1. Go to [Feishu Developer Console](https://open.feishu.cn/app), create an **Enterprise Custom App**
+2. Fill in basic information (app name, description, icon)
 
-2. **Permission Management** — Enable the following permissions:
+#### 1.2 Configure Permissions
 
-   | Permission Scope | Purpose |
-   |:-----------------|:--------|
-   | `im:message` | Read messages |
-   | `im:message:send_as_bot` | Send messages as bot |
-   | `im:message.reactions:read` | ✏️ Typing indicator |
-   | `im:message.reactions:write_only` | Add/remove reactions |
-   | `im:resource` | Download images/files |
-   | `contact:user.id:readonly` | Read user ID |
-   | `cardkit:card:read` / `cardkit:card:write` | CardKit streaming cards (optional, auto-fallback if disabled) |
+**Option A: Import from JSON (Recommended)**
 
-   > ⚠️ **Note**: If CardKit permissions are not granted, the system will automatically fall back to IM Patch mode with 1500ms update intervals.
+The repository includes a pre-configured permission file. Download [`doc/feishu_permissions.json`](./doc/feishu_permissions.json) from this repo, then in the Developer Console:
 
-3. **Events & Callbacks** → Connection mode: "**Long Connection**" → Add event `im.message.receive_v1`
-   
-   > Do not fill in card callback URL, long connection automatically receives card button callbacks.
+```
+Permission Management → Import from JSON → Select feishu_permissions.json
+```
 
-4. **Version Management & Release** → Create version → Release (internal apps don't require review, effective immediately)
+This automatically enables all required permissions including messaging, cards, and file access.
 
-5. Record **App ID** and **App Secret** from "Credentials & Basic Info"
+**Option B: Manual Configuration**
 
-> 📝 Every time you change permissions or event subscriptions in the console, you must create a new version and release it for changes to take effect.
+If you prefer manual setup, enable these required permissions:
+
+| Permission Scope | Purpose | Required |
+|:-----------------|:--------|:--------:|
+| `im:message` | Read messages | ✅ |
+| `im:message:send_as_bot` | Send messages as bot | ✅ |
+| `im:message.reactions:read` | ✏️ Typing indicator | ✅ |
+| `im:message.reactions:write_only` | Add/remove reactions | ✅ |
+| `im:resource` | Download images/files | ✅ |
+| `contact:user.id:readonly` | Read user ID | ✅ |
+| `cardkit:card:read` / `cardkit:card:write` | CardKit streaming cards | ❌ |
+
+> ⚠️ **Note**: If CardKit permissions are not granted, the system will automatically fall back to IM Patch mode with 1500ms update intervals. Core functionality still works.
+
+#### 1.3 Configure Event Subscription
+
+**Events & Callbacks** → Connection mode: "**Long Connection**" → Add event `im.message.receive_v1`
+
+> Do not fill in card callback URL, long connection automatically receives card button callbacks.
+
+#### 1.4 Publish Application
+
+**Version Management & Release** → Create version → Release
+
+> Internal apps don't require review and are effective immediately.
+
+#### 1.5 Record Credentials
+
+From "Credentials & Basic Info", record:
+- **App ID** (format: `cli_xxxxxxxxxxxxxxxx`)
+- **App Secret**
+
+> 📝 **Important**: Every time you change permissions or event subscriptions in the console, you must create a new version and release it for changes to take effect.
 
 ---
 
@@ -610,7 +760,8 @@ feishu-cli-bridge/
 ├── README.md                  # This file (English)
 └── doc/                       # Documentation directory
     ├── CHANGELOG.md           # Version changelog
-    └── README_CN.md           # Chinese version
+    ├── README_CN.md           # Chinese version
+    └── feishu_permissions.json # Feishu bot permissions (import in Developer Console)
 ```
 
 ---
