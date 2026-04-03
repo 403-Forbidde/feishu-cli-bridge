@@ -362,8 +362,11 @@ The script will:
 │     └─ Installed → Check login status → Prompt login     │
 │        (if not logged in)                                │
 │                                                          │
-│  2. Model Selection                                      │
-│     └─ Fetch available models → Select default model     │
+│  2. Model Selection (REQUIRED)                           │
+│     ├─ Read user OpenCode config → Has default model?    │
+│     │   ├─ Yes → Ask use existing or select new          │
+│     │   └─ No  → Fetch available models from OpenCode    │
+│     └─ User must select a model (no hardcoded default)   │
 │                                                          │
 │  3. Feishu Configuration                                 │
 │     └─ Enter App ID / App Secret → Validate format       │
@@ -374,6 +377,8 @@ The script will:
 ```
 
 > 💡 **Note**: The wizard **does NOT automatically install CLI tools**, only detects and guides. If not detected, it displays installation commands for manual execution.
+>
+> 💡 **Model Selection**: The wizard will first check your existing OpenCode default model configuration. If not set, you **must** select from the current available models. The free model list is fetched dynamically and may change over time - no hardcoded default is used.
 
 > 💡 **Tip**: The generated config is saved to `~/.config/feishu-cli-bridge/config.yaml` (Linux/macOS) or `%APPDATA%\feishu-cli-bridge\config.yaml` (Windows).
 
@@ -510,6 +515,8 @@ npm start
 ```
 
 On successful startup, logs will show `🚀 Feishu CLI Bridge started successfully!`. Upon receiving the first Feishu message, the bridge will automatically start `opencode serve`, no manual operation needed.
+
+> 💡 **About Model Selection**: The setup wizard detects your existing OpenCode configuration. If you have a default model set, it will ask if you want to use it. Otherwise, you **must** select from the current available free models. The model list is fetched dynamically from OpenCode and may change over time - no hardcoded defaults are used.
 
 ---
 
