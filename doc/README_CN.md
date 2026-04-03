@@ -320,7 +320,8 @@ opencode --version  # 应显示 0.5.0+
 <summary><b>🐧 Linux / 🍎 macOS</b></summary>
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main/scripts/setup.sh | bash
+curl -fsSL -o /tmp/setup.sh https://raw.githubusercontent.com/403-Forbidde/feishu-cli-bridge/main/scripts/setup.sh
+bash /tmp/setup.sh
 ```
 
 脚本会：

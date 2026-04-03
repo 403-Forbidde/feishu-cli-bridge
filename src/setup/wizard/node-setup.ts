@@ -23,7 +23,7 @@ export async function runNodeSetup(): Promise<NodeSetupResult> {
   if (!checkResult.installed) {
     console.log(chalk.red('\n❌ 未检测到 Node.js 环境。'));
     console.log(chalk.dim('安装向导本身需要 Node.js 才能运行。请使用以下方式安装：'));
-    console.log(chalk.dim('  • Linux/macOS: curl -fsSL .../scripts/setup.sh | bash'));
+    console.log(chalk.dim('  • Linux/macOS: curl -fsSL -o /tmp/setup.sh .../scripts/setup.sh && bash /tmp/setup.sh'));
     console.log(chalk.dim('  • Windows: 下载并运行 scripts/setup.bat'));
     console.log(chalk.dim('  • 或手动安装 Node.js >= 20.0.0 后重试\n'));
     return { success: false, nodeOk: false };
