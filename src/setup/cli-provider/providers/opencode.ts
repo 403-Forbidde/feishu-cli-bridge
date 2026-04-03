@@ -208,4 +208,26 @@ export class OpenCodeProvider implements ICLIProvider {
       default_model: 'kimi',
     };
   }
+
+  /**
+   * 获取用户已配置的默认模型
+   * 通过 opencode config get default_model 命令读取
+   * @returns 模型ID或null
+   */
+  async getUserDefaultModel(): Promise<string | null> {
+    try {
+      const opencodePath = await which('opencode');
+      const { stdout, exitCode } = await execa(
+        opencodePath,
+        ['config', 'get', 'default_model'],
+        { reject: false, timeout: 5000 }
+      );
+      if (exitCode === 0 && stdout.trim()) {
+        return stdout.trim();
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
 }

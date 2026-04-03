@@ -75,38 +75,33 @@ export async function runCliSetup(): Promise<CliSetupResult> {
   return await selectModelAndComplete(provider);
 }
 
-async function selectModelAndComplete(provider: ICLIProvider): Promise<CliSetupResult> {
-  // Model selection: fetch free models from opencode and let user choose
-  const modelSpinner = ora('获取可用模型列表...').start();
-  const freeModels = await provider.fetchModels();
-  modelSpinner.stop();
+async function selectModelAndComplete(provider: OpenCodeProvider): Promise<CliSetupResult> {
+  // 首先尝试读取用户已有的默认模型配置
+  const userModelSpinner = ora('读取用户默认模型配置...').start();
+  const userDefaultModel = await provider.getUserDefaultModel();
+  userModelSpinner.stop();
 
   let selectedModel: string;
 
-  if (freeModels.length === 0) {
-    // 如果没有获取到免费模型，使用默认配置
-    const defaultConfig = provider.getDefaultConfig();
-    selectedModel = defaultConfig.default_model;
-    console.log(chalk.yellow('  未找到免费模型，使用默认模型'));
-    console.log(chalk.dim(`  默认模型: ${selectedModel}（如需更改可后续手动修改配置文件）\n`));
-  } else {
-    // 显示找到的免费模型数量
-    console.log(chalk.green(`  找到 ${freeModels.length} 个免费模型`));
-    console.log('');
-
-    // 让用户选择模型
-    const modelChoices = freeModels.map((m) => ({
-      name: `${m.name} (${m.id})`,
-      value: m.id,
-      description: `提供商: ${m.provider || 'unknown'}`,
-    }));
-
-    selectedModel = await select({
-      message: '选择默认使用的模型',
-      choices: modelChoices,
+  // 如果用户已配置默认模型，询问是否使用
+  if (userDefaultModel) {
+    console.log(chalk.green(`  检测到 OpenCode 默认模型: ${userDefaultModel}`));
+    const useExisting = await confirm({
+      message: '是否使用该模型作为桥接服务的默认模型？',
+      default: true,
     });
 
-    console.log(chalk.green(`  已选择: ${selectedModel}\n`));
+    if (useExisting) {
+      selectedModel = userDefaultModel;
+      console.log(chalk.green(`  已选择使用现有模型: ${selectedModel}\n`));
+    } else {
+      // 用户选择不使用，继续从列表选择
+      selectedModel = await promptModelSelection(provider);
+    }
+  } else {
+    // 用户没有配置默认模型，从列表选择
+    console.log(chalk.yellow('  未检测到 OpenCode 默认模型配置'));
+    selectedModel = await promptModelSelection(provider);
   }
 
   const defaultConfig = provider.getDefaultConfig();
@@ -120,6 +115,43 @@ async function selectModelAndComplete(provider: ICLIProvider): Promise<CliSetupR
     provider,
     config,
   };
+}
+
+/**
+ * 提示用户从模型列表中选择
+ */
+async function promptModelSelection(provider: OpenCodeProvider): Promise<string> {
+  const modelSpinner = ora('获取可用模型列表...').start();
+  const freeModels = await provider.fetchModels();
+  modelSpinner.stop();
+
+  if (freeModels.length === 0) {
+    // 如果没有获取到免费模型，使用默认配置
+    const defaultConfig = provider.getDefaultConfig();
+    const selectedModel = defaultConfig.default_model;
+    console.log(chalk.yellow('  未找到免费模型，使用默认模型'));
+    console.log(chalk.dim(`  默认模型: ${selectedModel}（如需更改可后续手动修改配置文件）\n`));
+    return selectedModel;
+  }
+
+  // 显示找到的免费模型数量
+  console.log(chalk.green(`  找到 ${freeModels.length} 个免费模型`));
+  console.log('');
+
+  // 让用户选择模型
+  const modelChoices = freeModels.map((m) => ({
+    name: `${m.name} (${m.id})`,
+    value: m.id,
+    description: `提供商: ${m.provider || 'unknown'}`,
+  }));
+
+  const selectedModel = await select({
+    message: '选择默认使用的模型',
+    choices: modelChoices,
+  });
+
+  console.log(chalk.green(`  已选择: ${selectedModel}\n`));
+  return selectedModel;
 }
 
 function printCheckResult(provider: ICLIProvider, result: CLICheckResult): void {
