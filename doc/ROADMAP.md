@@ -8,7 +8,7 @@
 
 | 里程碑 | 核心交付 | 状态 |
 |:-------|:---------|:----:|
-| **v0.2.0** | TypeScript 重写 · 架构优化 · 性能提升 | ✅ 已完成 |
+| **v0.2.1** | TypeScript 重写 · 架构优化 · 性能提升 | ✅ 已完成 |
 | **v0.3.0** | Claude Code 适配器 | 🔜 规划中 |
 | **v0.4.0** | Kimi CLI 适配器（Wire 协议） | 🔜 规划中 |
 | **v0.5.0** | Codex CLI 适配器 | 🔜 规划中 |
@@ -16,7 +16,7 @@
 
 ---
 
-### ✅ v0.2.0（当前版本）— TypeScript 重写完成
+### ✅ v0.2.1（当前版本）— TypeScript 重写完成
 
 - [x] 全面迁移至 TypeScript/Node.js 技术栈
 - [x] 分层架构：Core → Platform → Adapter
@@ -93,7 +93,7 @@
 
 | Milestone | Core Deliverables | Status |
 |:----------|:------------------|:------:|
-| **v0.2.0** | TypeScript Rewrite · Architecture Optimization · Performance Improvements | ✅ Completed |
+| **v0.2.1** | TypeScript Rewrite · Architecture Optimization · Performance Improvements | ✅ Completed |
 | **v0.3.0** | Claude Code Adapter | 🔜 Planned |
 | **v0.4.0** | Kimi CLI Adapter (Wire Protocol) | 🔜 Planned |
 | **v0.5.0** | Codex CLI Adapter | 🔜 Planned |
@@ -101,7 +101,7 @@
 
 ---
 
-### ✅ v0.2.0 (Current) — TypeScript Rewrite Complete
+### ✅ v0.2.1 (Current) — TypeScript Rewrite Complete
 
 - [x] Full migration to TypeScript/Node.js stack
 - [x] Layered architecture: Core → Platform → Adapter

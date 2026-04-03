@@ -1,10 +1,10 @@
 # 更新日志
 
-## v0.2.0 - TypeScript/Node.js 全面迁移版
+## v0.2.1 - TypeScript/Node.js 全面迁移版
 
 ### 里程碑
 
-- **2026-04-01** `30ace6a` - **feat: 全面迁移至 TypeScript/Node.js (v0.2.0)**
+- **2026-04-01** `30ace6a` - **feat: 全面迁移至 TypeScript/Node.js (v0.2.1)**
   - 完成从 Python 到 TypeScript/Node.js 的全量重构
   - 实现 100% 功能与旧版对齐
   - 引入严格类型安全、分层架构、安全加固等重大改进

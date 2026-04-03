@@ -24,7 +24,7 @@
 
 <!-- Status Badges -->
 <p>
-  <img src="https://img.shields.io/badge/version-v0.2.0-FF6B6B?style=flat-square&logo=semver&logoColor=white" alt="Version">
+  <img src="https://img.shields.io/badge/version-v0.2.1-FF6B6B?style=flat-square&logo=semver&logoColor=white" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-4ECDC4?style=flat-square&logo=opensourceinitiative&logoColor=white" alt="License">
   <img src="https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
   <img src="https://img.shields.io/badge/Node.js-20+-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js">
@@ -663,7 +663,7 @@ npm run test
 
 ## 📝 Changelog
 
-### v0.2.0 (2026-04-02) — TypeScript Rewrite
+### v0.2.1 (2026-04-02) — TypeScript Rewrite
 
 - 🔧 **Full Migration** — Migrated from Python to TypeScript/Node.js
 - 🏗️ **Architecture Upgrade** — Layered architecture: Core → Platform → Adapter

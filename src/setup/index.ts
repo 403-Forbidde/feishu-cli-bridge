@@ -9,7 +9,7 @@ const program = new Command();
 program
   .name('feishu-bridge-setup')
   .description('Feishu CLI Bridge 交互式安装向导')
-  .version('2.0.0');
+  .version('0.2.1');
 
 program
   .command('wizard', { isDefault: true })

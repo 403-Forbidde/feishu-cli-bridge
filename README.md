@@ -24,7 +24,7 @@
 
 <!-- Status Badges -->
 <p>
-  <img src="https://img.shields.io/badge/version-v0.2.0-FF6B6B?style=flat-square&logo=semver&logoColor=white" alt="Version">
+  <img src="https://img.shields.io/badge/version-v0.2.1-FF6B6B?style=flat-square&logo=semver&logoColor=white" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-4ECDC4?style=flat-square&logo=opensourceinitiative&logoColor=white" alt="License">
   <img src="https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
   <img src="https://img.shields.io/badge/Node.js-20+-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js">
@@ -683,7 +683,7 @@ npm run test
 
 ## 📝 更新日志
 
-### v0.2.0 (2026-04-02) — TypeScript 重写（当前版本）
+### v0.2.1 (2026-04-02) — TypeScript 重写（当前版本）
 
 - 🔧 **全面迁移** — 从 Python 迁移至 TypeScript/Node.js
 - 🏗️ **架构升级** — 分层架构：Core → Platform → Adapter
