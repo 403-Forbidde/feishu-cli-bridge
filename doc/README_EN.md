@@ -51,7 +51,6 @@
 - [🎯 Use Cases](#-use-cases)
 - [✨ Features](#-features)
 - [⚡ Quick Start](#-quick-start)
-- [📖 Usage](#-usage)
 - [🏗️ Project Structure](#️-project-structure)
 - [🔧 Development Commands](#-development-commands)
 - [📝 Changelog](#-changelog)
@@ -299,7 +298,9 @@ The script will:
 
 #### Option 2: Manual Clone & Install
 
-For developers or those who need custom configuration.
+For developers or those who need custom configuration. Follow the steps below.
+
+##### Step 1: Clone & Install Dependencies
 
 ```bash
 # Clone repository from GitHub
@@ -308,73 +309,74 @@ cd feishu-cli-bridge
 
 # Install dependencies
 npm install
-
-# Launch setup wizard (development mode with hot reload)
-npm run setup:dev
 ```
 
-The wizard content is the same as one-line install, but it won't auto-check/install Node.js prerequisites.
+> 💡 **About the setup wizard**: If you want to run the same interactive setup wizard as the one-line installer, execute `npm run setup:dev`. Alternatively, you can manually edit `config.yaml`.
+
+> 💡 **About CLI tools**: This project is a bridge tool and does **NOT** automatically install OpenCode or other CLI tools. The wizard only detects and guides based on your existing local environment.
 
 ---
 
-### Step 1: Create Feishu Custom App
+##### Step 2: Create Feishu Enterprise Custom App & Enable Bot
 
-#### 1.1 Create Application
+1. **Create Enterprise Custom App**
+   - Go to [Feishu Developer Console](https://open.feishu.cn/app), create an **Enterprise Custom App**
+   - Fill in basic information (app name, description, icon)
 
-1. Go to [Feishu Developer Console](https://open.feishu.cn/app), create an **Enterprise Custom App**
-2. Fill in basic information (app name, description, icon)
+2. **Add App Capability → Bot**
+   - In the app details page, select **Add App Capability** from the left menu
+   - Click the **Bot** card and follow the prompts to enable the bot capability
+   - Once enabled, you will see **App ID** and **App Secret** on the **Credentials & Basic Info** page
 
-#### 1.2 Configure Permissions
+3. **Configure Permissions**
 
-**Option A: Import from JSON (Recommended)**
+   **Option A: Import from JSON (Recommended)**
 
-The repository includes a pre-configured permission file. Download [`doc/feishu_permissions.json`](./feishu_permissions.json) from this repo, then in the Developer Console:
+   The repository includes a pre-configured permission file. Download [`doc/feishu_permissions.json`](./feishu_permissions.json) from this repo, then in the Developer Console:
 
-```
-Permission Management → Import from JSON → Select feishu_permissions.json
-```
+   ```
+   Permission Management → Import from JSON → Select feishu_permissions.json
+   ```
 
-This automatically enables all required permissions including messaging, cards, and file access.
+   **Option B: Manual Configuration**
 
-**Option B: Manual Configuration**
+   If you prefer manual setup, enable these required permissions:
 
-If you prefer manual setup, enable these required permissions:
+   | Permission Scope | Purpose | Required |
+   |:-----------------|:--------|:--------:|
+   | `im:message` | Read messages | ✅ |
+   | `im:message:send_as_bot` | Send messages as bot | ✅ |
+   | `im:message.reactions:read` | ✏️ Typing indicator | ✅ |
+   | `im:message.reactions:write_only` | Add/remove reactions | ✅ |
+   | `im:resource` | Download images/files | ✅ |
+   | `contact:user.id:readonly` | Read user ID | ✅ |
+   | `cardkit:card:read` / `cardkit:card:write` | CardKit streaming cards | ❌ |
 
-| Permission Scope | Purpose | Required |
-|:-----------------|:--------|:--------:|
-| `im:message` | Read messages | ✅ |
-| `im:message:send_as_bot` | Send messages as bot | ✅ |
-| `im:message.reactions:read` | ✏️ Typing indicator | ✅ |
-| `im:message.reactions:write_only` | Add/remove reactions | ✅ |
-| `im:resource` | Download images/files | ✅ |
-| `contact:user.id:readonly` | Read user ID | ✅ |
-| `cardkit:card:read` / `cardkit:card:write` | CardKit streaming cards | ❌ |
+   > ⚠️ **Note**: If CardKit permissions are not granted, the system will automatically fall back to IM Patch mode with 1500ms update intervals. Core functionality still works.
 
-> ⚠️ **Note**: If CardKit permissions are not granted, the system will automatically fall back to IM Patch mode with 1500ms update intervals. Core functionality still works.
+4. **Configure Event Subscription**
 
-#### 1.3 Configure Event Subscription
+   **Events & Callbacks** → Connection mode: "**Long Connection**" → Add event `im.message.receive_v1`
 
-**Events & Callbacks** → Connection mode: "**Long Connection**" → Add event `im.message.receive_v1`
+   > Do not fill in card callback URL, long connection automatically receives card button callbacks.
 
-> Do not fill in card callback URL, long connection automatically receives card button callbacks.
+5. **Publish Application**
 
-#### 1.4 Publish Application
+   **Version Management & Release** → Create version → Release
 
-**Version Management & Release** → Create version → Release
+   > Internal apps don't require review and are effective immediately.
 
-> Internal apps don't require review and are effective immediately.
+6. **Record Credentials**
 
-#### 1.5 Record Credentials
-
-From "Credentials & Basic Info", record:
-- **App ID** (format: `cli_xxxxxxxxxxxxxxxx`)
-- **App Secret**
+   From "Credentials & Basic Info", record:
+   - **App ID** (format: `cli_xxxxxxxxxxxxxxxx`)
+   - **App Secret**
 
 > 📝 **Important**: Every time you change permissions or event subscriptions in the console, you must create a new version and release it for changes to take effect.
 
 ---
 
-### Step 2: Manual Configuration (Skip if you used the wizard)
+##### Step 3: Manual Configuration (Manual install only)
 
 ```bash
 cp config.example.yaml config.yaml   # Windows: copy config.example.yaml config.yaml
@@ -412,15 +414,18 @@ set FEISHU_APP_SECRET=xxx
 
 ---
 
-### Step 3: Start
+##### Step 4: Start (Choose based on install method)
 
-#### Development mode (hot reload)
+If you used the **one-line install script**, you can start the service directly after the wizard finishes.  
+If you used **manual clone & install**, start with one of the following:
+
+###### Development mode (hot reload)
 
 ```bash
 npm run dev
 ```
 
-#### Production mode
+###### Production mode
 
 ```bash
 npm run build
@@ -428,8 +433,6 @@ npm start
 ```
 
 On successful startup, logs will show `🚀 Feishu CLI Bridge started successfully!`. Upon receiving the first Feishu message, the bridge will automatically start `opencode serve`, no manual operation needed.
-
-> 💡 **About Model Selection**: The setup wizard detects your existing OpenCode configuration. If you have a default model set, it will ask if you want to use it. Otherwise, you **must** select from the current available free models. The model list is fetched dynamically from OpenCode and may change over time - no hardcoded defaults are used.
 
 ---
 
@@ -501,24 +504,6 @@ schtasks /delete /tn "FeiShuBridge" /f  & REM Uninstall
 > Run `chcp 65001` before `npm start` in CMD/PowerShell to prevent Chinese garbled text.
 
 </details>
-
----
-
-## 📖 Usage
-
-Open a **private chat** with the bot in Feishu, send messages directly:
-
-```
-Help me write a Python script to process CSV files
-```
-
-### Specify CLI Tool
-
-Use `@` prefix to specify tool. Currently only **OpenCode** (`@opencode`) is supported. Claude, Kimi, and Codex adapters are planned — see [Roadmap](./ROADMAP.md).
-
-```
-@opencode Generate a React component
-```
 
 ---
 
