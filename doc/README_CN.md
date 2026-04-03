@@ -216,6 +216,8 @@ HTTP/SSE 方式，自动启动并管理 `opencode serve`，自动预授权外部
 
 需要 **Node.js 20+ LTS** 和 **opencode CLI**。
 
+> 💡 **重要说明**：本项目专注于桥接飞书与本地 CLI 工具，**不会自动安装** OpenCode 等 CLI 工具。你需要先手动安装 CLI 工具，配置向导只负责检测和引导。
+
 <details>
 <summary><b>🐧 Linux（Ubuntu/Debian）</b></summary>
 
@@ -224,7 +226,7 @@ HTTP/SSE 方式，自动启动并管理 `opencode serve`，自动预授权外部
 curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
 sudo apt-get install -y nodejs
 
-# opencode
+# opencode（需手动安装，本项目不会自动安装）
 npm install -g opencode-ai
 ```
 
@@ -234,7 +236,10 @@ npm install -g opencode-ai
 <summary><b>🍎 macOS</b></summary>
 
 ```bash
-brew install node    # 需先安装 Homebrew: https://brew.sh
+# 需先安装 Homebrew: https://brew.sh
+brew install node
+
+# opencode（需手动安装，本项目不会自动安装）
 npm install -g opencode-ai
 ```
 
@@ -246,6 +251,7 @@ npm install -g opencode-ai
 **安装前请确保已安装：**
 - [Node.js LTS (v20+)](https://nodejs.org/en/download) — 安装时勾选「**Add to PATH**」
 - [Git for Windows](https://git-scm.com/download/win) — 下载 64 位独立安装包，使用默认选项安装即可
+- **opencode CLI** — 安装命令：`npm install -g opencode-ai`
 
 > 安装完成后，**重启 PowerShell**，使环境变量生效。
 
