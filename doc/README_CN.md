@@ -231,7 +231,7 @@ HTTP/SSE 方式，自动启动并管理 `opencode serve`，自动预授权外部
 
 ```bash
 # 1. 安装 Node.js LTS
-curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
 sudo apt-get install -y nodejs
 
 # 2. 验证 Node.js 版本
