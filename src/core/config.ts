@@ -62,15 +62,18 @@ function cleanString(value: unknown): string | undefined {
 
 /**
  * 解析路径（支持相对路径和 ~ 展开）
+ * 自动清理 Windows 换行符 \r
  */
 export function resolvePath(inputPath: string): string {
-  if (inputPath.startsWith('~')) {
-    return join(homedir(), inputPath.slice(1));
+  // 清理 Windows 换行符（输入可能来自环境变量）
+  const cleanPath = inputPath.replace(/\r/g, '');
+  if (cleanPath.startsWith('~')) {
+    return join(homedir(), cleanPath.slice(1));
   }
-  if (inputPath.startsWith('./') || inputPath.startsWith('../')) {
-    return resolve(getConfigDir(), inputPath);
+  if (cleanPath.startsWith('./') || cleanPath.startsWith('../')) {
+    return resolve(getConfigDir(), cleanPath);
   }
-  return resolve(inputPath);
+  return resolve(cleanPath);
 }
 
 /**
@@ -136,10 +139,10 @@ function loadFromEnv(): Config {
 
   return {
     feishu: {
-      appId: process.env.FEISHU_APP_ID || '',
-      appSecret: process.env.FEISHU_APP_SECRET || '',
-      encryptKey: process.env.FEISHU_ENCRYPT_KEY,
-      verificationToken: process.env.FEISHU_VERIFICATION_TOKEN,
+      appId: cleanString(process.env.FEISHU_APP_ID) || '',
+      appSecret: cleanString(process.env.FEISHU_APP_SECRET) || '',
+      encryptKey: cleanString(process.env.FEISHU_ENCRYPT_KEY),
+      verificationToken: cleanString(process.env.FEISHU_VERIFICATION_TOKEN),
     },
     session: {
       maxSessions: parseIntEnv(process.env.MAX_SESSIONS, DEFAULTS.SESSION_MAX_SESSIONS),
@@ -148,15 +151,15 @@ function loadFromEnv(): Config {
     cli: {
       opencode: {
         enabled: parseBool(process.env.OPENCODE_ENABLED, true),
-        command: process.env.OPENCODE_CMD || 'opencode',
-        defaultModel: process.env.OPENCODE_MODEL || 'kimi',
+        command: cleanString(process.env.OPENCODE_CMD) || 'opencode',
+        defaultModel: cleanString(process.env.OPENCODE_MODEL) || 'kimi',
         timeout: parseIntEnv(process.env.OPENCODE_TIMEOUT, DEFAULTS.CLI_TIMEOUT),
         models: [],
       },
       codex: {
         enabled: parseBool(process.env.CODEX_ENABLED, false),
-        command: process.env.CODEX_CMD || 'codex',
-        defaultModel: process.env.CODEX_MODEL || 'gpt-5-codex',
+        command: cleanString(process.env.CODEX_CMD) || 'codex',
+        defaultModel: cleanString(process.env.CODEX_MODEL) || 'gpt-5-codex',
         timeout: parseIntEnv(process.env.CODEX_TIMEOUT, DEFAULTS.CLI_TIMEOUT),
         models: [],
       },
@@ -167,16 +170,16 @@ function loadFromEnv(): Config {
       maxMessageLength: parseIntEnv(process.env.MAX_MSG_LENGTH, DEFAULTS.STREAMING_MAX_MESSAGE_LENGTH),
     },
     debug: {
-      logLevel: (process.env.LOG_LEVEL as DebugConfig['logLevel']) || DEFAULTS.DEBUG_LOG_LEVEL,
+      logLevel: (cleanString(process.env.LOG_LEVEL) as DebugConfig['logLevel']) || DEFAULTS.DEBUG_LOG_LEVEL,
       saveLogs: parseBool(process.env.SAVE_LOGS, true),
-      logDir: process.env.LOG_DIR || '',
+      logDir: cleanString(process.env.LOG_DIR) || '',
     },
     project: {
-      storagePath: process.env.PROJECT_STORAGE_PATH || '',
+      storagePath: cleanString(process.env.PROJECT_STORAGE_PATH) || '',
       maxProjects: parseIntEnv(process.env.MAX_PROJECTS, DEFAULTS.PROJECT_MAX_PROJECTS),
     },
     security: {
-      allowedProjectRoot: process.env.ALLOWED_PROJECT_ROOT || '/',
+      allowedProjectRoot: cleanString(process.env.ALLOWED_PROJECT_ROOT) || '/',
       maxAttachmentSize: parseIntEnv(process.env.MAX_ATTACHMENT_SIZE, DEFAULTS.SECURITY_MAX_ATTACHMENT_SIZE),
       maxPromptLength: parseIntEnv(process.env.MAX_PROMPT_LENGTH, DEFAULTS.SECURITY_MAX_PROMPT_LENGTH),
     },
