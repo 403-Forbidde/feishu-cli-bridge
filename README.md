@@ -242,9 +242,11 @@ powershell -ExecutionPolicy Bypass -Command "iex (irm https://raw.githubusercont
 > `-ExecutionPolicy Bypass` applies only to the current process, preventing the system's script execution policy from blocking `npm` PowerShell scripts.
 
 The wizard will then guide you through:
-1. **OpenCode CLI installation** — detects, installs, logs in, and selects default model
+1. **OpenCode CLI setup** — detects installation, guides you through manual installation if needed, then logs in and selects default model
 2. **Feishu credentials** — validates App ID / App Secret with format checking
 3. **Service configuration** — auto-detects systemd / launchd and generates service files
+
+> 💡 **Note**: The wizard does **not** automatically install CLI tools to avoid permission issues and environment conflicts. It provides installation instructions for you to execute manually.
 
 > 💡 **Tip**: The generated config is saved to `~/.config/feishu-cli-bridge/config.yaml` (Linux/macOS) or `%APPDATA%\feishu-cli-bridge\config.yaml` (Windows). You can still manually edit it afterward.
 

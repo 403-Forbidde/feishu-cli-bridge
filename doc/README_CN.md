@@ -256,6 +256,8 @@ powershell -ExecutionPolicy Bypass -Command "iex (irm https://raw.githubusercont
 ```
 
 > 脚本不再自动安装 Node.js/Git。它会先检查前置环境，随后拉取仓库、安装 npm 依赖并启动交互式配置向导。
+> 
+> 💡 **注意**：配置向导不会自动安装 CLI 工具（如 OpenCode），而是检测后提供安装命令供你手动执行，以避免权限问题和环境冲突。
 >
 > `-ExecutionPolicy Bypass` 仅作用于当前进程，避免系统执行策略拦截 `npm` 的 PowerShell 脚本。
 
@@ -366,6 +368,8 @@ npm start
 ```
 
 启动成功后日志会显示 `🚀 Feishu CLI Bridge 启动成功！`。收到第一条飞书消息时，桥接程序会自动启动 `opencode serve`，无需手动操作。
+
+> 💡 **关于 CLI 工具安装**：本项目专注于桥接飞书与本地 CLI 工具，**不会自动安装** OpenCode 等 CLI 工具。首次运行配置向导时，如果未检测到 CLI 工具，向导会显示安装命令供你手动执行。这样可以避免权限问题和环境冲突，让你完全掌控自己的开发环境。
 
 ---
 
