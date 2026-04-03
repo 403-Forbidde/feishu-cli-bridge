@@ -3,13 +3,6 @@
 <!-- Banner Image -->
 <img src="./doc/img/feishu-cli-bridge-banner.png" width="100%" alt="Feishu CLI Bridge Banner">
 
-<!-- Logo/Title -->
-<img src="https://img.shields.io/badge/Feishu-CLI%20Bridge-1677FF?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0xMiAybDIuNCA3LjJoNy42bC02IDQuOCAyLjQgNy4yLTYtNC44LTYgNC44IDIuNC03LjItNi00LjhoNy42eiIvPjwvc3ZnPg==&logoColor=white" height="40" alt="Feishu CLI Bridge">
-
-<h1>
-  <img src="https://img.shields.io/badge/🚀-Feishu%20CLI%20Bridge-FF6B6B?style=flat-square&colorA=2d3436&colorB=FF6B6B" height="28">
-</h1>
-
 <p align="center">
   <b>程序员专属：用飞书私聊向本地 CLI AI 工具下达指令，享受流式打字机输出体验</b><br>
   <i>已接入 OpenCode 与 Claude Code，支持多 CLI 工具切换</i>

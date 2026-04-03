@@ -1,15 +1,12 @@
 <div align="center">
 
-<!-- Logo/Title -->
-<img src="https://img.shields.io/badge/Feishu-CLI%20Bridge-1677FF?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0xMiAybDIuNCA3LjJoNy42bC02IDQuOCAyLjQgNy4yLTYtNC44LTYgNC44IDIuNC03LjItNi00LjhoNy42eiIvPjwvc3ZnPg==&logoColor=white" height="40" alt="Feishu CLI Bridge">
-
-<h1>
-  <img src="https://img.shields.io/badge/🚀-Feishu%20CLI%20Bridge-FF6B6B?style=flat-square&colorA=2d3436&colorB=FF6B6B" height="28">
-</h1>
+<!-- Banner Image -->
+<img src="../doc/img/feishu-cli-bridge-banner.png" width="100%" alt="Feishu CLI Bridge Banner">
 
 <p align="center">
-  <b>A Node.js/TypeScript bridge connecting Feishu (Lark) to OpenCode CLI</b><br>
-  <i>Delivering a streaming "typewriter" chat experience inside Feishu</i>
+  <b>A Node.js/TypeScript bridge connecting Feishu (Lark) to CLI AI tools</b><br>
+  <i>Delivering a streaming "typewriter" chat experience inside Feishu</i><br>
+  <i>Supports OpenCode and Claude Code</i>
 </p>
 
 <!-- Language Switch -->
@@ -24,7 +21,7 @@
 
 <!-- Status Badges -->
 <p>
-  <img src="https://img.shields.io/badge/version-v0.2.1-FF6B6B?style=flat-square&logo=semver&logoColor=white" alt="Version">
+  <img src="https://img.shields.io/badge/version-v0.3.0-FF6B6B?style=flat-square&logo=semver&logoColor=white" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-4ECDC4?style=flat-square&logo=opensourceinitiative&logoColor=white" alt="License">
   <img src="https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
   <img src="https://img.shields.io/badge/Node.js-20+-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js">
@@ -39,7 +36,7 @@
 
 <!-- Last Updated -->
 <p>
-  <img src="https://img.shields.io/badge/Updated-2026--04--02-9b59b6?style=flat-square" alt="Updated">
+  <img src="https://img.shields.io/badge/Updated-2026--04--03-9b59b6?style=flat-square" alt="Updated">
 </p>
 
 </div>
@@ -83,6 +80,9 @@
 
 ### 🤖 **OpenCode Integration**
 HTTP/SSE protocol, auto-start and manage `opencode serve`, pre-authorize external directory access (no blocking in headless mode)
+
+### 🎭 **Claude Code Integration**
+`child_process.spawn` + JSON Lines streaming, supports `@filepath` file references, dynamic model detection (compatible with third-party providers like Kimi)
 
 ### 🎭 **Agent Modes**
 Built-in Build / Plan modes; auto-detect oh-my-openagent, switch to 7 professional agents when installed, `/mode` card for quick switching
@@ -130,9 +130,10 @@ Before starting, ensure you have the following installed:
 |:-----------|:----------------|:--------|:-------------|
 | **Node.js** | 20+ LTS | Runtime | [Download](https://nodejs.org/) or package manager |
 | **Git** | Any | Clone repository | [Download](https://git-scm.com/) or package manager |
-| **OpenCode CLI** | 0.5.0+ | AI coding assistant | `npm install -g opencode-ai` |
+| **OpenCode CLI** (optional) | 0.5.0+ | AI coding assistant | `npm install -g opencode-ai` |
+| **Claude Code** (optional) | Latest | AI coding assistant | `npm install -g @anthropic-ai/claude-code` |
 
-> 💡 **Important**: This project is a **bridge tool** connecting Feishu to local CLI tools. It **does NOT automatically install** OpenCode or other CLI tools. The wizard only detects and guides.
+> 💡 **Important**: This project is a **bridge tool** connecting Feishu to local CLI tools. It **does NOT automatically install** OpenCode/Claude or other CLI tools. The wizard only detects and guides. You need to **install at least one** CLI tool to use this bridge.
 
 <details>
 <summary><b>🐧 Linux — Install Prerequisites</b></summary>
@@ -145,11 +146,13 @@ sudo apt-get install -y nodejs
 # 2. Verify Node.js version
 node --version  # Should show v20.x.x or higher
 
-# 3. Install OpenCode CLI (manual installation)
-npm install -g opencode-ai
+# 3. Install CLI tools (manual installation, choose at least one)
+npm install -g opencode-ai          # OpenCode
+npm install -g @anthropic-ai/claude-code  # Claude Code (optional)
 
-# 4. Verify OpenCode
-opencode --version
+# 4. Verify installation
+opencode --version  # If OpenCode is installed
+claude --version    # If Claude Code is installed
 ```
 
 **Troubleshooting**:
@@ -171,11 +174,13 @@ brew install node
 # 3. Verify version
 node --version  # Should show v20.x.x or higher
 
-# 4. Install OpenCode CLI (manual installation)
-npm install -g opencode-ai
+# 4. Install CLI tools (manual installation, choose at least one)
+npm install -g opencode-ai          # OpenCode
+npm install -g @anthropic-ai/claude-code  # Claude Code (optional)
 
 # 5. Verify
-opencode --version
+opencode --version  # If OpenCode is installed
+claude --version    # If Claude Code is installed
 ```
 
 </details>
@@ -193,9 +198,13 @@ opencode --version
    - Download 64-bit Git for Windows Setup
    - Use default options for installation
 
-3. **OpenCode CLI**
+3. **CLI Tools (install at least one)**
    ```powershell
+   # OpenCode
    npm install -g opencode-ai
+   
+   # Claude Code (optional)
+   npm install -g @anthropic-ai/claude-code
    ```
 
 **Important Step**:
@@ -204,7 +213,8 @@ opencode --version
 Verify installation:
 ```powershell
 node --version      # Should show v20.x.x
-opencode --version  # Should show 0.5.0+
+opencode --version  # If OpenCode is installed
+claude --version    # If Claude Code is installed
 ```
 
 </details>
@@ -566,11 +576,17 @@ feishu-cli-bridge/
 │   │   │   └── types.ts
 │   │   ├── factory.ts         # Adapter factory
 │   │   ├── index.ts           # Adapter registration
-│   │   └── opencode/          # OpenCode adapter
+│   │   ├── opencode/          # OpenCode adapter
+│   │   │   ├── adapter.ts
+│   │   │   ├── http-client.ts
+│   │   │   ├── sse-parser.ts
+│   │   │   ├── server-manager.ts
+│   │   │   ├── session-manager.ts
+│   │   │   └── types.ts
+│   │   └── claude/            # Claude Code adapter
 │   │       ├── adapter.ts
-│   │       ├── http-client.ts
-│   │       ├── sse-parser.ts
-│   │       ├── server-manager.ts
+│   │       ├── process-manager.ts
+│   │       ├── stream-parser.ts
 │   │       ├── session-manager.ts
 │   │       └── types.ts
 │   │
@@ -662,6 +678,14 @@ npm run test
 ---
 
 ## 📝 Changelog
+
+### v0.3.0 (2026-04-03) — Claude Code Support (Current Version)
+
+- 🤖 **Claude Code Support** — Brand new Claude Code CLI adapter, production-ready
+- 🔄 **Dual CLI Support** — Support both OpenCode and Claude Code with seamless switching
+- 📝 **File References** — Support `@filepath` syntax for referencing images/files
+- 🎯 **Dynamic Model Detection** — Automatically detect actual model used by Claude Code (supports third-party providers like Kimi)
+- 🧪 **Comprehensive Testing** — 61 unit tests covering Claude Code adapter
 
 ### v0.2.1 (2026-04-02) — TypeScript Rewrite
 
