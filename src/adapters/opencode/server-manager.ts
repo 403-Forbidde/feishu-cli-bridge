@@ -204,7 +204,8 @@ export class OpenCodeServerManager {
         process.platform === 'win32' ? 'where opencode' : 'which opencode',
         { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] }
       );
-      const path = result.trim().split('\n')[0];
+      // 清理 Windows 换行符 \r\n，取第一行
+      const path = result.trim().split('\n')[0]?.replace(/\r/g, '');
       return path || null;
     } catch {
       return null;
