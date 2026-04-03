@@ -163,6 +163,16 @@ function loadFromEnv(): Config {
         timeout: parseIntEnv(process.env.CODEX_TIMEOUT, DEFAULTS.CLI_TIMEOUT),
         models: [],
       },
+      claude: {
+        enabled: parseBool(process.env.CLAUDE_ENABLED, false),
+        command: cleanString(process.env.CLAUDE_CMD) || 'claude',
+        defaultModel: cleanString(process.env.CLAUDE_MODEL) || 'auto',
+        timeout: parseIntEnv(process.env.CLAUDE_TIMEOUT, DEFAULTS.CLI_TIMEOUT),
+        models: [],
+        contextWindow: cleanString(process.env.CLAUDE_CONTEXT_WINDOW) || 'auto',
+        permissionMode: cleanString(process.env.CLAUDE_PERMISSION_MODE) || 'acceptEdits',
+        allowedTools: process.env.CLAUDE_ALLOWED_TOOLS?.split(',').map(s => s.trim()).filter(Boolean) || [],
+      },
     },
     streaming: {
       updateInterval: parseFloatEnv(process.env.STREAM_INTERVAL, DEFAULTS.STREAMING_UPDATE_INTERVAL),
@@ -196,13 +206,26 @@ function parseCLIConfig(data: Record<string, unknown>): Record<string, CLIConfig
     if (typeof c !== 'object' || c === null) continue;
 
     const config = c as Record<string, unknown>;
-    configs[name] = {
+    const cliConfig: CLIConfig = {
       enabled: config.enabled !== false,
       command: cleanString(config.command) || name,
       defaultModel: cleanString(config.default_model) || '',
       timeout: (config.timeout as number) || DEFAULTS.CLI_TIMEOUT,
       models: (config.models as CLIConfig['models']) || [],
     };
+
+    // Claude Code 特有配置
+    if (config.context_window !== undefined) {
+      cliConfig.contextWindow = config.context_window as number | string;
+    }
+    if (config.permission_mode !== undefined) {
+      cliConfig.permissionMode = cleanString(config.permission_mode);
+    }
+    if (config.allowed_tools !== undefined) {
+      cliConfig.allowedTools = (config.allowed_tools as string[]);
+    }
+
+    configs[name] = cliConfig;
   }
 
   return configs;

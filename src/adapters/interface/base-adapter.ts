@@ -117,4 +117,12 @@ export abstract class BaseCLIAdapter implements ICLIAdapter {
   async stopGeneration(): Promise<boolean> {
     return false;
   }
+
+  /**
+   * 获取支持的 TUI 命令列表
+   * 默认返回通用命令，子类可覆盖
+   */
+  getSupportedTUICommands(): string[] {
+    return ['new', 'session', 'model', 'reset', 'clear', 'rename', 'delete', 'help'];
+  }
 }

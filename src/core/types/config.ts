@@ -9,6 +9,10 @@ export interface CLIConfig {
   defaultModel: string;
   timeout: number;
   models: Array<{ id: string; name: string } | string>;
+  // Claude Code 特有配置（可选）
+  contextWindow?: number | string;  // 'auto' | number
+  permissionMode?: string;
+  allowedTools?: string[];
 }
 
 // 飞书配置

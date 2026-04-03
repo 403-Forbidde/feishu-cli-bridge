@@ -410,6 +410,13 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
   }
 
   /**
+   * 获取支持的 TUI 命令列表
+   */
+  getSupportedTUICommands(): string[] {
+    return ['new', 'session', 'model', 'mode', 'reset', 'clear', 'rename', 'delete', 'help'];
+  }
+
+  /**
    * 停止生成
    *
    * Issue #52: 用于实现 /stop 命令

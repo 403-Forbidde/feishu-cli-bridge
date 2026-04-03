@@ -328,6 +328,10 @@ export class AIProcessor {
         // 流结束，无需处理
         break;
 
+      case StreamChunkType.STATS:
+        // Stats chunk 由适配器内部消费，平台层无需处理
+        break;
+
       default:
         logger.warn({ chunk }, '未知的流块类型');
     }
@@ -366,11 +370,11 @@ export class AIProcessor {
 
     const parts: string[] = [content];
 
-    // 添加图片数据
-    for (const att of attachments) {
-      if (att.dataUrl) {
-        parts.push(`\n\n[图片: ${att.filename}]\n${att.dataUrl}`);
-      }
+    // 添加附件文件名的文本描述（下游适配器会自行处理实际的文件内容）
+    // 不再将 base64 dataUrl 直接拼进 prompt，避免命令行参数过长（E2BIG）
+    const fileNames = attachments.map(att => att.filename).join(', ');
+    if (fileNames) {
+      parts.push(`\n\n[附件: ${fileNames}]`);
     }
 
     return parts.join('');

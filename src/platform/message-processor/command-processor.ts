@@ -84,6 +84,18 @@ export class CommandProcessor {
   ): Promise<void> {
     const context = await this.buildContext(message);
 
+    // 检查适配器是否支持该命令
+    const adapter = this.adapters.get(context.adapterType);
+    const supportedCommands = adapter?.getSupportedTUICommands?.() || ['new', 'session', 'model', 'reset', 'help'];
+    const commandName = command.slice(1);
+    if (!supportedCommands.includes(commandName)) {
+      await this.feishuAPI.sendCardMessage(
+        context.chatId,
+        buildErrorCard(`命令 ${command} 不被 ${context.adapterType} 支持`, 'invalid_request')
+      );
+      return;
+    }
+
     logger.info({ command, args: args.join(' '), userId: context.userId }, '处理 TUI 命令');
 
     try {
@@ -331,6 +343,16 @@ export class CommandProcessor {
             '新消息将使用此模型'
           )
         );
+      } else if (context.adapterType === 'claude') {
+        // Claude Code 的模型由本地配置决定，适配器无法直接切换
+        await this.feishuAPI.sendCardMessage(
+          context.chatId,
+          buildInfoCard(
+            'ℹ️ Claude Code 模型切换说明',
+            'Claude Code 的模型由其本地配置（`~/.claude/settings.json` 中的 `ANTHROPIC_BASE_URL`）决定，bridge 无法直接切换。\n\n如需更改模型，请修改本地配置后重启 bridge。',
+            'grey'
+          )
+        );
       } else {
         await this.feishuAPI.sendCardMessage(
           context.chatId,
@@ -365,17 +387,28 @@ export class CommandProcessor {
       return;
     }
 
-    // OpenCode 适配器（直接类型断言，因为目前只支持 OpenCode）
-    const opencodeAdapter = adapter as unknown as {
-      listAgents(): Promise<Array<{ id: string; name?: string; description?: string }>>;
-      switchAgent(agentId: string): Promise<boolean>;
-      getCurrentAgent(): string;
+    // 通用能力检测：适配器是否支持 Agent 模式切换
+    const agentAdapter = adapter as unknown as {
+      listAgents?(): Promise<Array<{ id: string; name?: string; description?: string }>>;
+      switchAgent?(agentId: string): Promise<boolean>;
+      getCurrentAgent?(): string;
     };
+
+    if (
+      typeof agentAdapter.listAgents !== 'function' ||
+      typeof agentAdapter.switchAgent !== 'function'
+    ) {
+      await this.feishuAPI.sendCardMessage(
+        context.chatId,
+        buildErrorCard(`适配器 ${context.adapterType} 不支持 Agent 模式切换`, 'invalid_request')
+      );
+      return;
+    }
 
     // 如果有参数，尝试切换模式
     if (args.length > 0) {
       const agentId = args[0];
-      const success = await opencodeAdapter.switchAgent(agentId);
+      const success = await agentAdapter.switchAgent!(agentId);
       if (success) {
         await this.feishuAPI.sendCardMessage(
           context.chatId,
@@ -394,8 +427,8 @@ export class CommandProcessor {
       }
 
       // 切换后显示模式列表
-      const agents = await opencodeAdapter.listAgents();
-      const current = opencodeAdapter.getCurrentAgent();
+      const agents = await agentAdapter.listAgents!();
+      const current = agentAdapter.getCurrentAgent ? agentAdapter.getCurrentAgent() : agentId;
       const card = buildModeSelectCard(
         agents.map((a) => ({ name: a.id, displayName: a.name, description: a.description })),
         current,
@@ -406,7 +439,7 @@ export class CommandProcessor {
     }
 
     // 列出可用模式
-    const agents = await opencodeAdapter.listAgents();
+    const agents = await agentAdapter.listAgents!();
     if (!agents || agents.length === 0) {
       await this.feishuAPI.sendCardMessage(
         context.chatId,
@@ -415,7 +448,7 @@ export class CommandProcessor {
       return;
     }
 
-    const current = opencodeAdapter.getCurrentAgent();
+    const current = agentAdapter.getCurrentAgent ? agentAdapter.getCurrentAgent() : '';
     const card = buildModeSelectCard(
       agents.map((a) => ({ name: a.id, displayName: a.name, description: a.description })),
       current,

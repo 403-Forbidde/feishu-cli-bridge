@@ -133,7 +133,7 @@ export class TUICommandRouter {
   private commandHandlers: Map<string, TUICommandHandler> = new Map();
   private interactiveManager: InteractiveMessageManager;
 
-  // 所有支持的 TUI 命令
+  // 所有支持的 TUI 命令（并集）
   static SUPPORTED_COMMANDS = [
     'new',
     'session',
@@ -141,6 +141,8 @@ export class TUICommandRouter {
     'mode',
     'reset',
     'clear',
+    'rename',
+    'delete',
     'help',
     'stop',
   ];

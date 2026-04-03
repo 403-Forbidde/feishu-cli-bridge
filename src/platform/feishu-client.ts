@@ -23,6 +23,7 @@ import type {
   CardCallbackResponse,
   MessageHandler,
   CardCallbackHandler,
+  Attachment,
 } from './types.js';
 
 /**
@@ -282,63 +283,108 @@ export class FeishuClient extends EventEmitter {
    * 解析原始消息事件为结构化消息
    */
   private parseMessageEvent(rawEvent?: RawMessageEvent): FeishuMessage | null {
-  if (!rawEvent) return null;
+    if (!rawEvent) return null;
 
-  // 获取消息类型（兼容 message_type 和 msg_type）
-  const msgType = rawEvent.message_type || rawEvent.msg_type || 'unknown';
+    // 获取消息类型（兼容 message_type 和 msg_type）
+    const msgType = rawEvent.message_type || rawEvent.msg_type || 'unknown';
 
-  // 调试：记录原始事件结构
-  logger.debug(
-    {
-      messageId: rawEvent.message_id,
-      msgType,
-      hasBody: !!rawEvent.body,
-      hasSender: !!rawEvent.sender,
-      rawContent: rawEvent.body?.content?.substring(0, 200),
-    },
-    '解析原始消息事件'
-  );
+    // 调试：记录原始事件结构
+    logger.debug(
+      {
+        messageId: rawEvent.message_id,
+        msgType,
+        hasBody: !!rawEvent.body,
+        hasSender: !!rawEvent.sender,
+        rawContent: rawEvent.body?.content?.substring(0, 200),
+      },
+      '解析原始消息事件'
+    );
 
-  // 解析消息内容
-  let content = '';
-  try {
-    const rawContent = rawEvent.body?.content ?? '{}';
-    const parsed = JSON.parse(rawContent);
-    // 飞书文本消息格式：{"text": "内容"}
-    content = parsed.text ?? '';
-  } catch {
-    // 如果不是 JSON，直接使用原始内容
-    content = rawEvent.body?.content ?? '';
-  }
+    // 解析消息内容
+    let content = '';
+    const attachments: Attachment[] = [];
 
-  // 如果内容为空，可能是其他消息类型（图片、文件等），尝试获取更多信息
-  if (!content && msgType !== 'text') {
-    content = `[${msgType}]`;
-  }
+    try {
+      const rawContent = rawEvent.body?.content ?? '{}';
+      const parsed = JSON.parse(rawContent);
 
-  // 提取提及的用户
-  const mentionUsers: string[] = [];
-  if (rawEvent.mentions) {
-    for (const mention of rawEvent.mentions) {
-      if (mention.id?.open_id) {
-        mentionUsers.push(mention.id.open_id);
+      if (msgType === 'text') {
+        // 飞书文本消息格式：{"text": "内容"}
+        content = parsed.text ?? '';
+      } else if (msgType === 'image') {
+        // 图片消息格式：{"image_key": "..."}
+        const imageKey = parsed.image_key as string | undefined;
+        if (imageKey) {
+          attachments.push({
+            fileKey: imageKey,
+            resourceType: 'image',
+            filename: `image_${imageKey.slice(-8)}.png`,
+            mimeType: 'image/png',
+          });
+        }
+        content = '[图片]';
+      } else if (msgType === 'post') {
+        // 富文本消息格式：{"title": "...", "content": [[{"tag": "text", ...}, ...], ...]}
+        const postContent = parsed.content as
+          | Array<Array<{ tag: string; text?: string; image_key?: string }>>
+          | undefined;
+        if (postContent) {
+          const textParts: string[] = [];
+          let imgIndex = 0;
+          for (const block of postContent) {
+            for (const element of block) {
+              if (element.tag === 'text' && element.text) {
+                textParts.push(element.text);
+              } else if (element.tag === 'img' && element.image_key) {
+                imgIndex++;
+                attachments.push({
+                  fileKey: element.image_key,
+                  resourceType: 'image',
+                  filename: `image_${imgIndex}.png`,
+                  mimeType: 'image/png',
+                });
+              }
+            }
+          }
+          content = textParts.join('') || '[post]';
+        } else {
+          content = (parsed.title as string) || '[post]';
+        }
+      } else {
+        content = parsed.text ?? `[${msgType}]`;
+      }
+    } catch {
+      // 如果不是 JSON，直接使用原始内容
+      content = rawEvent.body?.content ?? '';
+      if (!content) {
+        content = `[${msgType}]`;
       }
     }
-  }
 
-  return {
-    messageId: rawEvent.message_id,
-    chatId: rawEvent.chat_id,
-    chatType: rawEvent.chat_type === 'p2p' ? 'p2p' : 'group',
-    senderId: rawEvent.sender?.sender_id?.open_id ?? '',
-    senderName: rawEvent.sender?.nickname ?? rawEvent.sender?.sender_id?.open_id ?? '',
-    content,
-    msgType,
-    threadId: rawEvent.thread_id,
-    mentionUsers,
-    parentId: rawEvent.parent_id || rawEvent.root_id,
-  };
-}
+    // 提取提及的用户
+    const mentionUsers: string[] = [];
+    if (rawEvent.mentions) {
+      for (const mention of rawEvent.mentions) {
+        if (mention.id?.open_id) {
+          mentionUsers.push(mention.id.open_id);
+        }
+      }
+    }
+
+    return {
+      messageId: rawEvent.message_id,
+      chatId: rawEvent.chat_id,
+      chatType: rawEvent.chat_type === 'p2p' ? 'p2p' : 'group',
+      senderId: rawEvent.sender?.sender_id?.open_id ?? '',
+      senderName: rawEvent.sender?.nickname ?? rawEvent.sender?.sender_id?.open_id ?? '',
+      content,
+      msgType,
+      threadId: rawEvent.thread_id,
+      mentionUsers,
+      parentId: rawEvent.parent_id || rawEvent.root_id,
+      attachments: attachments.length > 0 ? attachments : undefined,
+    };
+  }
 
   /**
    * 解析卡片回调事件

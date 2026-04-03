@@ -649,18 +649,39 @@ export class MessageProcessor {
     actionValue: Record<string, unknown>
   ): Promise<CardCallbackResponse> {
     const workingDir = (actionValue.working_dir ?? await this.projectManager.getCurrentWorkingDir()) as string;
-    const adapter = this.getAdapter(this.defaultAdapterType);
+    logger.info({ workingDir }, 'Creating new session from button');
 
-    if (adapter) {
-      const sessionInfo = await adapter.createNewSession(workingDir);
-      if (sessionInfo) {
-        // 清空本地会话历史
-        this.sessionManager.clearHistory(event.openId);
-        // 返回刷新后的会话列表卡片
-        return await this.buildSessionListCardResponse(event.chatId, 1);
-      }
+    const adapter = this.getAdapter(this.defaultAdapterType);
+    if (!adapter) {
+      logger.warn('Adapter not found');
+      return {};
     }
 
+    const sessionInfo = await adapter.createNewSession(workingDir);
+    logger.info({ sessionInfo }, 'createNewSession result');
+
+    if (sessionInfo) {
+      // 清空本地会话历史
+      this.sessionManager.clearHistory(event.openId);
+
+      // 发送成功提示卡片（类似 /new 命令）
+      const { buildSuccessCard } = await import('../cards/index.js');
+      const displayId = sessionInfo.id.length > 8 ? sessionInfo.id.slice(-8) : sessionInfo.id;
+      const successCard = buildSuccessCard(
+        '✅ 已创建新会话',
+        `**${sessionInfo.title}**`,
+        [{ key: '🆔 会话ID', value: `\`${displayId}\`` }],
+        '新消息将在此会话中继续对话'
+      );
+      await this.feishuAPI.sendCardMessage(event.chatId, successCard);
+
+      // 返回刷新后的会话列表卡片
+      const response = await this.buildSessionListCardResponse(event.chatId, 1);
+      logger.info({ hasCard: !!response.card }, 'buildSessionListCardResponse result');
+      return response;
+    }
+
+    logger.warn('createNewSession returned null');
     return {};
   }
 
@@ -702,8 +723,11 @@ export class MessageProcessor {
       logger.info({ chatId, page }, '构建会话列表卡片响应');
 
       const workingDir = await this.projectManager.getCurrentWorkingDir();
+      logger.info({ workingDir, defaultAdapterType: this.defaultAdapterType }, 'Getting adapter');
+
       const adapter = this.getAdapter(this.defaultAdapterType);
       if (!adapter) {
+        logger.warn('Adapter not found');
         return {};
       }
 
@@ -843,14 +867,25 @@ export class MessageProcessor {
       return {};
     }
 
-    // 调用适配器切换 agent
-    const opencodeAdapter = adapter as unknown as {
-      switchAgent(agentId: string): Promise<boolean>;
-      listAgents(): Promise<Array<{ id: string; name?: string; description?: string }>>;
-      getCurrentAgent(): string;
+    // 通用能力检测
+    const agentAdapter = adapter as unknown as {
+      switchAgent?(agentId: string): Promise<boolean>;
+      listAgents?(): Promise<Array<{ id: string; name?: string; description?: string }>>;
+      getCurrentAgent?(): string;
     };
 
-    const success = await opencodeAdapter.switchAgent(agentId);
+    if (
+      typeof agentAdapter.switchAgent !== 'function' ||
+      typeof agentAdapter.listAgents !== 'function'
+    ) {
+      await this.feishuAPI.sendCardMessage(
+        event.chatId,
+        buildErrorCard('当前适配器不支持模式切换', 'invalid_request')
+      );
+      return {};
+    }
+
+    const success = await agentAdapter.switchAgent(agentId);
     if (!success) {
       await this.feishuAPI.sendCardMessage(
         event.chatId,
@@ -860,8 +895,8 @@ export class MessageProcessor {
     }
 
     // 刷新模式列表卡片
-    const agents = await opencodeAdapter.listAgents();
-    const current = opencodeAdapter.getCurrentAgent();
+    const agents = await agentAdapter.listAgents();
+    const current = agentAdapter.getCurrentAgent ? agentAdapter.getCurrentAgent() : agentId;
     const { buildModeSelectCard } = await import('../../card-builder/interactive-cards.js');
     const card = buildModeSelectCard(
       agents.map((a) => ({ name: a.id, displayName: a.name, description: a.description })),

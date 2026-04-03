@@ -417,15 +417,18 @@ export class FeishuAPI {
 
       const filePath = join(downloadDir, filename);
 
-      // 获取文件内容
-      const fileResponse = await this.client.im.v1.file.get({
+      // 使用 messageResource/get 接口下载用户发送的资源
+      // file.get / image.get 只能下载机器人自己上传的资源
+      const resourceResponse = await this.client.im.v1.messageResource.get({
         path: {
+          message_id: messageId,
           file_key: fileKey,
         },
+        params: {
+          type: resourceType,
+        },
       });
-
-      // 写入文件
-      await fileResponse.writeFile(filePath);
+      await resourceResponse.writeFile(filePath);
 
       // 获取文件大小
       const { stat } = await import('fs/promises');

@@ -177,6 +177,12 @@ export interface ICLIAdapter {
    * @returns 会话 ID 或 null
    */
   getSessionId?(workingDir: string): string | null;
+
+  /**
+   * 获取支持的 TUI 命令列表
+   * @returns 命令名称数组（不含前导斜杠）
+   */
+  getSupportedTUICommands(): string[];
 }
 
 /**

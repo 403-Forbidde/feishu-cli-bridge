@@ -64,7 +64,53 @@ const COMMANDS: CommandItem[] = [
     title: '使用帮助',
     description: '显示所有可用命令的详细说明',
   },
+  {
+    icon: '📁',
+    command: '/pa',
+    title: '添加项目',
+    description: '添加已有目录到项目列表，例如 /pa /path/to/project',
+  },
+  {
+    icon: '📝',
+    command: '/pc',
+    title: '创建项目',
+    description: '同 /pa，语义上表示新建并添加项目',
+  },
+  {
+    icon: '📂',
+    command: '/pl',
+    title: '项目列表',
+    description: '查看所有已添加的项目',
+  },
+  {
+    icon: '🔀',
+    command: '/ps',
+    title: '切换项目',
+    description: '切换到指定项目，例如 /ps my-project',
+  },
+  {
+    icon: 'ℹ️',
+    command: '/pi',
+    title: '项目信息',
+    description: '查看当前项目的详细信息',
+  },
+  {
+    icon: '🗑️',
+    command: '/pd',
+    title: '删除项目',
+    description: '从列表中删除项目，例如 /pd my-project',
+  },
 ];
+
+/**
+ * 根据 CLI 类型过滤命令列表
+ */
+function getCommandsForCliType(cliType: string): CommandItem[] {
+  if (cliType === 'claude') {
+    return COMMANDS.filter((cmd) => cmd.command !== '/mode' && cmd.command !== '/model');
+  }
+  return COMMANDS;
+}
 
 /**
  * 构建帮助卡片
@@ -78,6 +124,7 @@ export function buildHelpCard(
   cliType: string = 'opencode'
 ): object {
   const elements: object[] = [];
+  const visibleCommands = getCommandsForCliType(cliType);
 
   // ── 项目信息头部 ────────────────────────────────────────────────────────
   const cliLabel = cliType.toUpperCase();
@@ -142,8 +189,8 @@ export function buildHelpCard(
   }
 
   // ── 命令列表 ────────────────────────────────────────────────────────────
-  for (let i = 0; i < COMMANDS.length; i++) {
-    const cmd = COMMANDS[i];
+  for (let i = 0; i < visibleCommands.length; i++) {
+    const cmd = visibleCommands[i];
 
     // 命令行：图标 + 命令名 + 标题
     elements.push({
@@ -177,7 +224,7 @@ export function buildHelpCard(
     });
 
     // 分隔线（除了最后一个命令）
-    if (i < COMMANDS.length - 1) {
+    if (i < visibleCommands.length - 1) {
       elements.push({ tag: 'hr' });
     }
   }

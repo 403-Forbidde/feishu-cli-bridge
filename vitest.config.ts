@@ -11,4 +11,9 @@ export default defineConfig({
     },
     isolate: false,
   },
+  server: {
+    watch: {
+      ignored: ['**/.venv/**', '**/node_modules/**', '**/dist/**'],
+    },
+  },
 });

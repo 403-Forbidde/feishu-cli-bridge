@@ -1,5 +1,48 @@
 # 更新日志
 
+## v0.3.0 - Claude Code 适配器支持版（2026-04-03）
+
+### 里程碑
+
+- **2026-04-03** - **feat: 新增 Claude Code 适配器支持（生产就绪）**
+  - 完整实现 Claude Code CLI 适配器，支持流式对话
+  - 子进程管理：`spawn` + JSON Lines 流式解析
+  - 会话管理：`--session-id` + `--resume` + `--fork-session`
+  - 停止生成：`SIGINT` 信号优雅终止
+  - 模型动态检测：从 `result.modelUsage` 自动读取实际模型（支持 Kimi 等第三方 Provider）
+  - 附件处理：临时文件 + `@filepath` 引用
+  - **测试覆盖**：61 个单元测试全部通过
+
+### 新增功能
+
+- **2026-04-03** - Claude Code 适配器核心实现
+  - `ClaudeCodeAdapter` 主类，继承 `BaseCLIAdapter`
+  - `ClaudeCodeProcessManager` 子进程生命周期管理
+  - `ClaudeCodeStreamParser` stream-json 解析器（28 个单元测试）
+  - `ClaudeCodeSessionManager` 会话 ID 映射与持久化
+- **2026-04-03** - 配置系统扩展
+  - 新增 `cli.claude` 配置段，支持 `auto` 模式动态检测模型
+  - 环境变量支持：`CLAUDE_ENABLED`, `CLAUDE_CMD`, `CLAUDE_MODEL` 等
+- **2026-04-03** - 设置向导扩展
+  - 安装向导支持 Claude Code 检测与配置
+  - 多 CLI 工具同时配置支持（OpenCode + Claude）
+- **2026-04-03** - 完整单元测试覆盖
+  - `stream-parser.test.ts`: 28 个测试用例
+  - `process-manager.test.ts`: 15 个测试用例
+  - `adapter.test.ts`: 18 个测试用例
+
+### 修复
+
+- **2026-04-03** - 修复 `adapter.ts` 中 `buildFullPrompt` 先于 `prepareAttachments` 调用导致附件 `@path` 缺失的 bug
+- **2026-04-03** - 修复 `session-manager.ts` 中会话验证过于严格导致 headless 模式下会话映射被错误清理的问题
+
+### 文档
+
+- **2026-04-03** - 创建 `doc/claude-stream-format.md` 流格式说明文档
+- **2026-04-03** - 创建 `doc/issues/001-claude-session-not-persisting.md` 问题记录
+
+---
+
 ## v0.2.1 - TypeScript/Node.js 全面迁移版
 
 ### 里程碑

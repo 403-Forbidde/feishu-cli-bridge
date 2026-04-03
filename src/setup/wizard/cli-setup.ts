@@ -3,29 +3,111 @@ import chalk from 'chalk';
 import ora from 'ora';
 
 import { OpenCodeProvider } from '../cli-provider/providers/opencode.js';
+import { ClaudeCodeProvider } from '../cli-provider/providers/claude.js';
 import type { ICLIProvider, CLICheckResult, AuthStatus, InstallMethod, CLIConfig } from '../cli-provider/interface.js';
 import { safeSelect } from './safe-select.js';
 
 export interface CliSetupResult {
   success: boolean;
   provider?: ICLIProvider;
-  config?: CLIConfig;
+  configs?: Record<string, CLIConfig>;
 }
 
 export async function runCliSetup(): Promise<CliSetupResult> {
-  const provider = new OpenCodeProvider();
+  // 检测所有可用的 CLI 工具
+  const providers = [new OpenCodeProvider(), new ClaudeCodeProvider()];
+  const availableProviders: ICLIProvider[] = [];
 
-  const spinner = ora('检测 CLI 工具中...').start();
+  console.log(chalk.bold('\n🔧 CLI 工具检测'));
+  console.log('─'.repeat(40));
+
+  for (const provider of providers) {
+    const spinner = ora(`检测 ${provider.displayName}...`).start();
+    const checkResult = await provider.check();
+    spinner.stop();
+
+    if (checkResult.installed) {
+      console.log(`  ${provider.displayName}: ${chalk.green('已安装')} ${chalk.dim(`(${checkResult.version})`)}`);
+      availableProviders.push(provider);
+    } else {
+      console.log(`  ${provider.displayName}: ${chalk.yellow('未安装')}`);
+    }
+  }
+
+  console.log('─'.repeat(40));
+
+  // 如果没有检测到任何 CLI 工具，提示用户安装
+  if (availableProviders.length === 0) {
+    console.log(chalk.yellow('\n⚠️ 未检测到任何支持的 CLI 工具'));
+    console.log(chalk.cyan('\n可用的 CLI 工具：'));
+    console.log('  1. OpenCode - https://opencode.ai');
+    console.log('  2. Claude Code - https://claude.ai/code');
+    console.log(chalk.dim('\n请至少安装一个 CLI 工具后重新运行配置向导。'));
+    return { success: false };
+  }
+
+  // 让用户选择要配置的 CLI 工具
+  let selectedProvider: ICLIProvider;
+
+  if (availableProviders.length === 1) {
+    selectedProvider = availableProviders[0];
+    console.log(chalk.green(`\n自动选择: ${selectedProvider.displayName}`));
+  } else {
+    const providerChoice = await select({
+      message: '选择要配置的 CLI 工具',
+      choices: availableProviders.map((p) => ({
+        name: p.displayName,
+        value: p.id,
+        description: `配置 ${p.displayName} 作为默认 AI 工具`,
+      })),
+    });
+    selectedProvider = availableProviders.find((p) => p.id === providerChoice)!;
+  }
+
+  // 运行所选 CLI 工具的配置流程
+  const config = await configureProvider(selectedProvider);
+
+  if (!config) {
+    return { success: false };
+  }
+
+  // 询问是否启用其他检测到的 CLI 工具
+  const configs: Record<string, CLIConfig> = {
+    [selectedProvider.id]: config,
+  };
+
+  const otherProviders = availableProviders.filter((p) => p.id !== selectedProvider.id);
+  for (const provider of otherProviders) {
+    const enableOther = await confirm({
+      message: `是否同时启用 ${provider.displayName}（可作为备用）？`,
+      default: false,
+    });
+
+    if (enableOther) {
+      const otherConfig = provider.getDefaultConfig();
+      otherConfig.enabled = true;
+      configs[provider.id] = otherConfig;
+    } else {
+      configs[provider.id] = { ...provider.getDefaultConfig(), enabled: false };
+    }
+  }
+
+  return {
+    success: true,
+    provider: selectedProvider,
+    configs,
+  };
+}
+
+async function configureProvider(provider: ICLIProvider): Promise<CLIConfig | null> {
   const checkResult = await provider.check();
-  spinner.stop();
-
   printCheckResult(provider, checkResult);
 
   if (!checkResult.installed || !checkResult.meetsRequirements) {
     const installReady = await promptInstallGuide(provider, checkResult);
 
     if (!installReady) {
-      return { success: false };
+      return null;
     }
 
     // Re-check after user manually installed
@@ -37,7 +119,7 @@ export async function runCliSetup(): Promise<CliSetupResult> {
     if (!retryResult.meetsRequirements) {
       console.log(chalk.red('\n仍未检测到满足要求的 CLI 工具。请检查安装是否成功，然后重新运行配置向导。'));
       console.log(chalk.dim(`\n文档地址: ${provider.docsUrl}`));
-      return { success: false };
+      return null;
     }
   }
 
@@ -64,7 +146,7 @@ export async function runCliSetup(): Promise<CliSetupResult> {
           default: true,
         });
         if (!continueAnyway) {
-          return { success: false };
+          return null;
         }
       } else {
         console.log(chalk.green('登录成功'));
@@ -75,7 +157,7 @@ export async function runCliSetup(): Promise<CliSetupResult> {
   return await selectModelAndComplete(provider);
 }
 
-async function selectModelAndComplete(provider: OpenCodeProvider): Promise<CliSetupResult> {
+async function selectModelAndComplete(provider: ICLIProvider): Promise<CLIConfig | null> {
   // 首先尝试读取用户已有的默认模型配置
   const userModelSpinner = ora('读取用户默认模型配置...').start();
   const userDefaultModel = await provider.getUserDefaultModel();
@@ -85,7 +167,7 @@ async function selectModelAndComplete(provider: OpenCodeProvider): Promise<CliSe
 
   // 如果用户已配置默认模型，询问是否使用
   if (userDefaultModel) {
-    console.log(chalk.green(`  检测到 OpenCode 默认模型: ${userDefaultModel}`));
+    console.log(chalk.green(`  检测到默认模型: ${userDefaultModel}`));
     const useExisting = await confirm({
       message: '是否使用该模型作为桥接服务的默认模型？',
       default: true,
@@ -100,7 +182,7 @@ async function selectModelAndComplete(provider: OpenCodeProvider): Promise<CliSe
     }
   } else {
     // 用户没有配置默认模型，从列表选择
-    console.log(chalk.yellow('  未检测到 OpenCode 默认模型配置'));
+    console.log(chalk.yellow('  未检测到默认模型配置'));
     console.log(chalk.cyan('  ℹ️  您需要选择一个模型作为桥接服务的默认模型'));
     console.log(chalk.dim('     （选择后可在配置文件中随时修改）'));
     console.log('');
@@ -108,46 +190,42 @@ async function selectModelAndComplete(provider: OpenCodeProvider): Promise<CliSe
   }
 
   const defaultConfig = provider.getDefaultConfig();
-  const config = {
+  const config: CLIConfig = {
     ...defaultConfig,
     default_model: selectedModel,
   };
 
-  return {
-    success: true,
-    provider,
-    config,
-  };
+  return config;
 }
 
 /**
  * 提示用户从模型列表中选择
  */
-async function promptModelSelection(provider: OpenCodeProvider): Promise<string> {
+async function promptModelSelection(provider: ICLIProvider): Promise<string> {
   const modelSpinner = ora('获取可用模型列表...').start();
-  const freeModels = await provider.fetchModels();
+  const models = await provider.fetchModels();
   modelSpinner.stop();
 
-  if (freeModels.length === 0) {
-    // 如果没有获取到免费模型，提示用户并退出
+  if (models.length === 0) {
+    // 如果没有获取到模型，提示用户并退出
     console.log(chalk.red('  错误：无法获取可用模型列表'));
-    console.log(chalk.dim('  请检查 OpenCode CLI 是否已正确安装和登录'));
+    console.log(chalk.dim(`  请检查 ${provider.displayName} CLI 是否已正确安装和登录`));
     console.log(chalk.dim('  或者稍后手动编辑配置文件设置模型'));
     process.exit(1);
   }
 
-  // 显示找到的免费模型数量
-  console.log(chalk.green(`  找到 ${freeModels.length} 个免费模型`));
+  // 显示找到的模型数量
+  console.log(chalk.green(`  找到 ${models.length} 个可用模型`));
   console.log('');
   console.log(chalk.cyan('  ℹ️  请从列表中选择默认使用的模型'));
-  console.log(chalk.dim('     （免费模型列表可能随时间变化，建议定期查看最新可用模型）'));
+  console.log(chalk.dim('     （选择后可在配置文件中随时修改）'));
   console.log('');
 
   // 让用户选择模型
-  const modelChoices = freeModels.map((m) => ({
+  const modelChoices = models.map((m) => ({
     name: `${m.name} (${m.id})`,
     value: m.id,
-    description: `提供商: ${m.provider || 'unknown'}`,
+    description: `提供商: ${m.provider || 'unknown'}${m.isFree ? ' | 免费' : ''}`,
   }));
 
   const selectedModel = await select({

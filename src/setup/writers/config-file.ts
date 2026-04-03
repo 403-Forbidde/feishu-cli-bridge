@@ -49,6 +49,20 @@ function generateYAML(config: FullConfig): string {
     if (c.timeout !== undefined) {
       lines.push(`    timeout: ${c.timeout}`);
     }
+    // Claude Code 特有配置
+    if (c.context_window !== undefined) {
+      const cw = typeof c.context_window === 'number' ? c.context_window : quote(c.context_window as string);
+      lines.push(`    context_window: ${cw}`);
+    }
+    if (c.permission_mode !== undefined) {
+      lines.push(`    permission_mode: ${quote(c.permission_mode as string)}`);
+    }
+    if (Array.isArray(c.allowed_tools) && c.allowed_tools.length > 0) {
+      lines.push('    allowed_tools:');
+      for (const tool of c.allowed_tools) {
+        lines.push(`      - ${quote(tool)}`);
+      }
+    }
     if (Array.isArray(c.models) && c.models.length > 0) {
       lines.push('    models:');
       for (const m of c.models) {

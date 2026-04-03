@@ -1,5 +1,8 @@
 <div align="center">
 
+<!-- Banner Image -->
+<img src="./doc/img/feishu-cli-bridge-banner.png" width="100%" alt="Feishu CLI Bridge Banner">
+
 <!-- Logo/Title -->
 <img src="https://img.shields.io/badge/Feishu-CLI%20Bridge-1677FF?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0xMiAybDIuNCA3LjJoNy42bC02IDQuOCAyLjQgNy4yLTYtNC44LTYgNC44IDIuNC03LjItNi00LjhoNy42eiIvPjwvc3ZnPg==&logoColor=white" height="40" alt="Feishu CLI Bridge">
 
@@ -9,7 +12,7 @@
 
 <p align="center">
   <b>程序员专属：用飞书私聊向本地 CLI AI 工具下达指令，享受流式打字机输出体验</b><br>
-  <i>当前已接入 OpenCode，Codex 与 Kimi CLI 支持规划中</i>
+  <i>已接入 OpenCode 与 Claude Code，支持多 CLI 工具切换</i>
 </p>
 
 <!-- Language Switch -->
@@ -24,7 +27,7 @@
 
 <!-- Status Badges -->
 <p>
-  <img src="https://img.shields.io/badge/version-v0.2.1-FF6B6B?style=flat-square&logo=semver&logoColor=white" alt="Version">
+  <img src="https://img.shields.io/badge/version-v0.3.0-FF6B6B?style=flat-square&logo=semver&logoColor=white" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-4ECDC4?style=flat-square&logo=opensourceinitiative&logoColor=white" alt="License">
   <img src="https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
   <img src="https://img.shields.io/badge/Node.js-20+-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js">
@@ -39,7 +42,7 @@
 
 <!-- Last Updated -->
 <p>
-  <img src="https://img.shields.io/badge/Updated-2026--04--02-9b59b6?style=flat-square" alt="Updated">
+  <img src="https://img.shields.io/badge/Updated-2026--04--03-9b59b6?style=flat-square" alt="Updated">
 </p>
 
 </div>
@@ -87,6 +90,9 @@
 ### 🤖 **OpenCode 接入**
 HTTP/SSE 方式，自动启动并管理 `opencode serve`，自动预授权外部目录访问（无头模式工具调用不阻塞）
 
+### 🎭 **Claude Code 接入**
+`child_process.spawn` + JSON Lines 流式解析，支持 `@filepath` 文件引用，模型动态检测（兼容 Kimi 等第三方 Provider）
+
 ### 🎭 **Agent 模式**
 内置 Build / Plan 模式；自动检测 oh-my-openagent，已安装时切换为 7 个专业 Agent，`/mode` 卡片一键切换
 
@@ -133,9 +139,10 @@ HTTP/SSE 方式，自动启动并管理 `opencode serve`，自动预授权外部
 |:-----|:--------|:-----|:---------|
 | **Node.js** | 20+ LTS | 运行环境 | [官网下载](https://nodejs.org/) 或包管理器 |
 | **Git** | 任意 | 克隆仓库 | [官网下载](https://git-scm.com/) 或包管理器 |
-| **OpenCode CLI** | 0.5.0+ | AI 编程助手 | `npm install -g opencode-ai` |
+| **OpenCode CLI** (可选) | 0.5.0+ | AI 编程助手 | `npm install -g opencode-ai` |
+| **Claude Code** (可选) | 最新版 | AI 编程助手 | `npm install -g @anthropic-ai/claude-code` |
 
-> 💡 **重要说明**：本项目是**桥接工具**，专注于连接飞书和本地 CLI 工具。**不会自动安装** OpenCode 等 CLI 工具，配置向导只负责检测和引导。
+> 💡 **重要说明**：本项目是**桥接工具**，专注于连接飞书和本地 CLI 工具。**不会自动安装** OpenCode/Claude 等 CLI 工具，配置向导只负责检测和引导。您需要**至少安装一个** CLI 工具才能使用。
 
 #### 各平台安装指南
 
@@ -150,11 +157,13 @@ sudo apt-get install -y nodejs
 # 2. 验证 Node.js 版本
 node --version  # 应显示 v20.x.x 或更高
 
-# 3. 安装 OpenCode CLI（需手动安装）
-npm install -g opencode-ai
+# 3. 安装 CLI 工具（需手动安装，至少选一个）
+npm install -g opencode-ai          # OpenCode
+npm install -g @anthropic-ai/claude-code  # Claude Code（可选）
 
-# 4. 验证 OpenCode
+# 4. 验证安装
 opencode --version
+claude --version  # 如安装了 Claude Code
 ```
 
 **常见问题**：
@@ -176,11 +185,13 @@ brew install node
 # 3. 验证版本
 node --version  # 应显示 v20.x.x 或更高
 
-# 4. 安装 OpenCode CLI（需手动安装）
-npm install -g opencode-ai
+# 4. 安装 CLI 工具（需手动安装，至少选一个）
+npm install -g opencode-ai          # OpenCode
+npm install -g @anthropic-ai/claude-code  # Claude Code（可选）
 
 # 5. 验证
 opencode --version
+claude --version  # 如安装了 Claude Code
 ```
 
 </details>
@@ -198,9 +209,13 @@ opencode --version
    - 下载 64-bit Git for Windows Setup
    - 使用默认选项安装即可
 
-3. **OpenCode CLI**
+3. **CLI 工具（至少安装一个）**
    ```powershell
+   # OpenCode
    npm install -g opencode-ai
+   
+   # Claude Code（可选）
+   npm install -g @anthropic-ai/claude-code
    ```
 
 **重要步骤**：
@@ -209,7 +224,8 @@ opencode --version
 验证安装：
 ```powershell
 node --version      # 应显示 v20.x.x
-opencode --version  # 应显示 0.5.0+
+opencode --version  # 如安装了 OpenCode
+claude --version    # 如安装了 Claude Code
 ```
 
 </details>
@@ -683,7 +699,15 @@ npm run test
 
 ## 📝 更新日志
 
-### v0.2.1 (2026-04-02) — TypeScript 重写（当前版本）
+### v0.3.0 (2026-04-03) — Claude Code 适配器支持（当前版本）
+
+- 🤖 **Claude Code 支持** — 全新 Claude Code CLI 适配器，生产就绪
+- 🔄 **双 CLI 支持** — 同时支持 OpenCode 与 Claude Code，自由切换
+- 📝 **文件引用** — 支持 `@filepath` 语法引用图片/文件
+- 🎯 **模型动态检测** — 自动识别 Claude Code 实际使用的模型（支持 Kimi 等第三方 Provider）
+- 🧪 **全面测试** — 61 个单元测试覆盖 Claude Code 适配器
+
+### v0.2.1 (2026-04-02) — TypeScript 重写
 
 - 🔧 **全面迁移** — 从 Python 迁移至 TypeScript/Node.js
 - 🏗️ **架构升级** — 分层架构：Core → Platform → Adapter

@@ -105,11 +105,13 @@ export class AttachmentProcessor {
         size: fileStats.size,
       };
 
-      // 如果是图片，进行 base64 编码
+      // 如果是图片，进行 base64 编码并保留原始 buffer 供适配器使用
       if (this.autoEncodeBase64 && this.isImage(attachment.mimeType)) {
-        const base64Data = await this.encodeToBase64(result.filePath);
+        const data = await readFile(result.filePath);
+        const base64Data = data.toString('base64');
         processed.base64Data = base64Data;
         processed.dataUrl = `data:${attachment.mimeType};base64,${base64Data}`;
+        processed.data = data;
       }
 
       logger.debug(

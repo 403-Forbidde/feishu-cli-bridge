@@ -35,6 +35,11 @@ export interface CLIConfig {
   enabled: boolean;
   command: string;
   default_model: string;
+  // Claude Code 特有配置
+  context_window?: number | string;
+  permission_mode?: string;
+  allowed_tools?: string[];
+  timeout?: number;
   [key: string]: unknown;
 }
 
@@ -55,4 +60,5 @@ export interface ICLIProvider {
   login(): Promise<boolean>;
   fetchModels(): Promise<Array<{ id: string; name: string; provider?: string; isFree?: boolean }>>;
   getDefaultConfig(): CLIConfig;
+  getUserDefaultModel(): Promise<string | null>;
 }

@@ -27,7 +27,7 @@ export async function runWizard(): Promise<void> {
 
   // Phase 3: CLI setup
   const cliResult = await runCliSetup();
-  if (!cliResult.success || !cliResult.config) {
+  if (!cliResult.success || !cliResult.configs) {
     console.log(chalk.red('\nCLI 工具配置未完成，安装向导退出'));
     process.exit(1);
   }
@@ -44,9 +44,7 @@ export async function runWizard(): Promise<void> {
 
   const fullConfig: FullConfig = {
     feishu: feishuConfig,
-    cli: {
-      opencode: cliResult.config,
-    },
+    cli: cliResult.configs,
     debug: {
       log_level: 'info',
       save_logs: true,
@@ -133,8 +131,12 @@ export async function runWizard(): Promise<void> {
     // ignore write failure
   }
 
-  // Summary
-  printSummary(configPath, feishuConfig, cliResult.config.default_model as string, serviceResult, serviceRunning);
+  // Summary - 获取主 CLI 工具信息
+  const primaryProvider = cliResult.provider;
+  const primaryConfig = primaryProvider ? cliResult.configs[primaryProvider.id] : undefined;
+  const primaryModel = primaryConfig?.default_model as string | undefined;
+
+  printSummary(configPath, feishuConfig, primaryModel || 'auto', serviceResult, serviceRunning);
 }
 
 function printSummary(
