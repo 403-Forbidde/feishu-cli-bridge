@@ -8,34 +8,18 @@
   <i>已接入 OpenCode 与 Claude Code，支持多 CLI 工具切换</i>
 </p>
 
+<!-- Badges -->
+<p>
+  <a href="#-更新日志"><img src="https://img.shields.io/badge/version-v0.3.0-blue.svg" alt="Version"></a>
+  <a href="#-许可证"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg" alt="Platform">
+  <img src="https://img.shields.io/badge/built%20with-TypeScript%205.0+-3178C6.svg" alt="TypeScript">
+  <img src="https://img.shields.io/badge/Node.js-20+-339933.svg" alt="Node.js">
+</p>
+
 <!-- Language Switch -->
 <p>
-  <a href="doc/README_EN.md">
-    <img src="https://img.shields.io/badge/🇬🇧-English-white?style=flat-square&color=3498db" height="20">
-  </a>
-  <a href="#feishu-cli-bridge">
-    <img src="https://img.shields.io/badge/🇨🇳-简体中文-white?style=flat-square&color=2ecc71" height="20">
-  </a>
-</p>
-
-<!-- Status Badges -->
-<p>
-  <img src="https://img.shields.io/badge/version-v0.3.0-FF6B6B?style=flat-square&logo=semver&logoColor=white" alt="Version">
-  <img src="https://img.shields.io/badge/license-MIT-4ECDC4?style=flat-square&logo=opensourceinitiative&logoColor=white" alt="License">
-  <img src="https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
-  <img src="https://img.shields.io/badge/Node.js-20+-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js">
-</p>
-
-<!-- Platform Support -->
-<p>
-  <img src="https://img.shields.io/badge/Windows-0078D6?style=flat-square&logo=windows&logoColor=white" alt="Windows">
-  <img src="https://img.shields.io/badge/Linux-FCC624?style=flat-square&logo=linux&logoColor=black" alt="Linux">
-  <img src="https://img.shields.io/badge/macOS-000000?style=flat-square&logo=apple&logoColor=white" alt="macOS">
-</p>
-
-<!-- Last Updated -->
-<p>
-  <img src="https://img.shields.io/badge/Updated-2026--04--03-9b59b6?style=flat-square" alt="Updated">
+  <a href="doc/README_EN.md">English</a> | <a href="#feishu-cli-bridge">简体中文</a> | <a href="#-更新日志">Changelog</a>
 </p>
 
 </div>
