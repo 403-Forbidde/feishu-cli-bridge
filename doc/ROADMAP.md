@@ -9,7 +9,7 @@
 | 里程碑 | 核心交付 | 状态 |
 |:-------|:---------|:----:|
 | **v0.2.1** | TypeScript 重写 · 架构优化 · 性能提升 | ✅ 已完成 |
-| **v0.3.0** | Claude Code 适配器 | 🔜 规划中 |
+| **v0.3.0** | Claude Code 适配器 | ✅ 已完成 |
 | **v0.4.0** | Kimi CLI 适配器（Wire 协议） | 🔜 规划中 |
 | **v0.5.0** | Codex CLI 适配器 | 🔜 规划中 |
 | **v1.0.0** | 首个正式版本 | 🔜 规划中 |
@@ -34,16 +34,31 @@
 
 ---
 
-### 🔜 v0.3.0 — Claude Code 适配器
+### ✅ v0.3.0 — Claude Code 适配器（已完成）
 
 **目标**：集成 Claude Code CLI，通过 `@claude` 前缀调用。
 
-| 特性 | 说明 |
-|:-----|:-----|
-| 子进程流式输出 | 实时解析 stdout/stderr 实现流式响应 |
-| 会话管理 | 与 OpenCode 会话隔离，LRU 复用 |
-| 双路并行启用 | `@opencode` / `@claude` 自由切换 |
-| 图片输入支持 | 统一的附件预处理管道 |
+| 特性 | 说明 | 状态 |
+|:-----|:-----|:----:|
+| 子进程流式输出 | `child_process.spawn` + JSON Lines 实时解析 | ✅ |
+| 会话管理 | `--session-id` + `--resume` + `--fork-session`，本地映射持久化 | ✅ |
+| 停止生成 | `SIGINT` 信号优雅终止 | ✅ |
+| 模型动态检测 | 从 `result.modelUsage` 自动读取实际模型 | ✅ |
+| 文件引用 | `@filepath` 语法引用附件 | ✅ |
+| 双路并行启用 | `@opencode` / `@claude` 自由切换 | ✅ |
+| 单元测试 | 61 个测试用例全部通过 | ✅ |
+
+**交付时间**：2026-04-03
+
+**关键实现**：
+- `ClaudeCodeAdapter`：实现 `BaseCLIAdapter` 接口
+- `ClaudeCodeProcessManager`：子进程生命周期管理
+- `ClaudeCodeStreamParser`：stream-json 解析器（28 个单元测试）
+- `ClaudeCodeSessionManager`：会话 ID 映射与持久化
+
+---
+
+### 🔜 v0.4.0 — Kimi CLI 适配器（Wire 协议）
 
 ---
 
@@ -94,7 +109,7 @@
 | Milestone | Core Deliverables | Status |
 |:----------|:------------------|:------:|
 | **v0.2.1** | TypeScript Rewrite · Architecture Optimization · Performance Improvements | ✅ Completed |
-| **v0.3.0** | Claude Code Adapter | 🔜 Planned |
+| **v0.3.0** | Claude Code Adapter | ✅ Completed |
 | **v0.4.0** | Kimi CLI Adapter (Wire Protocol) | 🔜 Planned |
 | **v0.5.0** | Codex CLI Adapter | 🔜 Planned |
 | **v1.0.0** | First Stable Release | 🔜 Planned |
@@ -120,16 +135,31 @@
 
 ---
 
-### 🔜 v0.3.0 — Claude Code Adapter
+### ✅ v0.3.0 — Claude Code Adapter (Completed)
 
 **Goal**: Integrate Claude Code CLI via subprocess mode, invoked with `@claude` prefix.
 
-| Feature | Description |
-|:--------|:------------|
-| Subprocess Streaming Output | Real-time stdout/stderr parsing for streaming responses |
-| Session Management | Isolated sessions from OpenCode, LRU-based reuse |
-| Dual Parallel Enablement | `@opencode` / `@claude` free switching |
-| Image Input Support | Unified attachment preprocessing pipeline |
+| Feature | Description | Status |
+|:--------|:------------|:------:|
+| Subprocess Streaming Output | `child_process.spawn` + JSON Lines real-time parsing | ✅ |
+| Session Management | `--session-id` + `--resume` + `--fork-session`, local mapping persistence | ✅ |
+| Stop Generation | `SIGINT` signal graceful termination | ✅ |
+| Dynamic Model Detection | Auto-detect actual model from `result.modelUsage` | ✅ |
+| File Reference | `@filepath` syntax for attachments | ✅ |
+| Dual Parallel Enablement | `@opencode` / `@claude` free switching | ✅ |
+| Unit Tests | 61 test cases all passing | ✅ |
+
+**Delivery Date**: 2026-04-03
+
+**Key Implementations**:
+- `ClaudeCodeAdapter`: Implements `BaseCLIAdapter` interface
+- `ClaudeCodeProcessManager`: Child process lifecycle management
+- `ClaudeCodeStreamParser`: stream-json parser (28 unit tests)
+- `ClaudeCodeSessionManager`: Session ID mapping and persistence
+
+---
+
+### 🔜 v0.4.0 — Kimi CLI Adapter (Wire Protocol)
 
 ---
 
