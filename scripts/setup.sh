@@ -40,8 +40,9 @@ print_prerequisites() {
     echo "     macOS: brew install git"
     echo "     Or download from: https://git-scm.com/downloads"
     echo ""
-    echo "  3. OpenCode CLI (will be detected by the setup wizard)"
-    echo "     Install: npm install -g opencode-ai"
+    echo "  3. CLI Tool (OpenCode or Claude Code, will be detected by the setup wizard)"
+    echo "     OpenCode:    npm install -g opencode-ai"
+    echo "     Claude Code: npm install -g @anthropic-ai/claude-code"
     echo ""
 }
 

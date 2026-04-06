@@ -1,7 +1,11 @@
 import { execa } from 'execa';
 import which from 'which';
 import semver from 'semver';
+import chalk from 'chalk';
 import process from 'node:process';
+import { readFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 import type {
   ICLIProvider,
@@ -14,6 +18,23 @@ import type {
 } from '../interface.js';
 
 const MIN_VERSION = '2.0.0';
+
+// Claude Code 设置文件路径
+const CLAUDE_SETTINGS_PATH = join(homedir(), '.claude', 'settings.json');
+
+// 第三方 Provider 列表
+const THIRD_PARTY_PROVIDERS: Record<string, { name: string; url: string; models: string[] }> = {
+  'kimi.com': {
+    name: 'Kimi',
+    url: 'https://api.kimi.com/coding/',
+    models: ['kimi-k2.5', 'kimi-k2.5-long'],
+  },
+  'openrouter.ai': {
+    name: 'OpenRouter',
+    url: 'https://openrouter.ai/api/v1/',
+    models: ['anthropic/claude-opus-4-6', 'anthropic/claude-sonnet-4-6'],
+  },
+};
 
 export class ClaudeCodeProvider implements ICLIProvider {
   readonly id = 'claude';
@@ -106,20 +127,22 @@ export class ClaudeCodeProvider implements ICLIProvider {
       // 检查 ANTHROPIC_API_KEY 环境变量
       const apiKey = process.env.ANTHROPIC_API_KEY;
       if (apiKey) {
-        return { authenticated: true, provider: 'ANTHROPIC_API_KEY' };
+        const providerInfo = await this.detectProvider();
+        return {
+          authenticated: true,
+          provider: providerInfo?.name || 'ANTHROPIC_API_KEY',
+        };
       }
 
       // 检查 settings.json 中的配置
-      const claudePath = await which('claude');
-      const { exitCode, stdout } = await execa(
-        claudePath,
-        ['--output-format', 'stream-json', '--verbose', 'echo test'],
-        { reject: false, timeout: 10000, env: { ...process.env, CI: 'true' } }
-      );
-
-      // 如果命令成功执行，说明已认证
-      if (exitCode === 0 || stdout.includes('system')) {
-        return { authenticated: true };
+      const settings = await this.readClaudeSettings();
+      const envSettings = settings?.env as Record<string, string> | undefined;
+      if (envSettings?.ANTHROPIC_API_KEY) {
+        const providerInfo = await this.detectProvider();
+        return {
+          authenticated: true,
+          provider: providerInfo?.name || 'settings.json',
+        };
       }
 
       return { authenticated: false };
@@ -128,13 +151,131 @@ export class ClaudeCodeProvider implements ICLIProvider {
     }
   }
 
+  /**
+   * 读取 Claude Code 的 settings.json 配置
+   */
+  private async readClaudeSettings(): Promise<Record<string, unknown> | null> {
+    try {
+      const content = await readFile(CLAUDE_SETTINGS_PATH, 'utf-8');
+      return JSON.parse(content);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * 检测当前使用的 API Provider
+   * 返回 Provider 信息或 null（使用官方 API）
+   */
+  async detectProvider(): Promise<{
+    name: string;
+    url: string;
+    isThirdParty: boolean;
+    models: string[];
+  } | null> {
+    // 1. 检查环境变量
+    const envUrl = process.env.ANTHROPIC_BASE_URL;
+    if (envUrl) {
+      return this.matchProvider(envUrl);
+    }
+
+    // 2. 检查 settings.json
+    const settings = await this.readClaudeSettings();
+    const envSettings = settings?.env as Record<string, string> | undefined;
+    const settingsUrl = envSettings?.ANTHROPIC_BASE_URL;
+    if (settingsUrl) {
+      return this.matchProvider(settingsUrl);
+    }
+
+    // 3. 使用官方 API
+    return null;
+  }
+
+  /**
+   * 根据 URL 匹配 Provider
+   */
+  private matchProvider(url: string): {
+    name: string;
+    url: string;
+    isThirdParty: boolean;
+    models: string[];
+  } {
+    for (const [key, provider] of Object.entries(THIRD_PARTY_PROVIDERS)) {
+      if (url.includes(key)) {
+        return { ...provider, isThirdParty: true };
+      }
+    }
+
+    // 未知的第三方 Provider
+    return {
+      name: `Third-party (${url})`,
+      url,
+      isThirdParty: true,
+      models: ['auto'],
+    };
+  }
+
+  /**
+   * 获取第三方 API 配置提示
+   */
+  getThirdPartyGuide(): string {
+    return `
+${chalk.cyan('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')}
+${chalk.bold('🌐 第三方模型 API 配置指南')}
+${chalk.cyan('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')}
+
+Claude Code 支持通过第三方 Provider 使用非 Anthropic 官方模型（如 Kimi）。
+
+${chalk.bold('配置方法：')}
+
+${chalk.yellow('方法 1: 直接编辑配置文件')}
+  编辑 ~/.claude/settings.json：
+  {
+    "env": {
+      "ANTHROPIC_API_KEY": "your-api-key",
+      "ANTHROPIC_BASE_URL": "https://api.kimi.com/coding/"
+    }
+  }
+
+${chalk.yellow('方法 2: 使用 cc-switch 工具（推荐）')}
+  cc-switch 是一个便捷的 Claude Code 模型切换工具：
+  ${chalk.dim('https://github.com/farion1231/cc-switch')}
+
+  安装：
+    npm install -g cc-switch
+
+  使用：
+    cc-switch kimi      # 切换到 Kimi API
+    cc-switch anthropic # 切换到 Anthropic 官方
+
+${chalk.bold('支持的第三方 Provider：')}
+  • Kimi (api.kimi.com) - Kimi K2.5 系列模型
+  • OpenRouter (openrouter.ai) - 多模型聚合平台
+
+${chalk.cyan('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')}
+    `.trim();
+  }
+
   async login(): Promise<boolean> {
-    console.log('\nClaude Code 使用 API Key 进行认证。');
-    console.log('请确保已设置 ANTHROPIC_API_KEY 环境变量。');
-    console.log('\n如果使用第三方 Provider（如 Kimi），请设置:');
-    console.log('  - ANTHROPIC_API_KEY');
-    console.log('  - ANTHROPIC_BASE_URL');
-    console.log('\n配置完成后按 Enter 继续...');
+    const providerInfo = await this.detectProvider();
+
+    console.log('\n' + chalk.bold('🔐 Claude Code 认证配置'));
+    console.log(chalk.dim('─'.repeat(50)));
+
+    if (providerInfo?.isThirdParty) {
+      console.log(chalk.green(`✓ 已配置第三方 Provider: ${providerInfo.name}`));
+      console.log(chalk.dim(`  API 地址: ${providerInfo.url}`));
+    } else {
+      console.log(chalk.cyan('ℹ 当前使用 Anthropic 官方 API'));
+    }
+
+    console.log('\n' + chalk.bold('认证方式:'));
+    console.log('Claude Code 通过环境变量或配置文件进行认证。');
+
+    // 显示第三方 API 配置指南
+    console.log('\n' + this.getThirdPartyGuide());
+
+    console.log('\n' + chalk.yellow('请完成上述配置后按 Enter 继续...'));
 
     // 等待用户确认
     await new Promise((resolve) => {
@@ -147,13 +288,32 @@ export class ClaudeCodeProvider implements ICLIProvider {
   }
 
   async fetchModels(): Promise<Array<{ id: string; name: string; provider?: string; isFree?: boolean }>> {
-    // Claude Code 支持通过 ANTHROPIC_BASE_URL 使用不同 Provider
-    // 返回推荐的模型列表
+    const providerInfo = await this.detectProvider();
+
+    // 根据检测到的 Provider 返回相应模型列表
+    if (providerInfo?.isThirdParty) {
+      const baseModels = [
+        { id: 'auto', name: '自动检测（推荐）', provider: providerInfo.name, isFree: false },
+      ];
+
+      // 添加该 Provider 支持的模型
+      for (const modelId of providerInfo.models) {
+        baseModels.push({
+          id: modelId,
+          name: `${providerInfo.name} ${modelId}`,
+          provider: providerInfo.name.toLowerCase(),
+          isFree: false,
+        });
+      }
+
+      return baseModels;
+    }
+
+    // 默认返回 Anthropic 官方模型
     return [
-      { id: 'auto', name: '自动检测（推荐）', provider: 'dynamic', isFree: false },
+      { id: 'auto', name: '自动检测（推荐）', provider: 'anthropic', isFree: false },
       { id: 'claude-opus-4-6', name: 'Claude Opus 4.6', provider: 'anthropic', isFree: false },
       { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', provider: 'anthropic', isFree: false },
-      { id: 'kimi-k2.5', name: 'Kimi K2.5', provider: 'kimi', isFree: false },
     ];
   }
 
@@ -190,8 +350,9 @@ export class ClaudeCodeProvider implements ICLIProvider {
       const settings = JSON.parse(content);
 
       // 检查 settings 中的模型相关配置
-      if (settings.env?.ANTHROPIC_MODEL) {
-        return settings.env.ANTHROPIC_MODEL;
+      const envSettings = settings.env as Record<string, string> | undefined;
+      if (envSettings?.ANTHROPIC_MODEL) {
+        return envSettings.ANTHROPIC_MODEL;
       }
     } catch {
       // 读取失败，忽略错误

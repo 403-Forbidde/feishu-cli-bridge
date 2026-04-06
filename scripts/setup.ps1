@@ -53,6 +53,23 @@ function Test-Git {
     }
 }
 
+function Print-Prerequisites {
+    Write-Host ""
+    Write-Host "  Prerequisites Check" -ForegroundColor Cyan
+    Write-Host "This script requires the following to be installed manually:"
+    Write-Host ""
+    Write-Host "  1. Node.js ${REQUIRED_NODE_MAJOR}+ LTS"
+    Write-Host "     Download: https://nodejs.org/"
+    Write-Host ""
+    Write-Host "  2. Git"
+    Write-Host "     Download: https://git-scm.com/download/win"
+    Write-Host ""
+    Write-Host "  3. CLI Tool (OpenCode or Claude Code, will be detected by the setup wizard)"
+    Write-Host "     OpenCode:    npm install -g opencode-ai"
+    Write-Host "     Claude Code: npm install -g @anthropic-ai/claude-code"
+    Write-Host ""
+}
+
 # Set UTF-8 code page to avoid Chinese garbled text in terminal
 chcp 65001 >$null 2>&1
 
@@ -60,6 +77,8 @@ chcp 65001 >$null 2>&1
 Write-Host ""
 Write-Host "  Feishu CLI Bridge Installer for Windows" -ForegroundColor Cyan
 Write-Host ""
+
+Print-Prerequisites
 
 # 1. Check Node.js
 if (-not (Test-Node)) {

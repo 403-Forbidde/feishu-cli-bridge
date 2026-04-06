@@ -103,6 +103,25 @@ async function configureProvider(provider: ICLIProvider): Promise<CLIConfig | nu
   const checkResult = await provider.check();
   printCheckResult(provider, checkResult);
 
+  // 对于 Claude Code，检测并显示第三方 Provider 信息
+  if (provider.id === 'claude') {
+    const claudeProvider = provider as import('../cli-provider/providers/claude.js').ClaudeCodeProvider;
+    const providerInfo = await claudeProvider.detectProvider();
+
+    console.log(chalk.bold('\n🌐 API Provider 检测'));
+    console.log('─'.repeat(40));
+
+    if (providerInfo?.isThirdParty) {
+      console.log(`  当前 Provider: ${chalk.green(providerInfo.name)}`);
+      console.log(`  API 地址: ${chalk.dim(providerInfo.url)}`);
+      console.log(`  可用模型: ${providerInfo.models.join(', ')}`);
+    } else {
+      console.log(`  当前 Provider: ${chalk.cyan('Anthropic 官方')}`);
+      console.log(chalk.dim('  提示: 如需使用第三方 API（如 Kimi），请参考后续的认证步骤'));
+    }
+    console.log('─'.repeat(40));
+  }
+
   if (!checkResult.installed || !checkResult.meetsRequirements) {
     const installReady = await promptInstallGuide(provider, checkResult);
 
