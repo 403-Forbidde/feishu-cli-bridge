@@ -77,7 +77,7 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
       serverPort: 4096,
       serverHostname: '127.0.0.1',
       defaultModel: config.defaultModel,
-      defaultAgent: 'build',
+      defaultAgent: config.defaultAgent || 'build',
       command: config.command,
       timeout: config.timeout,
       serverPassword: config.serverPassword,

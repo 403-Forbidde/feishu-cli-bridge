@@ -35,6 +35,10 @@ export interface CLIConfig {
   enabled: boolean;
   command: string;
   default_model: string;
+  // OpenCode 特有配置
+  default_agent?: string;
+  server_password?: string;
+  models?: Array<{ id: string; name: string; capabilities?: unknown } | string>;
   // Claude Code 特有配置
   context_window?: number | string;
   permission_mode?: string;

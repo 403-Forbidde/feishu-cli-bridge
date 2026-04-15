@@ -156,6 +156,7 @@ function loadFromEnv(): Config {
         timeout: parseIntEnv(process.env.OPENCODE_TIMEOUT, DEFAULTS.CLI_TIMEOUT),
         models: [],
         serverPassword: cleanString(process.env.OPENCODE_SERVER_PASSWORD) || '',
+        defaultAgent: cleanString(process.env.OPENCODE_DEFAULT_AGENT) || 'build',
       },
       codex: {
         enabled: parseBool(process.env.CODEX_ENABLED, false),
@@ -214,6 +215,14 @@ function parseCLIConfig(data: Record<string, unknown>): Record<string, CLIConfig
       timeout: (config.timeout as number) || DEFAULTS.CLI_TIMEOUT,
       models: (config.models as CLIConfig['models']) || [],
     };
+
+    // OpenCode 特有配置
+    if (config.server_password !== undefined) {
+      cliConfig.serverPassword = cleanString(config.server_password);
+    }
+    if (config.default_agent !== undefined) {
+      cliConfig.defaultAgent = cleanString(config.default_agent);
+    }
 
     // Claude Code 特有配置
     if (config.context_window !== undefined) {

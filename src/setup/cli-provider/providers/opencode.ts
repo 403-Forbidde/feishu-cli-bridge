@@ -2,6 +2,9 @@ import { execa } from 'execa';
 import which from 'which';
 import semver from 'semver';
 import process from 'node:process';
+import { readFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import path from 'node:path';
 
 import type {
   ICLIProvider,
@@ -144,29 +147,37 @@ export class OpenCodeProvider implements ICLIProvider {
   }
 
   async fetchModels(): Promise<Array<{ id: string; name: string; provider?: string; isFree?: boolean }>> {
-    // 优先尝试通过 opencode models 命令获取模型列表
+    // OpenCode 1.4.4+ 的 `opencode models` 命令输出不稳定，优先从本地缓存读取免费模型列表
+    const cachePath = path.join(homedir(), '.cache', 'opencode', 'models.json');
     try {
-      const opencodePath = await which('opencode');
-      // 使用 opencode models 命令获取所有模型
-      const { stdout, exitCode } = await execa(
-        opencodePath,
-        ['models'],
-        { reject: false, timeout: 15000 }
-      );
-      if (exitCode === 0 && stdout.trim()) {
-        // 解析模型列表，每行一个模型 ID
-        const allModels = stdout
-          .split('\n')
-          .map((line) => line.trim())
-          .filter((line) => line && !line.startsWith('Commands:') && !line.startsWith('Options:') && !line.startsWith('Positionals:'));
+      const raw = await readFile(cachePath, 'utf-8');
+      const data = JSON.parse(raw) as Record<
+        string,
+        {
+          models?: Record<
+            string,
+            {
+              id: string;
+              name?: string;
+              cost?: { input?: number; output?: number };
+              status?: string;
+            }
+          >;
+        }
+      >;
 
-        // 过滤出包含 free 的模型
-        const freeModels = allModels
-          .filter((id) => id.toLowerCase().includes('free'))
-          .map((id) => ({
-            id,
-            name: this.formatModelName(id),
-            provider: id.split('/')[0] || 'unknown',
+      const opencodeProvider = data['opencode'];
+      if (opencodeProvider?.models) {
+        const freeModels = Object.values(opencodeProvider.models)
+          .filter((info) => {
+            const cost = info.cost || {};
+            const isOfficialFree = info.id.endsWith('-free') || info.id === 'big-pickle';
+            return cost.input === 0 && cost.output === 0 && info.status !== 'deprecated' && isOfficialFree;
+          })
+          .map((info) => ({
+            id: `opencode/${info.id}`,
+            name: info.name || this.formatModelName(info.id),
+            provider: 'opencode',
             isFree: true,
           }));
 
@@ -175,19 +186,21 @@ export class OpenCodeProvider implements ICLIProvider {
         }
       }
     } catch {
-      // fallback to recommended models
+      // 缓存读取失败，继续 fallback
     }
 
     // 如果无法获取或没有免费模型，返回默认的免费模型列表
-    const defaultFreeModels = [
+    return this.getFallbackModels();
+  }
+
+  private getFallbackModels(): Array<{ id: string; name: string; provider: string; isFree: boolean }> {
+    return [
       { id: 'opencode/mimo-v2-omni-free', name: 'Mimo V2 Omni (Free)', provider: 'opencode', isFree: true },
       { id: 'opencode/mimo-v2-pro-free', name: 'Mimo V2 Pro (Free)', provider: 'opencode', isFree: true },
       { id: 'opencode/minimax-m2.5-free', name: 'MiniMax M2.5 (Free)', provider: 'opencode', isFree: true },
       { id: 'opencode/nemotron-3-super-free', name: 'Nemotron 3 Super (Free)', provider: 'opencode', isFree: true },
       { id: 'opencode/qwen3.6-plus-free', name: 'Qwen 3.6 Plus (Free)', provider: 'opencode', isFree: true },
     ];
-
-    return defaultFreeModels;
   }
 
   private formatModelName(id: string): string {
@@ -208,6 +221,8 @@ export class OpenCodeProvider implements ICLIProvider {
       enabled: true,
       command: 'opencode',
       default_model: '',
+      default_agent: 'build',
+      server_password: '',
     };
   }
 

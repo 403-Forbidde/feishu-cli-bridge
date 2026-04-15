@@ -49,6 +49,13 @@ function generateYAML(config: FullConfig): string {
     if (c.timeout !== undefined) {
       lines.push(`    timeout: ${c.timeout}`);
     }
+    // OpenCode 特有配置
+    if (c.default_agent !== undefined && c.default_agent !== '') {
+      lines.push(`    default_agent: ${quote(c.default_agent)}`);
+    }
+    if (c.server_password !== undefined && c.server_password !== '') {
+      lines.push(`    server_password: ${quote(c.server_password)}`);
+    }
     // Claude Code 特有配置
     if (c.context_window !== undefined) {
       const cw = typeof c.context_window === 'number' ? c.context_window : quote(c.context_window as string);
@@ -66,7 +73,12 @@ function generateYAML(config: FullConfig): string {
     if (Array.isArray(c.models) && c.models.length > 0) {
       lines.push('    models:');
       for (const m of c.models) {
-        lines.push(`      - ${quote(m)}`);
+        if (typeof m === 'string') {
+          lines.push(`      - ${quote(m)}`);
+        } else {
+          lines.push(`      - id: ${quote(m.id)}`);
+          lines.push(`        name: ${quote(m.name)}`);
+        }
       }
     }
   }

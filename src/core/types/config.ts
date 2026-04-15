@@ -15,6 +15,7 @@ export interface CLIConfig {
   allowedTools?: string[];
   // OpenCode 特有配置（可选）
   serverPassword?: string;
+  defaultAgent?: string;
 }
 
 // 飞书配置

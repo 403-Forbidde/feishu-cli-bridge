@@ -100,6 +100,7 @@ export interface AdapterConfig {
   timeout: number;
   models: Array<{ id: string; name: string } | string>;
   serverPassword?: string;
+  defaultAgent?: string;
 }
 
 /**
