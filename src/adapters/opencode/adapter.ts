@@ -549,19 +549,61 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
 
   /**
    * 切换 Agent
-   * 注意：Python 实现中只更新本地配置，不调用 API
+   *
+   * 同时更新本地缓存和 OpenCode 服务器配置（PATCH /config），
+   * 确保 /new 新建会话也能继承当前选择的 agent。
    */
   async switchAgent(agentId: string): Promise<boolean> {
     this.opencodeConfig.defaultAgent = agentId;
     logger.info({ agentId }, '切换到 agent');
+
+    try {
+      await this.httpClient.patchConfig({ default_agent: agentId });
+    } catch (error) {
+      logger.warn({ err: error, agentId }, 'switchAgent: failed to sync to server config');
+    }
+
     return true;
   }
 
   /**
    * 获取当前 Agent
+   *
+   * 完全从 OpenCode 服务器获取，废弃本地硬编码默认值：
+   * 1. 优先从当前会话最后一条用户消息的 agent 字段读取（最精确）
+   * 2. 若会话无消息（如 /new 新建），从 GET /config 的 default_agent 读取
+   * 3. 若全部失败，回退到 'build'
    */
-  getCurrentAgent(): string {
-    return this.opencodeConfig.defaultAgent;
+  async getCurrentAgent(workingDir?: string): Promise<string> {
+    await this.ensureServer();
+
+    // 1. 尝试从当前会话最后一条用户消息读取 agent
+    const dir = workingDir || this.activeWorkingDir || process.cwd();
+    const sessionId = this.sessionManager.getSessionId(dir);
+    if (sessionId) {
+      try {
+        const agent = await this.httpClient.getSessionCurrentAgent(sessionId);
+        if (agent) {
+          return agent;
+        }
+      } catch (error) {
+        logger.debug({ err: error, sessionId }, 'getCurrentAgent: failed to fetch from session messages');
+      }
+    }
+
+    // 2. 会话无消息，从 /config 读取全局 default_agent
+    try {
+      const config = await this.httpClient.getConfig();
+      const defaultAgent = config.default_agent;
+      if (typeof defaultAgent === 'string' && defaultAgent) {
+        return defaultAgent;
+      }
+    } catch (error) {
+      logger.debug({ err: error }, 'getCurrentAgent: failed to fetch from /config');
+    }
+
+    // 3. 最终回退
+    return 'build';
   }
 
   /**

@@ -870,8 +870,8 @@ export class MessageProcessor {
     // 通用能力检测
     const agentAdapter = adapter as unknown as {
       switchAgent?(agentId: string): Promise<boolean>;
-      listAgents?(): Promise<Array<{ id: string; name?: string; description?: string }>>;
-      getCurrentAgent?(): string;
+      listAgents?(): Promise<Array<{ id: string; name?: string; description?: string; color?: string }>>;
+      getCurrentAgent?(workingDir?: string): Promise<string>;
     };
 
     if (
@@ -896,10 +896,10 @@ export class MessageProcessor {
 
     // 刷新模式列表卡片
     const agents = await agentAdapter.listAgents();
-    const current = agentAdapter.getCurrentAgent ? agentAdapter.getCurrentAgent() : agentId;
+    const current = agentId;
     const { buildModeSelectCard } = await import('../../card-builder/interactive-cards.js');
     const card = buildModeSelectCard(
-      agents.map((a) => ({ name: a.id, displayName: a.name, description: a.description })),
+      agents.map((a) => ({ name: a.id, displayName: a.name, description: a.description, color: a.color })),
       current,
       this.defaultAdapterType
     );

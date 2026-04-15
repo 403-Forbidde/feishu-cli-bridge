@@ -40,6 +40,16 @@
   - 优先从 `/provider` API 补充 capabilities
   - API 失败时从本地缓存 `~/.cache/opencode/models.json` 回补充
 - **2026-04-15** - 统一视觉能力标签文案为 `🖼️ 识图`（原 `🖼️ 图片`）
+- **2026-04-15** - 修复 `/mode` 当前激活 agent 与 OpenCode 服务器不同步的问题
+  - 根因：bridge 仅依赖内存中的 `defaultAgent`（默认 `build`），进程重启后丢失，且 `/new` 新建会话无历史消息时无法读取真实 agent
+  - 修复：
+    - `getCurrentAgent()` 改为优先从当前会话最后一条用户消息读取 `info.agent`
+    - 若会话为空（如 `/new` 后），fallback 到 `GET /config` 读取 OpenCode 全局 `default_agent`
+    - `switchAgent()` 调用 `PATCH /config` 同步更新服务器配置，保证持久化
+  - 效果：oh-my-openagent 环境下 `/mode` 始终准确显示当前真实激活 agent，切换后立即生效且重启不丢失
+- **2026-04-15** - 修复 `/mode` 卡片点击"切换至此"后所有 agent 名称颜色变为绿色的问题
+  - 根因：`handleSwitchModeCallback` 回调中刷新卡片时未将 agent 的 `color` 字段传入 `buildModeSelectCard`
+  - 修复：补全 `color` 字段传递，保持 oh-my-openagent 各 Agent 品牌色（turquoise / orange / red / green）正确显示
 
 ---
 

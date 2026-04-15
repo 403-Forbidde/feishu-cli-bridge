@@ -32,7 +32,7 @@ interface OpenCodeAdapter extends ICLIAdapter {
   switchModel(modelId: string): Promise<boolean>;
   listAgents?(): Promise<AgentInfo[]>;
   switchAgent?(agentId: string): Promise<boolean>;
-  getCurrentAgent?(): string;
+  getCurrentAgent?(workingDir?: string): Promise<string>;
   getSessionId(workingDir: string): string | null;
   getSessionDetail?(sessionId: string): Promise<Record<string, unknown> | null>;
 }
@@ -453,7 +453,7 @@ export class OpenCodeTUICommands extends TUIBaseCommand {
       });
     }
 
-    const current = this.adapter.getCurrentAgent ? this.adapter.getCurrentAgent() : 'build';
+    const current = this.adapter.getCurrentAgent ? await this.adapter.getCurrentAgent(context.workingDir) : 'build';
 
     const card = buildModeSelectCard(
       agents.map((a) => ({ name: a.id, displayName: a.name, description: a.description, color: a.color })),

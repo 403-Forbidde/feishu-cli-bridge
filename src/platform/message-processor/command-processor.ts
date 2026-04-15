@@ -391,7 +391,7 @@ export class CommandProcessor {
     const agentAdapter = adapter as unknown as {
       listAgents?(): Promise<Array<{ id: string; name?: string; description?: string; color?: string }>>;
       switchAgent?(agentId: string): Promise<boolean>;
-      getCurrentAgent?(): string;
+      getCurrentAgent?(workingDir?: string): Promise<string>;
     };
 
     if (
@@ -428,7 +428,7 @@ export class CommandProcessor {
 
       // 切换后显示模式列表
       const agents = await agentAdapter.listAgents!();
-      const current = agentAdapter.getCurrentAgent ? agentAdapter.getCurrentAgent() : agentId;
+      const current = agentAdapter.getCurrentAgent ? await agentAdapter.getCurrentAgent(context.workingDir) : agentId;
       const card = buildModeSelectCard(
         agents.map((a) => ({ name: a.id, displayName: a.name, description: a.description, color: a.color })),
         current,
@@ -448,7 +448,7 @@ export class CommandProcessor {
       return;
     }
 
-    const current = agentAdapter.getCurrentAgent ? agentAdapter.getCurrentAgent() : '';
+    const current = agentAdapter.getCurrentAgent ? await agentAdapter.getCurrentAgent(context.workingDir) : '';
     const card = buildModeSelectCard(
       agents.map((a) => ({ name: a.id, displayName: a.name, description: a.description, color: a.color })),
       current,

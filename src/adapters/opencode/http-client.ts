@@ -254,6 +254,47 @@ export class OpenCodeHTTPClient {
   }
 
   /**
+   * 获取会话当前使用的 agent（从最新消息中提取）
+   * 用于兼容 oh-my-openagent 等插件环境下的 agent 状态同步
+   */
+  async getSessionCurrentAgent(sessionId: string): Promise<string | null> {
+    this.ensureInitialized();
+
+    try {
+      const response = await this.client!.get<
+        Array<{
+          info?: {
+            agent?: string;
+            role?: string;
+          };
+        }>
+      >(`/session/${sessionId}/message`);
+
+      const messages = response.data || [];
+      if (messages.length === 0) {
+        return null;
+      }
+
+      // 从后往前查找最后一条用户消息的 agent 字段
+      // oh-my-openagent 的 agent 选择体现在用户消息的 info.agent 中
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const msg = messages[i];
+        if (msg.info?.role === 'user' && msg.info?.agent) {
+          return msg.info.agent;
+        }
+      }
+
+      return null;
+    } catch (error) {
+      const axiosError = error as AxiosError;
+      if (axiosError.response?.status === 404) {
+        return null;
+      }
+      throw this.wrapError(`Failed to get current agent for session ${sessionId}`, error);
+    }
+  }
+
+  /**
    * 获取可用模型列表（从 /models 端点）
    */
   async listModels(): Promise<ModelInfo[]> {
@@ -446,6 +487,34 @@ export class OpenCodeHTTPClient {
       return providers;
     } catch (error) {
       throw this.wrapError('Failed to get providers', error);
+    }
+  }
+
+  /**
+   * 获取 OpenCode 配置（包含 default_agent 等全局设置）
+   */
+  async getConfig(): Promise<Record<string, unknown>> {
+    this.ensureInitialized();
+
+    try {
+      const response = await this.client!.get<Record<string, unknown>>('/config');
+      return response.data;
+    } catch (error) {
+      throw this.wrapError('Failed to get config', error);
+    }
+  }
+
+  /**
+   * 更新 OpenCode 配置（用于同步 default_agent）
+   */
+  async patchConfig(updates: Record<string, unknown>): Promise<Record<string, unknown>> {
+    this.ensureInitialized();
+
+    try {
+      const response = await this.client!.patch<Record<string, unknown>>('/config', updates);
+      return response.data;
+    } catch (error) {
+      throw this.wrapError('Failed to patch config', error);
     }
   }
 

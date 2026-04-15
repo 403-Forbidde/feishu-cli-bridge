@@ -701,6 +701,8 @@ npm run test
 - 🔒 **服务器密码支持** — 支持 `OPENCODE_SERVER_PASSWORD` 环境变量访问受保护的服务端点
 - 🏷️ **模型能力标签** — 模型选择卡片显示推理、附件、工具调用等能力标识
 - 📊 **会话统计展示** — 会话列表卡片显示代码变更统计（新增/删除行数、文件数）
+- 🎯 **Agent 状态同步** — `/mode` 当前激活 agent 完全从 OpenCode 服务器读取（优先会话消息，fallback 到 `/config`），切换后通过 `PATCH /config` 持久化，oh-my-openagent 环境重启后不再回退为 `build`
+- 🎨 **oh-my-openagent 品牌色修复** — 修复 `/mode` 卡片点击"切换至此"后所有 agent 名称颜色变绿的 bug，保持各 Agent 品牌色正确显示
 
 （更多历史版本见 [doc/CHANGELOG.md](./doc/CHANGELOG.md)）
 
