@@ -389,7 +389,7 @@ export class CommandProcessor {
 
     // 通用能力检测：适配器是否支持 Agent 模式切换
     const agentAdapter = adapter as unknown as {
-      listAgents?(): Promise<Array<{ id: string; name?: string; description?: string }>>;
+      listAgents?(): Promise<Array<{ id: string; name?: string; description?: string; color?: string }>>;
       switchAgent?(agentId: string): Promise<boolean>;
       getCurrentAgent?(): string;
     };
@@ -430,7 +430,7 @@ export class CommandProcessor {
       const agents = await agentAdapter.listAgents!();
       const current = agentAdapter.getCurrentAgent ? agentAdapter.getCurrentAgent() : agentId;
       const card = buildModeSelectCard(
-        agents.map((a) => ({ name: a.id, displayName: a.name, description: a.description })),
+        agents.map((a) => ({ name: a.id, displayName: a.name, description: a.description, color: a.color })),
         current,
         context.adapterType
       );
@@ -450,7 +450,7 @@ export class CommandProcessor {
 
     const current = agentAdapter.getCurrentAgent ? agentAdapter.getCurrentAgent() : '';
     const card = buildModeSelectCard(
-      agents.map((a) => ({ name: a.id, displayName: a.name, description: a.description })),
+      agents.map((a) => ({ name: a.id, displayName: a.name, description: a.description, color: a.color })),
       current,
       context.adapterType
     );

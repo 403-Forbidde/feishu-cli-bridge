@@ -17,6 +17,7 @@ export interface AgentInfo {
   name: string;
   displayName?: string;
   description?: string;
+  color?: string;
 }
 
 /** 模型信息 */
@@ -75,34 +76,37 @@ export function buildModeSelectCard(
   };
 
   const getLabel = (a: AgentInfo): string => AGENT_NAME_MAP[a.name] || a.displayName || a.name;
+  const getColor = (a: AgentInfo | undefined): string => a?.color || 'green';
 
   const currentInfo = agents.find((a) => a.name === currentAgent);
   const currentLabel = currentInfo ? getLabel(currentInfo) : currentAgent;
   const currentDesc = currentInfo ? (AGENT_DESC_MAP[currentInfo.name] || currentInfo.description || '') : '';
+  const currentColor = getColor(currentInfo);
 
-  // ── 当前激活区块（绿色高亮，无切换按钮）─────────────────────────────
+  // ── 当前激活区块（按 agent 自定义颜色高亮，无切换按钮）─────────────────
   elements.push({
     tag: 'markdown',
     content: "<font color='grey'>当前激活</font>",
   });
   elements.push({
     tag: 'markdown',
-    content: `<font color='green'>🟢 **${currentLabel}**</font>\n${currentDesc}`,
+    content: `<font color='${currentColor}'>🟢 **${currentLabel}**</font>\n${currentDesc}`,
   });
   elements.push({ tag: 'hr' });
 
-  // ── 其余 agent：名称 + 描述 + 醒目蓝色切换按钮 ───────────────────────
+  // ── 其余 agent：名称（自定义颜色）+ 描述 + 醒目蓝色切换按钮 ───────────
   for (const agent of agents) {
     const name = agent.name;
     const label = getLabel(agent);
     const desc = AGENT_DESC_MAP[name] || agent.description || '';
+    const color = getColor(agent);
     if (name === currentAgent) {
       continue;
     }
 
     elements.push({
       tag: 'markdown',
-      content: `**${label}**\n<font color='grey'>${desc}</font>`,
+      content: `<font color='${color}'>**${label}**</font>\n<font color='grey'>${desc}</font>`,
     });
     elements.push({
       tag: 'button',

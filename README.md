@@ -86,7 +86,7 @@
 HTTP/SSE 方式，自动启动并管理 `opencode serve`，自动预授权外部目录访问（无头模式工具调用不阻塞）
 
 ### 🎭 **Agent 模式**
-内置 Build / Plan 模式；自动检测 oh-my-openagent，已安装时切换为 7 个专业 Agent，`/mode` 卡片一键切换
+内置 Build / Plan 模式；自动检测 oh-my-openagent，已安装时展示 4 个主编排 Agent（Sisyphus / Hephaestus / Prometheus / Atlas），`/mode` 卡片带品牌色一键切换
 
 ### 🔀 **模型切换**
 `/model` 卡片展示 `config.yaml` 中配置的模型列表，点击按钮即时切换，无需重启

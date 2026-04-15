@@ -456,7 +456,7 @@ export class OpenCodeTUICommands extends TUIBaseCommand {
     const current = this.adapter.getCurrentAgent ? this.adapter.getCurrentAgent() : 'build';
 
     const card = buildModeSelectCard(
-      agents.map((a) => ({ name: a.id, displayName: a.name, description: a.description })),
+      agents.map((a) => ({ name: a.id, displayName: a.name, description: a.description, color: a.color })),
       current,
       context.cliType
     );
@@ -473,7 +473,7 @@ export class OpenCodeTUICommands extends TUIBaseCommand {
     const agents = this.adapter.listAgents ? await this.adapter.listAgents() : [];
 
     const card = buildModeSelectCard(
-      agents.map((a) => ({ name: a.id, displayName: a.name, description: a.description })),
+      agents.map((a) => ({ name: a.id, displayName: a.name, description: a.description, color: a.color })),
       agentId,
       context.cliType
     );

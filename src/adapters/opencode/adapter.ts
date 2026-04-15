@@ -59,17 +59,16 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
     plan: { name: 'Plan · 规划', description: '只读模式，用于分析代码和制定方案，不会修改文件' },
   };
 
-  private readonly OHM_AGENTS: Record<string, { name: string; description: string }> = {
-    sisyphus: { name: 'Sisyphus · 总协调', description: '主协调者，并行调度其他 agent，驱动任务完成' },
-    hephaestus: { name: 'Hephaestus · 深度工作', description: '自主深度工作者，端到端探索和执行代码任务' },
-    prometheus: { name: 'Prometheus · 战略规划', description: '动手前先与你确认任务范围和策略' },
-    oracle: { name: 'Oracle · 架构调试', description: '架构设计与调试专家' },
-    librarian: { name: 'Librarian · 文档搜索', description: '文档查找与代码搜索专家' },
-    explore: { name: 'Explore · 快速探索', description: '快速代码库 grep 与文件浏览' },
-    multimodal_looker: { name: 'Multimodal Looker · 视觉分析', description: '图片与多模态内容分析' },
+  // oh-my-openagent 4 个主编排 agent（按 Tab 键切换的顺序）
+  // 注意：飞书卡片 Markdown 的 <font color='...'> 只支持预定义命名色，不支持 HEX
+  private readonly OHM_AGENTS: Record<string, { name: string; description: string; color: string }> = {
+    sisyphus: { name: 'Sisyphus · 总协调', description: '主协调者，并行调度其他 agent，驱动任务完成', color: 'turquoise' },
+    hephaestus: { name: 'Hephaestus · 深度工作', description: '自主深度工作者，端到端探索和执行代码任务', color: 'orange' },
+    prometheus: { name: 'Prometheus · 战略规划', description: '动手前先与你确认任务范围和策略', color: 'red' },
+    atlas: { name: 'Atlas · 全局导航', description: '全局导航与上下文管理专家', color: 'green' },
   };
 
-  private readonly OHM_SIGNATURE = new Set(['sisyphus', 'hephaestus', 'prometheus']);
+  private readonly OHM_SIGNATURE = new Set(['sisyphus', 'hephaestus', 'prometheus', 'atlas']);
 
   constructor(config: AdapterConfig) {
     super(config);
@@ -492,22 +491,26 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
       );
 
       if (hasOhmSignature) {
-        // 返回 OHM agents，并映射为统一格式
-        return agents
-          .filter((a) => {
-            const normalized = this.normalizeAgentName(a.name);
-            return Object.keys(this.OHM_AGENTS).some((key) => normalized.includes(key));
-          })
-          .map((a) => {
-            const normalized = this.normalizeAgentName(a.name);
-            const matchedKey = Object.keys(this.OHM_AGENTS).find((key) => normalized.includes(key));
-            const display = matchedKey ? this.OHM_AGENTS[matchedKey] : undefined;
-            return {
-              id: a.name,
-              name: display?.name || this.cleanAgentName(a.name),
-              description: display?.description || a.description || '',
-            };
-          });
+        // oh-my-openagent 环境：只返回 4 个主编排 agent，并固定顺序
+        const normalizedAgents = agents.map((a) => ({
+          raw: a,
+          normalized: this.normalizeAgentName(a.name),
+        }));
+
+        const result: Array<{ id: string; name: string; description: string; color: string }> = [];
+        for (const key of Object.keys(this.OHM_AGENTS)) {
+          const found = normalizedAgents.find((na) => na.normalized.includes(key));
+          if (found) {
+            const display = this.OHM_AGENTS[key];
+            result.push({
+              id: found.raw.name,
+              name: display.name,
+              description: display.description,
+              color: display.color,
+            });
+          }
+        }
+        return result;
       }
 
       // 非 OHM 环境：返回所有非隐藏的 primary agents

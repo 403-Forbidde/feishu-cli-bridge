@@ -24,6 +24,10 @@
   - 会话列表卡片新增 `+additions / -deletions · files` 变更统计
 - **2026-04-15** - Agent 名称规范化
   - `listAgents()` 添加 `normalizeAgentName()` 和 `cleanAgentName()` 处理零宽字符
+- **2026-04-15** - oh-my-openagent `/mode` 适配
+  - 检测到 oh-my-openagent 时 `/mode` 仅展示 4 个主编排 Agent（Sisyphus、Hephaestus、Prometheus、Atlas）
+  - 为每个 Agent 绑定品牌色卡片展示（turquoise / orange / red / green）
+  - `AgentInfo` 扩展 `color` 字段，`buildModeSelectCard` 支持按自定义颜色渲染名称
 
 ### 修复
 
