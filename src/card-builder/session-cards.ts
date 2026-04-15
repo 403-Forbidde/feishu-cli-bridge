@@ -8,6 +8,13 @@
 import type { CardElement, FeishuCard } from './base.js';
 import { homedir } from 'os';
 
+/** 会话统计摘要 */
+export interface SessionSummary {
+  additions: number;
+  deletions: number;
+  files: number;
+}
+
 /** 会话数据 */
 export interface SessionData {
   sessionId: string;
@@ -16,6 +23,7 @@ export interface SessionData {
   createdAt: number;
   updatedAt: number;
   isCurrent: boolean;
+  summary?: SessionSummary;
 }
 
 /** 新建会话卡片选项 */
@@ -198,6 +206,11 @@ export function buildSessionListCard(
           })
         : '';
 
+      // 会话统计摘要
+      const summaryLine = session.summary
+        ? `\n<font color='grey'>📊 +${session.summary.additions.toLocaleString()} / -${session.summary.deletions.toLocaleString()} · ${session.summary.files} files</font>`
+        : '';
+
       // 第一行：状态图标 + ID + 时间
       const statusIcon = isCurrent ? '🟢' : '⚪';
       let firstLine = `${statusIcon} **${session.displayId}**`;
@@ -219,7 +232,7 @@ export function buildSessionListCard(
               elements: [
                 {
                   tag: 'markdown',
-                  content: `📋 ${session.title}\n<font color='green'>✓ 当前会话</font>`,
+                  content: `📋 ${session.title}\n<font color='green'>✓ 当前会话</font>${summaryLine}`,
                 },
               ],
             },
@@ -254,7 +267,7 @@ export function buildSessionListCard(
               tag: 'column',
               width: 'weighted',
               weight: 3,
-              elements: [{ tag: 'markdown', content: `📋 ${session.title}` }],
+              elements: [{ tag: 'markdown', content: `📋 ${session.title}${summaryLine}` }],
             },
             {
               tag: 'column',

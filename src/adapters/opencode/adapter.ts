@@ -359,6 +359,12 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
             limit?: { context?: number };
             capabilities?: ModelInfo['capabilities'];
             status?: string;
+            // OpenCode 本地缓存中的扁平化能力字段
+            reasoning?: boolean;
+            attachment?: boolean;
+            temperature?: boolean;
+            tool_call?: boolean;
+            modalities?: { input?: string[]; output?: string[] };
           }
         >;
       }
@@ -375,12 +381,37 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
       // 只保留官方标记为免费的模型（-free 后缀）或 opencode 原生免费模型 big-pickle
       const isOfficialFree = info.id.endsWith('-free') || info.id === 'big-pickle';
       if (cost.input === 0 && cost.output === 0 && info.status !== 'deprecated' && isOfficialFree) {
+        // 缓存文件中的能力是扁平化字段，需要映射到 capabilities 对象
+        const capabilities: ModelInfo['capabilities'] = info.capabilities || {
+          temperature: info.temperature,
+          reasoning: info.reasoning,
+          attachment: info.attachment,
+          toolcall: info.tool_call,
+          input: info.modalities?.input
+            ? {
+                text: info.modalities.input.includes('text'),
+                image: info.modalities.input.includes('image'),
+                audio: info.modalities.input.includes('audio'),
+                video: info.modalities.input.includes('video'),
+                pdf: info.modalities.input.includes('pdf'),
+              }
+            : undefined,
+          output: info.modalities?.output
+            ? {
+                text: info.modalities.output.includes('text'),
+                image: info.modalities.output.includes('image'),
+                audio: info.modalities.output.includes('audio'),
+                video: info.modalities.output.includes('video'),
+                pdf: info.modalities.output.includes('pdf'),
+              }
+            : undefined,
+        };
         freeModels.push({
           id: `opencode/${info.id}`,
           name: info.name || info.id,
           provider: 'opencode',
           contextWindow: info.limit?.context || 0,
-          capabilities: info.capabilities,
+          capabilities,
         });
       }
     }

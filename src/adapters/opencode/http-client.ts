@@ -147,6 +147,12 @@ export class OpenCodeHTTPClient {
         time?: { created?: number; updated?: number };
         slug?: string;
         directory?: string;
+        version?: string;
+        summary?: {
+          additions: number;
+          deletions: number;
+          files: number;
+        };
       }
 
       // 响应可能是数组或 {items: [...]}
@@ -166,6 +172,8 @@ export class OpenCodeHTTPClient {
           updated_at: s.time?.updated ? Number(s.time.updated) / 1000 : undefined,
           slug: String(s.slug || ''),
           directory: s.directory ? String(s.directory) : undefined,
+          version: s.version,
+          summary: s.summary,
         })),
       };
     } catch (error) {

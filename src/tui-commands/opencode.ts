@@ -177,6 +177,7 @@ export class OpenCodeTUICommands extends TUIBaseCommand {
         createdAt: session.createdAt || 0,
         updatedAt: session.updatedAt || 0,
         isCurrent: session.id === currentSessionId,
+        summary: session.summary,
       }));
 
       const card = buildSessionListCard(
