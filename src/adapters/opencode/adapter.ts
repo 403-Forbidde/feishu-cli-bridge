@@ -65,7 +65,7 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
     sisyphus: { name: 'Sisyphus · 总协调', description: '主协调者，并行调度其他 agent，驱动任务完成', color: 'turquoise' },
     hephaestus: { name: 'Hephaestus · 深度工作', description: '自主深度工作者，端到端探索和执行代码任务', color: 'orange' },
     prometheus: { name: 'Prometheus · 战略规划', description: '动手前先与你确认任务范围和策略', color: 'red' },
-    atlas: { name: 'Atlas · 全局导航', description: '全局导航与上下文管理专家', color: 'green' },
+    atlas: { name: 'Atlas · 计划执行', description: '计划执行总指挥，系统化执行 Prometheus 生成的计划，管理任务调度与状态跟踪', color: 'green' },
   };
 
   private readonly OHM_SIGNATURE = new Set(['sisyphus', 'hephaestus', 'prometheus', 'atlas']);
