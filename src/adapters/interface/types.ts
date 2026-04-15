@@ -23,6 +23,15 @@ export interface Message {
 }
 
 /**
+ * 会话统计摘要
+ */
+export interface SessionSummary {
+  additions: number;
+  deletions: number;
+  files: number;
+}
+
+/**
  * 会话信息
  */
 export interface SessionInfo {
@@ -32,6 +41,8 @@ export interface SessionInfo {
   updatedAt?: number;
   workingDir: string;
   slug?: string;
+  version?: string;
+  summary?: SessionSummary;
 }
 
 /**
@@ -44,6 +55,30 @@ export interface AgentInfo {
 }
 
 /**
+ * 模型能力信息
+ */
+export interface ModelCapabilities {
+  temperature?: boolean;
+  reasoning?: boolean;
+  attachment?: boolean;
+  toolcall?: boolean;
+  input?: {
+    text?: boolean;
+    image?: boolean;
+    audio?: boolean;
+    video?: boolean;
+    pdf?: boolean;
+  };
+  output?: {
+    text?: boolean;
+    image?: boolean;
+    audio?: boolean;
+    video?: boolean;
+    pdf?: boolean;
+  };
+}
+
+/**
  * 模型信息
  */
 export interface ModelInfo {
@@ -51,6 +86,7 @@ export interface ModelInfo {
   name: string;
   provider?: string;
   contextWindow?: number;
+  capabilities?: ModelCapabilities;
 }
 
 /**
@@ -62,6 +98,7 @@ export interface AdapterConfig {
   defaultModel: string;
   timeout: number;
   models: Array<{ id: string; name: string } | string>;
+  serverPassword?: string;
 }
 
 /**

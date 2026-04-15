@@ -279,13 +279,15 @@ export class OpenCodeSessionManager {
       }
 
       // 转换为内部格式
-      const allSessions = sessionsArray.map((s) => ({
+      const allSessions: OpenCodeSession[] = sessionsArray.map((s) => ({
         id: s.id,
         title: s.title,
         createdAt: s.created_at,
         updatedAt: s.updated_at,
         workingDir: s.directory || '',
         slug: s.slug,
+        version: s.version,
+        summary: s.summary,
       }));
 
       // 合并本地缓存中的会话（解决 OpenCode 列表不完整的问题）
@@ -307,29 +309,23 @@ export class OpenCodeSessionManager {
                 updatedAt: detail.created_at,
                 workingDir: detail.directory || dir,
                 slug: detail.slug,
+                version: detail.version,
+                summary: detail.summary,
               });
               logger.debug(`  Added from server detail: id="${detail.id?.slice(-8)}", dir="${detail.directory || dir}"`);
             } else {
               // 获取详情失败，使用本地缓存
               allSessions.push({
-                id: session.id,
-                title: session.title,
-                createdAt: session.createdAt,
-                updatedAt: session.updatedAt,
+                ...session,
                 workingDir: dir,
-                slug: session.slug,
               });
               logger.debug(`  Added from local cache (detail null): id="${session.id?.slice(-8)}", dir="${dir}"`);
             }
           } catch (e) {
             // 获取详情失败，使用本地缓存
             allSessions.push({
-              id: session.id,
-              title: session.title,
-              createdAt: session.createdAt,
-              updatedAt: session.updatedAt,
+              ...session,
               workingDir: dir,
-              slug: session.slug,
             });
             logger.debug(`  Added from local cache (detail error): id="${session.id?.slice(-8)}", dir="${dir}"`);
           }
@@ -396,6 +392,8 @@ export class OpenCodeSessionManager {
               createdAt: detail.created_at,
               workingDir: normalizedDir,
               slug: detail.slug,
+              version: detail.version,
+              summary: detail.summary,
             };
             this.sessions.set(normalizedDir, session);
             // 持久化会话缓存
@@ -535,6 +533,8 @@ export class OpenCodeSessionManager {
       createdAt: response.created_at,
       workingDir: workingDir,
       slug: response.slug,
+      version: response.version,
+      summary: response.summary,
     };
   }
 }

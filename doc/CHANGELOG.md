@@ -1,5 +1,34 @@
 # 更新日志
 
+## v0.3.1 - OpenCode 1.4.4 兼容优化版（2026-04-15）
+
+### 里程碑
+
+- **2026-04-15** - **feat: OpenCode 1.4.4 兼容性优化**
+  - 适配新版服务器 API 变化（`/global/health`、空 `/models`、Agent 名称零宽字符）
+  - `/model` 命令支持动态读取 `~/.cache/opencode/models.json` 中的 opencode 官方免费模型
+  - 严格过滤：仅显示 `status !== 'deprecated'` 且 ID 以 `-free` 结尾或 `big-pickle` 的免费模型
+
+### 新增功能
+
+- **2026-04-15** - OpenCode 服务器访问密码支持
+  - `OpenCodeConfig` 新增 `serverPassword?` 字段
+  - HTTP 客户端自动注入 `Authorization: Bearer` 请求头
+  - 服务器管理器启动时注入 `OPENCODE_SERVER_PASSWORD` 环境变量
+- **2026-04-15** - 模型能力标签展示
+  - `buildModelSelectCard()` 中显示 reasoning、attachment、toolcall 等能力标签
+- **2026-04-15** - 会话统计展示
+  - 会话列表卡片新增 `+additions / -deletions · files` 变更统计
+- **2026-04-15** - Agent 名称规范化
+  - `listAgents()` 添加 `normalizeAgentName()` 和 `cleanAgentName()` 处理零宽字符
+
+### 修复
+
+- **2026-04-15** - 修复 OpenCode 1.4.4 `/models` 端点返回空数组导致模型列表无法获取的问题
+- **2026-04-15** - 修复 `/model` 卡片因模型数量过多导致 JSON 过大触发飞书 400 错误的问题
+
+---
+
 ## v0.3.0 - Claude Code 适配器支持版（2026-04-03）
 
 ### 里程碑

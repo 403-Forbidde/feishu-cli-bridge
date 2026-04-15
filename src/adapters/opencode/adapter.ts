@@ -6,6 +6,10 @@
  * 完全参考 Python 实现: core.py
  */
 
+import { readFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import path from 'node:path';
+
 import type { Attachment, Message, ModelInfo, SessionInfo } from '../interface/types.js';
 import { BaseCLIAdapter } from '../interface/base-adapter.js';
 import { StreamChunkType, type StreamChunk, type TokenStats } from '../../core/types/stream.js';
@@ -77,6 +81,7 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
       defaultAgent: 'build',
       command: config.command,
       timeout: config.timeout,
+      serverPassword: config.serverPassword,
     };
 
     // 从配置中解析端口和主机名
@@ -295,28 +300,92 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
 
   /**
    * 列出可用模型
+   *
+   * 策略：
+   * 1. 从 config.yaml 的 cli.opencode.models 读取用户手动配置的模型（始终优先）
+   * 2. 从 OpenCode 本地缓存 (~/.cache/opencode/models.json) 读取 opencode 官方 provider 下的免费模型
+   * 3. 合并并去重（config 中手动配置的模型排在前面）
+   *
+   * 不调用 OpenCode API，不修改配置文件，free 模型随缓存实时更新。
    */
   async listModels(_provider?: string): Promise<ModelInfo[]> {
-    await this.ensureServer();
+    const configModels = await super.listModels();
 
     try {
-      const models = await this.httpClient.listModels();
-      // 如果 API 返回空数组，使用配置中的模型列表作为后备
-      if (!models || models.length === 0) {
-        logger.debug('API returned empty models list, falling back to config');
-        return super.listModels();
+      const freeModels = await this.loadOpenCodeFreeModelsFromCache();
+      if (freeModels.length === 0) {
+        return configModels;
       }
-      return models.map((m) => ({
-        id: m.id,
-        name: m.name,
-        provider: m.provider,
-        contextWindow: m.contextWindow,
-      }));
+
+      // 去重：config 中已配置的模型优先保留
+      const existingIds = new Set(configModels.map((m) => m.id));
+      const merged: ModelInfo[] = [...configModels];
+      for (const m of freeModels) {
+        if (!existingIds.has(m.id)) {
+          merged.push(m);
+          existingIds.add(m.id);
+        }
+      }
+      return merged;
     } catch (error) {
-      logger.error({ err: error }, 'Failed to list models');
-      // 返回配置中的模型列表作为后备
-      return super.listModels();
+      logger.warn({ err: error }, '加载 OpenCode 免费模型缓存失败，仅使用 config 配置');
+      return configModels;
     }
+  }
+
+  /**
+   * 从 OpenCode 本地缓存读取 opencode provider 的免费模型
+   * 判定标准：provider === 'opencode' 且 cost.input === 0 且 cost.output === 0
+   */
+  private async loadOpenCodeFreeModelsFromCache(): Promise<ModelInfo[]> {
+    const cachePath = path.join(homedir(), '.cache', 'opencode', 'models.json');
+    let raw: string;
+    try {
+      raw = await readFile(cachePath, 'utf-8');
+    } catch {
+      return [];
+    }
+
+    const data = JSON.parse(raw) as Record<
+      string,
+      {
+        models?: Record<
+          string,
+          {
+            id: string;
+            name?: string;
+            providerID?: string;
+            cost?: { input?: number; output?: number };
+            limit?: { context?: number };
+            capabilities?: ModelInfo['capabilities'];
+            status?: string;
+          }
+        >;
+      }
+    >;
+
+    const opencodeProvider = data['opencode'];
+    if (!opencodeProvider?.models) {
+      return [];
+    }
+
+    const freeModels: ModelInfo[] = [];
+    for (const info of Object.values(opencodeProvider.models)) {
+      const cost = info.cost || {};
+      // 只保留官方标记为免费的模型（-free 后缀）或 opencode 原生免费模型 big-pickle
+      const isOfficialFree = info.id.endsWith('-free') || info.id === 'big-pickle';
+      if (cost.input === 0 && cost.output === 0 && info.status !== 'deprecated' && isOfficialFree) {
+        freeModels.push({
+          id: `opencode/${info.id}`,
+          name: info.name || info.id,
+          provider: 'opencode',
+          contextWindow: info.limit?.context || 0,
+          capabilities: info.capabilities,
+        });
+      }
+    }
+
+    return freeModels;
   }
 
   /**
@@ -351,23 +420,27 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
     try {
       const agents = await this.httpClient.listAgents();
 
-      // 检查返回的 agents 是否包含 OHM 签名
-      const namesLower = new Set(agents.map((a) => a.name?.toLowerCase() || ''));
-      const hasOhmSignature = [...this.OHM_SIGNATURE].some((sig) => namesLower.has(sig));
+      // OpenCode 1.4.4+ 的 agent name 可能包含零宽字符且格式变化
+      // 例如 "\u200bSisyphus - Ultraworker"，需要进行规范化匹配
+      const normalizedNames = agents.map((a) => this.normalizeAgentName(a.name));
+      const hasOhmSignature = [...this.OHM_SIGNATURE].some((sig) =>
+        normalizedNames.some((n) => n.includes(sig))
+      );
 
       if (hasOhmSignature) {
         // 返回 OHM agents，并映射为统一格式
         return agents
           .filter((a) => {
-            const key = a.name?.toLowerCase() || '';
-            return key in this.OHM_AGENTS;
+            const normalized = this.normalizeAgentName(a.name);
+            return Object.keys(this.OHM_AGENTS).some((key) => normalized.includes(key));
           })
           .map((a) => {
-            const key = a.name?.toLowerCase() || '';
-            const display = this.OHM_AGENTS[key];
+            const normalized = this.normalizeAgentName(a.name);
+            const matchedKey = Object.keys(this.OHM_AGENTS).find((key) => normalized.includes(key));
+            const display = matchedKey ? this.OHM_AGENTS[matchedKey] : undefined;
             return {
               id: a.name,
-              name: display?.name || a.name,
+              name: display?.name || this.cleanAgentName(a.name),
               description: display?.description || a.description || '',
             };
           });
@@ -378,7 +451,7 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
         .filter((a) => !a.hidden && (a.mode === 'primary' || !a.mode))
         .map((a) => ({
           id: a.name,
-          name: a.name,
+          name: this.cleanAgentName(a.name),
           description: a.description || '',
         }));
     } catch (error) {
@@ -390,6 +463,21 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
         description: value.description,
       }));
     }
+  }
+
+  /**
+   * 规范化 agent 名称（去除零宽字符并转小写，用于匹配）
+   * OpenCode 1.4.4+ 的 agent name 可能包含 \u200b 等零宽字符
+   */
+  private normalizeAgentName(name?: string): string {
+    return (name || '').replace(/[\u200b\u200c\u200d\ufeff]/g, '').toLowerCase().trim();
+  }
+
+  /**
+   * 清理 agent 名称（去除零宽字符，用于展示）
+   */
+  private cleanAgentName(name?: string): string {
+    return (name || '').replace(/[\u200b\u200c\u200d\ufeff]/g, '').trim();
   }
 
   /**

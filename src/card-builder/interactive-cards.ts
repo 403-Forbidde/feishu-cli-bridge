@@ -25,6 +25,14 @@ export interface ModelInfo {
   name?: string;
   provider?: string;
   model?: string;
+  capabilities?: {
+    temperature?: boolean;
+    reasoning?: boolean;
+    attachment?: boolean;
+    toolcall?: boolean;
+    input?: { image?: boolean };
+    output?: { text?: boolean };
+  };
 }
 
 /**
@@ -120,6 +128,24 @@ export function buildModeSelectCard(
 }
 
 /**
+ * 格式化模型能力标签
+ */
+function formatModelCapabilities(
+  capabilities?: ModelInfo['capabilities']
+): string {
+  if (!capabilities) return '';
+
+  const tags: string[] = [];
+  if (capabilities.attachment || capabilities.input?.image) tags.push('🖼️ 图片');
+  if (capabilities.reasoning) tags.push('🧠 推理');
+  if (capabilities.toolcall) tags.push('🔧 工具');
+
+  return tags.length > 0
+    ? `\n<font color='grey'>${tags.join(' · ')}</font>`
+    : '';
+}
+
+/**
  * 构建模型切换卡片（与 Agent 模式卡片风格一致）
  *
  * 当前模型用绿色高亮标识，其余模型显示名称 + ID + 切换按钮。
@@ -146,7 +172,7 @@ export function buildModelSelectCard(
   });
   elements.push({
     tag: 'markdown',
-    content: `<font color='green'>🟢 **${currentName}**</font>\n<font color='grey'>\`${currentModel}\`</font>`,
+    content: `<font color='green'>🟢 **${currentName}**</font>${formatModelCapabilities(currentInfo?.capabilities)}\n<font color='grey'>\`${currentModel}\`</font>`,
   });
   elements.push({ tag: 'hr' });
 
@@ -160,7 +186,7 @@ export function buildModelSelectCard(
     const name = model.name || fullId;
     elements.push({
       tag: 'markdown',
-      content: `**${name}**\n<font color='grey'>\`${fullId}\`</font>`,
+      content: `**${name}**${formatModelCapabilities(model.capabilities)}\n<font color='grey'>\`${fullId}\`</font>`,
     });
     elements.push({
       tag: 'button',

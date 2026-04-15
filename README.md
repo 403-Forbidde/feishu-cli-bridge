@@ -10,7 +10,7 @@
 
 <!-- Badges -->
 <p>
-  <a href="#-更新日志"><img src="https://img.shields.io/badge/version-v0.3.0-blue.svg" alt="Version"></a>
+  <a href="#-更新日志"><img src="https://img.shields.io/badge/version-v0.3.1-blue.svg" alt="Version"></a>
   <a href="#-许可证"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg" alt="Platform">
   <img src="https://img.shields.io/badge/built%20with-TypeScript%205.0+-3178C6.svg" alt="TypeScript">
@@ -694,15 +694,15 @@ npm run test
 
 ## 📝 更新日志
 
-### v0.3.0 (2026-04-03) — Claude Code 适配器支持（当前版本）
+### v0.3.1 (2026-04-15) — OpenCode 1.4.4 兼容优化（当前版本）
 
-- 🤖 **Claude Code 支持** — 全新 Claude Code CLI 适配器，生产就绪
-- 🔄 **双 CLI 支持** — 同时支持 OpenCode 与 Claude Code，自由切换
-- 📝 **文件引用** — 支持 `@filepath` 语法引用图片/文件
-- 🎯 **模型动态检测** — 自动识别 Claude Code 实际使用的模型（支持 Kimi 等第三方 Provider）
-- 🧪 **全面测试** — 61 个单元测试覆盖 Claude Code 适配器
+- 🚀 **OpenCode 1.4.4 兼容** — 适配新版服务器 API（健康检查、会话统计、Agent 名称规范化）
+- 🆓 **免费模型动态同步** — `/model` 命令自动从本地缓存读取 opencode 官方免费模型列表
+- 🔒 **服务器密码支持** — 支持 `OPENCODE_SERVER_PASSWORD` 环境变量访问受保护的服务端点
+- 🏷️ **模型能力标签** — 模型选择卡片显示推理、附件、工具调用等能力标识
+- 📊 **会话统计展示** — 会话列表卡片显示代码变更统计（新增/删除行数、文件数）
 
-### v0.2.1 (2026-04-02) — TypeScript 重写
+（更多历史版本见 [doc/CHANGELOG.md](./doc/CHANGELOG.md)）
 
 - 🔧 **全面迁移** — 从 Python 迁移至 TypeScript/Node.js
 - 🏗️ **架构升级** — 分层架构：Core → Platform → Adapter

@@ -45,6 +45,12 @@ export interface CreateSessionResponse {
   created_at: number;
   slug: string;
   directory?: string;
+  version?: string;
+  summary?: {
+    additions: number;
+    deletions: number;
+    files: number;
+  };
 }
 
 /**
@@ -58,6 +64,12 @@ export interface ListSessionsResponse {
     updated_at?: number;
     slug: string;
     directory?: string;
+    version?: string;
+    summary?: {
+      additions: number;
+      deletions: number;
+      files: number;
+    };
   }>;
 }
 
@@ -128,6 +140,8 @@ export interface OpenCodeConfig {
   command: string;
   /** 超时时间（秒） */
   timeout: number;
+  /** 服务器访问密码（可选） */
+  serverPassword?: string;
 }
 
 /**
@@ -161,6 +175,8 @@ export interface ServerHealth {
   healthy: boolean;
   /** 响应时间（ms） */
   responseTime?: number;
+  /** OpenCode Server 版本号 */
+  version?: string;
   /** 错误信息 */
   error?: string;
 }
@@ -173,18 +189,54 @@ export interface ProviderInfo {
   id: string;
   /** Provider 名称 */
   name?: string;
+  /** Provider 来源 */
+  source?: string;
+  /** 所需环境变量 */
+  env?: string[];
   /** 模型列表 */
   models?: Record<string, ModelLimitInfo>;
 }
 
 /**
  * 模型限制信息
+ * OpenCode 1.4.4+ /provider 端点返回的模型详情
  */
 export interface ModelLimitInfo {
+  /** 模型 ID */
+  id?: string;
+  /** Provider ID */
+  providerID?: string;
+  /** 模型展示名称 */
+  name?: string;
+  /** 模型状态 */
+  status?: string;
   /** 限制信息 */
   limit?: {
     /** 上下文窗口大小 */
     context?: number;
+    /** 最大输出 tokens */
+    output?: number;
+  };
+  /** 模型能力 */
+  capabilities?: {
+    temperature?: boolean;
+    reasoning?: boolean;
+    attachment?: boolean;
+    toolcall?: boolean;
+    input?: {
+      text?: boolean;
+      image?: boolean;
+      audio?: boolean;
+      video?: boolean;
+      pdf?: boolean;
+    };
+    output?: {
+      text?: boolean;
+      image?: boolean;
+      audio?: boolean;
+      video?: boolean;
+      pdf?: boolean;
+    };
   };
 }
 

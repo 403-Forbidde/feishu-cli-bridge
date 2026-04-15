@@ -13,6 +13,8 @@ export interface CLIConfig {
   contextWindow?: number | string;  // 'auto' | number
   permissionMode?: string;
   allowedTools?: string[];
+  // OpenCode 特有配置（可选）
+  serverPassword?: string;
 }
 
 // 飞书配置

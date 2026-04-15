@@ -34,13 +34,19 @@ export class OpenCodeHTTPClient {
       return;
     }
 
+    // 构建请求头
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (this.config.serverPassword) {
+      headers['Authorization'] = `Bearer ${this.config.serverPassword}`;
+    }
+
     // 创建 axios 实例，启用 keepAlive 连接池
     this.client = axios.create({
       baseURL: this.baseURL,
       timeout: this.config.timeout * 1000,
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       httpAgent: new http.Agent({
         keepAlive: true,
         maxSockets: 10,
@@ -90,6 +96,7 @@ export class OpenCodeHTTPClient {
           return {
             healthy: true,
             responseTime: Date.now() - startTime,
+            version: (response.data as { version?: string }).version,
           };
         }
       } catch {
@@ -239,7 +246,7 @@ export class OpenCodeHTTPClient {
   }
 
   /**
-   * 获取可用模型列表
+   * 获取可用模型列表（从 /models 端点）
    */
   async listModels(): Promise<ModelInfo[]> {
     this.ensureInitialized();
@@ -249,6 +256,45 @@ export class OpenCodeHTTPClient {
       return response.data.models || [];
     } catch (error) {
       throw this.wrapError('Failed to list models', error);
+    }
+  }
+
+  /**
+   * 从 /provider 端点获取所有模型（包含能力信息）
+   *
+   * 注意：/provider 返回的是 OpenCode 全局模型注册表，可能包含大量模型。
+   * 建议在上层根据 provider.source / env 等字段过滤后再展示。
+   */
+  async listProviderModels(): Promise<ModelInfo[]> {
+    this.ensureInitialized();
+
+    try {
+      const providers = await this.getProviders();
+      const models: ModelInfo[] = [];
+
+      for (const provider of providers) {
+        if (!provider.models) continue;
+        for (const [modelKey, info] of Object.entries(provider.models)) {
+          // 跳过非活跃模型
+          if (info.status && info.status !== 'active') continue;
+
+          const modelId = info.id || modelKey;
+          const providerId = info.providerID || provider.id;
+          const fullId = providerId ? `${providerId}/${modelId}` : modelId;
+
+          models.push({
+            id: fullId,
+            name: info.name || modelId,
+            provider: provider.name || provider.id || info.providerID || '',
+            contextWindow: info.limit?.context || 0,
+            capabilities: info.capabilities,
+          });
+        }
+      }
+
+      return models;
+    } catch (error) {
+      throw this.wrapError('Failed to list provider models', error);
     }
   }
 

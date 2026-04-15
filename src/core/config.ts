@@ -155,6 +155,7 @@ function loadFromEnv(): Config {
         defaultModel: cleanString(process.env.OPENCODE_MODEL) || 'kimi',
         timeout: parseIntEnv(process.env.OPENCODE_TIMEOUT, DEFAULTS.CLI_TIMEOUT),
         models: [],
+        serverPassword: cleanString(process.env.OPENCODE_SERVER_PASSWORD) || '',
       },
       codex: {
         enabled: parseBool(process.env.CODEX_ENABLED, false),

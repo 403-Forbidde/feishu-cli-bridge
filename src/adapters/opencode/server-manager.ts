@@ -28,6 +28,7 @@ export interface ServerManagerOptions {
 export class OpenCodeServerManager {
   private process: ChildProcess | null = null;
   private isRunning = false;
+  private serverVersion: string | null = null;
   private config: OpenCodeConfig;
   private httpClient: OpenCodeHTTPClient;
 
@@ -50,7 +51,12 @@ export class OpenCodeServerManager {
     const health = await this.httpClient.checkHealth();
     if (health.healthy) {
       this.isRunning = true;
-      logger.info('OpenCode server already running');
+      this.serverVersion = health.version || null;
+      logger.info(
+        health.version
+          ? `OpenCode server v${health.version} already running`
+          : 'OpenCode server already running'
+      );
       return true;
     }
 
@@ -62,11 +68,16 @@ export class OpenCodeServerManager {
     }
 
     // 准备环境变量
-    const env = {
+    const env: NodeJS.ProcessEnv = {
       ...process.env,
       // 预授权外部目录访问，防止无头模式下 TUI 对话框阻塞
       OPENCODE_PERMISSION: JSON.stringify({ external_directory: 'allow' }),
     };
+
+    // OpenCode 1.4.4+ 支持服务器访问密码
+    if (this.config.serverPassword) {
+      env.OPENCODE_SERVER_PASSWORD = this.config.serverPassword;
+    }
 
     // 启动子进程
     const args = ['serve', '--port', String(this.config.serverPort)];
@@ -123,8 +134,11 @@ export class OpenCodeServerManager {
         const health = await this.httpClient.checkHealth();
         if (health.healthy) {
           this.isRunning = true;
+          this.serverVersion = health.version || null;
           logger.info(
-            `OpenCode server started successfully in ${Date.now() - startTime}ms`
+            health.version
+              ? `OpenCode server v${health.version} started successfully in ${Date.now() - startTime}ms`
+              : `OpenCode server started successfully in ${Date.now() - startTime}ms`
           );
           return true;
         }
@@ -190,6 +204,13 @@ export class OpenCodeServerManager {
    */
   getIsRunning(): boolean {
     return this.isRunning;
+  }
+
+  /**
+   * 获取 OpenCode Server 版本号
+   */
+  getServerVersion(): string | null {
+    return this.serverVersion;
   }
 
   /**

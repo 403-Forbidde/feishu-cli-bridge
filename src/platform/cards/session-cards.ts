@@ -106,6 +106,11 @@ export function buildSessionListCard(
         updatedStr = `${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
       }
 
+      // 会话统计摘要（OpenCode 1.4.4+）
+      const summaryLine = session.summary
+        ? `\n<font color='grey'>📊 +${session.summary.additions.toLocaleString()} / -${session.summary.deletions.toLocaleString()} · ${session.summary.files} files</font>`
+        : '';
+
       // 第一行：状态图标 + ID + 创建时间
       const statusIcon = isCurrent ? '🟢' : isDeleting ? '🔴' : '⚪';
       let firstLine = `${statusIcon} **${displayId}**`;
@@ -130,7 +135,7 @@ export function buildSessionListCard(
               weight: 3,
               elements: [{
                 tag: 'markdown',
-                content: `📋 ${title}\n<font color='red'>⚠️ 确认永久删除？</font>`,
+                content: `📋 ${title}\n<font color='red'>⚠️ 确认永久删除？</font>${summaryLine}`,
               }],
             },
             {
@@ -176,7 +181,7 @@ export function buildSessionListCard(
               weight: 3,
               elements: [{
                 tag: 'markdown',
-                content: `📋 ${title}\n<font color='green'>✓ 当前会话</font>`,
+                content: `📋 ${title}\n<font color='green'>✓ 当前会话</font>${summaryLine}`,
               }],
             },
             {
@@ -209,7 +214,7 @@ export function buildSessionListCard(
               tag: 'column',
               width: 'weighted',
               weight: 3,
-              elements: [{ tag: 'markdown', content: `📋 ${title}` }],
+              elements: [{ tag: 'markdown', content: `📋 ${title}${summaryLine}` }],
             },
             {
               tag: 'column',
