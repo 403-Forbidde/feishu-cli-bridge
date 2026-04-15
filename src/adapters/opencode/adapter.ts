@@ -309,17 +309,50 @@ export class OpenCodeAdapter extends BaseCLIAdapter {
    * 不调用 OpenCode API，不修改配置文件，free 模型随缓存实时更新。
    */
   async listModels(_provider?: string): Promise<ModelInfo[]> {
-    const configModels = await super.listModels();
+    // 确保 HTTP 客户端已初始化，否则后续 listProviderModels 会失败
+    await this.ensureServer();
 
+    let configModels = await super.listModels();
+
+    // 1. 尝试从 /provider API 为 config 模型补充 capabilities
+    try {
+      const providerModels = await this.httpClient.listProviderModels();
+      const providerMap = new Map(providerModels.map((m) => [m.id, m]));
+
+      configModels = configModels.map((m) => {
+        const providerModel = providerMap.get(m.id);
+        if (providerModel && !m.capabilities) {
+          return {
+            ...providerModel,
+            name: m.name || providerModel.name,
+          };
+        }
+        return m;
+      });
+    } catch (error) {
+      logger.debug({ err: error }, '从 /provider 获取模型能力失败');
+    }
+
+    // 2. 从本地缓存读取免费模型，并补充 config 模型缺失的 capabilities
     try {
       const freeModels = await this.loadOpenCodeFreeModelsFromCache();
       if (freeModels.length === 0) {
         return configModels;
       }
 
-      // 去重：config 中已配置的模型优先保留
-      const existingIds = new Set(configModels.map((m) => m.id));
-      const merged: ModelInfo[] = [...configModels];
+      const freeMap = new Map(freeModels.map((m) => [m.id, m]));
+      const merged: ModelInfo[] = configModels.map((m) => {
+        const free = freeMap.get(m.id);
+        if (free && !m.capabilities) {
+          return {
+            ...free,
+            name: m.name || free.name,
+          };
+        }
+        return m;
+      });
+
+      const existingIds = new Set(merged.map((m) => m.id));
       for (const m of freeModels) {
         if (!existingIds.has(m.id)) {
           merged.push(m);

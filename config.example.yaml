@@ -53,6 +53,14 @@ cli:
     models:                             # /model 命令展示的常用模型列表
       - id: "kimi"
         name: "Kimi"
+        capabilities:                     # 可选：模型能力标签（不写则自动从 API/缓存获取）
+          reasoning: true
+          toolcall: true
+          input:
+            text: true
+            image: true
+          output:
+            text: true
       - id: "kimi-for-coding/kimi-k2-thinking"
         name: "Kimi K2 Thinking"
       - id: "opencode/mimo-v2-pro-free"

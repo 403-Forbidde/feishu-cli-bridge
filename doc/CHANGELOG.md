@@ -17,6 +17,9 @@
   - 服务器管理器启动时注入 `OPENCODE_SERVER_PASSWORD` 环境变量
 - **2026-04-15** - 模型能力标签展示
   - `buildModelSelectCard()` 中显示 reasoning、attachment、toolcall 等能力标签
+- **2026-04-15** - Claude Code 模型能力标签
+  - `ClaudeCodeAdapter.listModels()` 为内置模型补充 `capabilities`（推理、工具、识图）
+  - `auto` 模式及未知检测模型默认展示完整能力标签
 - **2026-04-15** - 会话统计展示
   - 会话列表卡片新增 `+additions / -deletions · files` 变更统计
 - **2026-04-15** - Agent 名称规范化
@@ -26,6 +29,13 @@
 
 - **2026-04-15** - 修复 OpenCode 1.4.4 `/models` 端点返回空数组导致模型列表无法获取的问题
 - **2026-04-15** - 修复 `/model` 卡片因模型数量过多导致 JSON 过大触发飞书 400 错误的问题
+- **2026-04-15** - 修复 OpenCode `/model` 卡片中"当前激活"模型不显示能力标签的问题
+  - 根因：`listModels()` 中 HTTP 客户端未初始化，`/provider` API 调用失败
+  - 修复：在 `listModels()` 开头调用 `ensureServer()` 保证客户端已就绪
+- **2026-04-15** - 修复 OpenCode `config.yaml` 配置的模型缺少能力标签的问题
+  - 优先从 `/provider` API 补充 capabilities
+  - API 失败时从本地缓存 `~/.cache/opencode/models.json` 回补充
+- **2026-04-15** - 统一视觉能力标签文案为 `🖼️ 识图`（原 `🖼️ 图片`）
 
 ---
 

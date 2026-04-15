@@ -136,7 +136,7 @@ function formatModelCapabilities(
   if (!capabilities) return '';
 
   const tags: string[] = [];
-  if (capabilities.attachment || capabilities.input?.image) tags.push('🖼️ 图片');
+  if (capabilities.attachment || capabilities.input?.image) tags.push('🖼️ 识图');
   if (capabilities.reasoning) tags.push('🧠 推理');
   if (capabilities.toolcall) tags.push('🔧 工具');
 

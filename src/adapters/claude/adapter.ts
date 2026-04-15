@@ -493,9 +493,42 @@ export class ClaudeCodeAdapter extends BaseCLIAdapter {
     // 返回 Claude Code 支持的模型列表
     // 注意：实际使用的模型取决于用户的 ANTHROPIC_BASE_URL 配置
     const models: ModelInfo[] = [
-      { id: 'claude-opus-4-6', name: 'Claude Opus 4.6', provider: 'anthropic', contextWindow: 200000 },
-      { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', provider: 'anthropic', contextWindow: 200000 },
-      { id: 'kimi-k2.5', name: 'Kimi K2.5', provider: 'kimi', contextWindow: 256000 },
+      {
+        id: 'claude-opus-4-6',
+        name: 'Claude Opus 4.6',
+        provider: 'anthropic',
+        contextWindow: 200000,
+        capabilities: {
+          reasoning: true,
+          toolcall: true,
+          input: { text: true, image: true },
+          output: { text: true },
+        },
+      },
+      {
+        id: 'claude-sonnet-4-6',
+        name: 'Claude Sonnet 4.6',
+        provider: 'anthropic',
+        contextWindow: 200000,
+        capabilities: {
+          reasoning: true,
+          toolcall: true,
+          input: { text: true, image: true },
+          output: { text: true },
+        },
+      },
+      {
+        id: 'kimi-k2.5',
+        name: 'Kimi K2.5',
+        provider: 'kimi',
+        contextWindow: 256000,
+        capabilities: {
+          reasoning: true,
+          toolcall: true,
+          input: { text: true, image: true },
+          output: { text: true },
+        },
+      },
     ];
 
     // 如果已检测到模型，将其标记为当前使用
@@ -504,14 +537,36 @@ export class ClaudeCodeAdapter extends BaseCLIAdapter {
       if (detected) {
         detected.name += ' (当前)';
       } else {
-        // 添加检测到的未知模型
+        // 添加检测到的未知模型（赋予默认能力标签）
         models.unshift({
           id: this.detectedModel.modelId,
           name: `${this.detectedModel.modelId} (当前)`,
           provider: 'unknown',
           contextWindow: this.detectedModel.contextWindow,
+          capabilities: {
+            reasoning: true,
+            toolcall: true,
+            input: { text: true, image: true },
+            output: { text: true },
+          },
         });
       }
+    }
+
+    // auto 模式下尚未检测到时，加入占位条目，确保当前激活区域能显示能力
+    if (this.claudeConfig.defaultModel === 'auto' && !this.detectedModel) {
+      models.unshift({
+        id: 'auto',
+        name: '自动检测',
+        provider: 'auto',
+        contextWindow: 200000,
+        capabilities: {
+          reasoning: true,
+          toolcall: true,
+          input: { text: true, image: true },
+          output: { text: true },
+        },
+      });
     }
 
     return models;
